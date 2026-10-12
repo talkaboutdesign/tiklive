@@ -92,10 +92,13 @@ The four `@tiklive/*` packages are versioned together with [Changesets](https://
 
 1. In any PR that changes a published package, run `bunx changeset`, pick the bump (patch, minor or major),
    write a one-line summary, and commit the generated `.changeset/*.md` file.
-2. On every push to `main`, the Release workflow opens or updates a "Release: version packages" PR that bumps
-   versions and writes `CHANGELOG.md` entries.
-3. Merging that PR **stages** the new versions on npm (trusted publishing, no tokens), then creates a GitHub
-   Release `vX.Y.Z` with the server's changelog as notes. Staged versions aren't installable yet.
+2. Changesets pile up on `main` until a maintainer decides to release. Nothing runs automatically. To start a
+   release, run the Release workflow by hand on `main` (Actions → Release → Run workflow, or
+   `gh workflow run release.yml`). It opens or updates a "Release: version packages" PR that bumps versions and
+   writes `CHANGELOG.md` entries.
+3. Merge that PR, then run the Release workflow again. With no pending changesets it **stages** the new versions
+   on npm (trusted publishing, no tokens), then creates a GitHub Release `vX.Y.Z` with the server's changelog as
+   notes. Staged versions aren't installable yet.
 4. A maintainer approves them with 2FA, in dependency order (contracts, core, client, server), either on
    npmjs.com or with `npm stage list @tiklive/<pkg>` and `npm stage approve <stage-id>`.
 
