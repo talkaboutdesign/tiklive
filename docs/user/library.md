@@ -38,14 +38,15 @@ LiveConnection.events("someone").pipe(
 - `LiveConnection.layer(options)`: the default TikTok and WebSocket layers. The TikTok layer uses `fetch`,
   and the WebSocket layer uses the runtime's global `WebSocket`.
 - Options: `roomId`, `wsHosts`, `includeHistory`, `includeRaw`, `reconnect`, `heartbeatInterval`,
-  `connectTimeout`.
+  `idleTimeout`, `connectTimeout`.
 
 The stream fails with a typed error: `UserNotFound`, `UserOffline`, `TikTokRequestError`,
 `SocketOpenFailed` or `ReconnectFailed`, all in the `ConnectError` union. Each is a tagged error, so you can
 match one with `Effect.catchTag`. A stream that fails with `UserOffline` on its first attempt means the
 streamer isn't live.
 
-Reconnects, backoff, de-duplication and the room lookup are handled for you. Interrupting the stream closes
+Reconnects, backoff, de-duplication and the room lookup are handled for you. A socket that receives nothing
+for `idleTimeout` (default 60 seconds) counts as dropped and reconnects. Interrupting the stream closes
 the socket.
 
 Other exports:
