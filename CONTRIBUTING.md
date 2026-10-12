@@ -91,8 +91,8 @@ For example, a TikTok message that tiklive doesn't normalize yet:
 Contributors add a changeset in any PR that changes the published `tiklive` package: run `bun run changeset`, pick
 the bump (patch, minor or major), write a one-line summary, and commit the generated `.changeset/*.md` file.
 
-Only the maintainer merges to `main`, and every merge to `main` with a changeset publishes a release. See
-[docs/operations/release.md](docs/operations/release.md).
+Only the maintainer merges to `main`. Every merge with a changeset publishes a nightly (`tiklive@nightly`), and the
+maintainer promotes a nightly to a stable release. See [docs/operations/release.md](docs/operations/release.md).
 
 ## Reporting problems
 

@@ -11,7 +11,7 @@
  * (OIDC) in GitHub Actions. With `--stage`, versions are uploaded with
  * `npm stage publish` and only go public once a maintainer approves them with
  * 2FA (`npm stage list`, `npm stage approve <id>`, in dependency order).
- * Prints `New tag:` lines that changesets/action uses to detect a release.
+ * Prints a `New tag:` line for each package it publishes.
  */
 import { $ } from "bun";
 import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -61,8 +61,10 @@ for (const dir of PACKAGES) {
   const tarball = readdirSync(OUT).find((file) => !before.has(file));
   if (!tarball) throw new Error(`Packing ${manifest.name} produced no tarball`);
 
-  // Prereleases (e.g. 0.2.0-next.1) go to the `next` dist-tag so `latest` stays stable.
-  const tag = manifest.version.includes("-") ? "next" : "latest";
+  // Prereleases go to a dist-tag named after their identifier so `latest` stays stable:
+  // 0.6.0-nightly.20261012173210 → `nightly`, 0.2.0-next.1 → `next`.
+  const prerelease = /^[^-]+-([0-9A-Za-z]+)/.exec(manifest.version)?.[1];
+  const tag = prerelease ?? "latest";
   const command = stage ? ["npm", "stage", "publish"] : ["npm", "publish"];
   if (dryRun) {
     console.log(`would ${stage ? "stage" : "publish"} ${id} (${tarball}) with tag ${tag}`);

@@ -3,8 +3,12 @@
 > For maintainers. Using tiklive? See [docs/user](../user/).
 
 tiklive ships as one npm package, `tiklive`, and one desktop app. Both get the same version. Releases use
-[Changesets](https://github.com/changesets/changesets) and GitHub Actions. **What lands on `main` ships.** Merging
-is the release decision. Nothing waits for an approval afterwards.
+[Changesets](https://github.com/changesets/changesets) and GitHub Actions, on two channels, with no approvals:
+
+- **Nightly:** every merge to `main` with a changeset publishes a nightly on its own.
+- **Stable:** one button promotes the latest nightly.
+
+This follows [T3 Code's release flow](https://github.com/pingdotgg/t3code/blob/main/docs/operations/release.md).
 
 ## Changesets
 
@@ -19,44 +23,60 @@ Commit the generated `.changeset/*.md` file. Only `tiklive` is versioned. The wo
 
 A PR without a changeset (docs, CI, tests) doesn't release anything when it merges.
 
-## How a release happens
+## Nightly
 
-Only the maintainer can merge to `main`: they're the only collaborator with write access. Every push to `main`
-runs the **Release** workflow (`release.yml`):
+Only the maintainer can merge to `main`: they're the only collaborator with write access. Every push to `main` runs
+the **Release** workflow (`release.yml`):
 
 1. CI (`ci.yml`) runs against the pushed commit. If it fails, nothing ships.
-2. With pending changesets, `changeset version` bumps the version and writes the `CHANGELOG.md` entries. The
-   workflow commits that to `main` as "Release: vX.Y.Z".
-3. `tiklive` is published to npm (trusted publishing, OIDC, no tokens) if its version isn't on npm yet.
-4. The desktop app is built (`release-desktop.yml`, which uses the same version and commit).
-5. The `vX.Y.Z` GitHub Release is created with the server's changelog as notes, and the installers and
-   `latest*.yml` files attached.
+2. With pending changesets, `changeset version --snapshot nightly` versions them as a nightly of the next version,
+   for example `0.6.0-nightly.20261012173210` while `0.6.0` is pending. Nothing is committed: the changesets
+   stay pending on `main` until a stable release.
+3. `tiklive` is published under the npm `nightly` dist-tag (`npx tiklive@nightly`). `latest` doesn't move.
+4. The commit is tagged `vX.Y.Z-nightly.<timestamp>` and gets a GitHub prerelease with the pending changelog.
+   Prereleases are never marked latest, so the desktop app's updater ignores them.
+
+Nightlies don't include desktop installers yet.
+
+To build a nightly of `main` without a new merge (for example to retry a failed one): Actions → **Release** →
+**Run workflow** on `main`, channel `nightly`.
+
+## Stable
+
+Actions → **Release** → **Run workflow** on `main`, channel `stable`. It promotes the **latest nightly**, not the
+tip of `main`, so a stable release only ships code that already ran as a nightly. Changes merged after that nightly
+wait for the next release.
+
+1. On the nightly's commit, `changeset version` bumps the version (the one the nightly previewed:
+   `0.6.0-nightly.*` ships as `0.6.0`) and writes the `CHANGELOG.md` entries. The workflow commits that as
+   "Release: vX.Y.Z" and merges it into `main` (a fast-forward when nothing landed after the nightly).
+2. `tiklive` is published to npm under `latest` (trusted publishing, OIDC, no tokens).
+3. The desktop app is built from the version commit (`release-desktop.yml`).
+4. The `vX.Y.Z` GitHub Release is created on that commit with the server's changelog as notes, and the installers
+   and `latest*.yml` files attached.
 
 The GitHub Release is created only after every installer exists. The desktop app's updater reads the latest
 release, so it must never see a release without its `latest*.yml` files.
 
-### Batching changes
-
-To ship several changes as one version, merge them into a branch (for example `next`) instead of `main`. CI runs on
-PRs to any branch. Their changesets pile up there. When it's time to release, open a PR from `next` to `main` and
-merge it: Changesets combines every pending changeset into one version bump.
+To change what the stable release contains, change what's on `main` and wait for (or start) the next nightly.
 
 ### When something fails
 
-- **CI fails:** nothing was versioned or published. Fix it in a new PR.
-- **The version commit can't be pushed** (`main` moved during the run): nothing was published. The run for the
-  newer push picks up the same changesets.
-- **npm publish fails after the version commit:** fix the cause, then Actions → **Release** → **Run workflow** on
-  `main`. With no pending changesets, it publishes whatever version on `main` isn't on npm yet.
-- **The desktop build or GitHub Release fails:** npm already has the version. Use **Re-run failed jobs** on that
-  run.
+- **CI fails on a push:** no nightly was published. Fix it in a new PR.
+- **A nightly fails to publish:** run **Release** with channel `nightly`.
+- **The version commit can't be merged into `main`** (a conflict): nothing was published. Fix `main`, wait for the
+  next nightly, and promote that.
+- **npm publish fails after the version commit:** fix the cause, then use **Re-run failed jobs**, or run
+  **Release** with channel `stable` again. It finds the version commit on `main` and continues from there.
+- **The desktop build or GitHub Release fails:** npm already has the version. Use **Re-run failed jobs**.
 
 Useful commands:
 
 - `bun run release -- --dry-run` packs the package and shows what would be published, without publishing.
 - `bun run build:binaries` builds a standalone `tiklive` binary for your platform into `dist/bin/` (`--all` for
   every target). Releases don't ship them yet.
-- A version with a prerelease suffix (for example `0.3.0-next.1`) publishes under the `next` dist-tag.
+- A version with a prerelease suffix publishes under a dist-tag named after it: `0.6.0-nightly.*` under `nightly`,
+  `0.3.0-next.1` under `next`.
 
 ## Environment and secrets
 
