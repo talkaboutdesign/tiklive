@@ -14,6 +14,25 @@ TikTok directly.
 
 ## Quick start
 
+**Run the server** (Node 22+ or Bun):
+
+```sh
+npx @tiklive/server          # or: bunx @tiklive/server
+```
+
+Or download a standalone binary for macOS, Linux or Windows from the
+[latest release](https://github.com/talkaboutdesign/tiklive/releases/latest). It needs no Node or Bun, and
+includes the dashboard and example overlays at http://localhost:8080.
+
+**Use the library** in your own app:
+
+```sh
+npm install @tiklive/core effect     # connect to TikTok LIVE
+npm install @tiklive/client          # typed client for overlays
+```
+
+### From source
+
 Requires [Bun](https://bun.sh) 1.4+.
 
 ```sh
