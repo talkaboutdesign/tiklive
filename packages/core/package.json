@@ -1,6 +1,6 @@
 {
   "name": "@tiklive/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Connect to TikTok LIVE and receive typed events. No signing service required.",
   "keywords": [
     "livestream",
