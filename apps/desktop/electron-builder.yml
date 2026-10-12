@@ -28,6 +28,8 @@ mac:
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: tiklive uses the microphone when you record a sound in the Media page.
 win:
   target:
     - target: nsis

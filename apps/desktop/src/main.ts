@@ -8,7 +8,17 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
-import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  type MenuItemConstructorOptions,
+  session,
+  shell,
+  systemPreferences,
+} from "electron";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { IPC } from "./ipc.ts";
@@ -221,7 +231,35 @@ const buildMenu = () => {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 };
 
+// Electron grants every permission when no handler is set. Allow only what the local pages use:
+// the microphone (recording sounds in the Media page) and copying overlay URLs.
+const ALLOWED_PERMISSIONS = new Set(["media", "clipboard-sanitized-write"]);
+
+const allowPermissions = () => {
+  const allowed = (permission: string, url: string) =>
+    ALLOWED_PERMISSIONS.has(permission) && URL.canParse(url) && isServerUrl(`${new URL(url).origin}/`);
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    // Audio only: nothing here records the screen or the camera.
+    const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
+    const audioOnly = mediaTypes.every((type) => type === "audio");
+    callback(allowed(permission, details.requestingUrl || webContents.getURL()) && audioOnly);
+  });
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, origin) =>
+    allowed(permission, origin),
+  );
+};
+
+// macOS asks once per app; after a denial only System Settings can change it.
+const requestMicrophone = async (): Promise<boolean> => {
+  if (process.platform !== "darwin") return true;
+  const status = systemPreferences.getMediaAccessStatus("microphone");
+  if (status === "granted") return true;
+  if (status === "not-determined") return systemPreferences.askForMediaAccess("microphone");
+  return false;
+};
+
 const registerIpc = () => {
+  ipcMain.handle(IPC.requestMicrophone, () => requestMicrophone());
   ipcMain.handle(IPC.updateGetState, () => runUpdates((updates) => updates.state));
   ipcMain.handle(IPC.updateCheck, () => runUpdates((updates) => updates.check));
   ipcMain.handle(IPC.updateDownload, () => runUpdates((updates) => updates.download));
@@ -257,6 +295,7 @@ const start = async () => {
     return;
   }
   buildMenu();
+  allowPermissions();
   registerIpc();
   createWindow();
   createPlayerWindow();

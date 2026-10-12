@@ -2426,7 +2426,10 @@
 
       // Library card at the bottom of the page.
       function buildLibrary() {
-        $("library-slot").replaceChildren(libraryPanel().node);
+        $("library-slot").replaceChildren(
+          libraryPanel().node,
+          el("p", { class: "hint" }, el("a", { href: withToken("/media.html") }, "Manage in Media Library")),
+        );
       }
 
       // ---- sound picker ----

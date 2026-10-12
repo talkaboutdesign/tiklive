@@ -8,6 +8,7 @@ import { TikTokWeb } from "@tiklive/core";
 import {
   ClientMessage,
   ImportMediaRequest,
+  RenameMediaRequest,
   LIVE_EVENT_TYPES,
   LiveEvent,
   LiveEventType,
@@ -126,6 +127,7 @@ const MAX_RULES_BODY = 1024 * 1024;
 const MAX_TEST_BODY = 16 * 1024;
 /** Largest JSON body accepted by `POST /api/media/import`. */
 const MAX_IMPORT_BODY = 16 * 1024;
+const MAX_RENAME_BODY = 4 * 1024;
 
 const MEDIA_STATUS = { unsupported: 415, tooLarge: 413, disabled: 503, io: 500 } as const;
 
@@ -461,12 +463,30 @@ export const routes = (options: HttpOptions = {}) => {
     "/api/media/:id",
     guarded((request) =>
       Effect.gen(function* () {
-        if (request.method !== "DELETE") return jsonError(405, "Method not allowed");
         const media = yield* MediaStore;
         const params = yield* HttpRouter.params;
         const id = params.id ?? "";
-        if (!(yield* media.remove(id))) return jsonError(404, `No media with id ${id}`);
-        return json({ ok: true });
+        switch (request.method) {
+          case "PATCH": {
+            const parsed = yield* readJson(request, MAX_RENAME_BODY);
+            if (!parsed.ok) return parsed.response;
+            const body = Schema.decodeUnknownExit(RenameMediaRequest)(parsed.value);
+            if (body._tag === "Failure") return jsonError(400, 'Body must be {"name": "<1 to 200 characters>"}');
+            return yield* media.rename(id, body.value.name).pipe(
+              Effect.map((item) =>
+                Option.isSome(item) ? json(item.value) : jsonError(404, `No media with id ${id}`),
+              ),
+              Effect.catchTag("MediaError", (error) =>
+                Effect.succeed(jsonError(MEDIA_STATUS[error.reason], error.message)),
+              ),
+            );
+          }
+          case "DELETE":
+            if (!(yield* media.remove(id))) return jsonError(404, `No media with id ${id}`);
+            return json({ ok: true });
+          default:
+            return jsonError(405, "Method not allowed");
+        }
       }),
     ),
   );

@@ -137,6 +137,7 @@ Responses are JSON. Errors look like `{"error": "message"}`.
 | `POST /api/rules/:id/test`              | `200 {ok: true, action}`               | Body `{username}`. Fires rule `:id` once, with a sample event, for a streamer with a running session. The action has `test: true`. `404` if either is missing                                            |
 | `GET /api/media`                        | `200 {media: MediaItem[]}`             | Uploaded files, newest first                                                                                                                                                                             |
 | `POST /api/media`                       | `201 MediaItem`                        | Raw file bytes. `Content-Type` is the file's type, and `X-File-Name` its percent-encoded name. Up to 25 MB. Needs `--data-dir`                                                                           |
+| `PATCH /api/media/:id`                  | `200 MediaItem`                        | Body `{name}` (1 to 200 characters). Renames the item for display. Its file and `url` stay the same. `404` if no such item                                                                               |
 | `DELETE /api/media/:id`                 | `200 {ok: true}`                       | `404` if no such item                                                                                                                                                                                    |
 | `GET /api/sounds/search?q=&page=`       | `200 SoundSearchResponse`              | Searches myinstants.com. `q` is 1 to 100 characters, `page` 1 to 50. Cached for 10 minutes. `400` for a bad `q`, `502` if MyInstants fails                                                               |
 | `POST /api/media/import`                | `201 MediaItem`                        | Body `{url, name?}`. Copies a MyInstants sound (`https://www.myinstants.com/media/sounds/<file>.mp3`) into the library. `400` for any other URL, `502` if the download fails, `503` without `--data-dir` |
@@ -325,7 +326,7 @@ with `PUT /api/rules`, sending the `revision` you last read. A save based on an 
   Clients must ignore unknown fields and event types. The browser client already does.
 - Actions (the `action` message, the `actions` subscribe option, `actions=1`, and the `/api/rules`,
   `/api/media`, `/api/media/import`, `/api/sounds/search` and `/media/:file` routes) was an additive change, so `PROTOCOL_VERSION` stays at 1.
-  So were the follow fields on `LiveUser` and `SessionStatus.hlsUrl`.
+  So were `PATCH /api/media/:id`, the follow fields on `LiveUser`, and `SessionStatus.hlsUrl`.
 - The browser client (`packages/client`) checks `hello.protocolVersion` against its own
   constant and logs one warning on a mismatch. It doesn't refuse to connect.
 - When the version changes, update `PROTOCOL_VERSION`, this document, and the client together.

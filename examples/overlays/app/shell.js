@@ -45,7 +45,8 @@
  *   pill(state)                   Status pill. state: live | waiting | connecting | error | idle.
  *   icon(name, size)              Inline SVG: dashboard | actions | overlays | settings | speaker |
  *                                 speakerOff | menu | external | video | filters | silence | volume | muted |
- *                                 mod | friend | gift | arrowDown | close | retry.
+ *                                 mod | friend | gift | arrowDown | close | retry | media | mic | stop | play |
+ *                                 pause | upload | pencil | trash.
  *   debounce(fn, ms)              Delayed call. Has .cancel().
  *   toast(message, { error })     Shows a short notice at the bottom. Auto-hides after 3 s.
  *
@@ -92,7 +93,7 @@
  *
  * Window
  *   mountShell({ page, crumbs, actions })
- *                                 page: "dashboard" | "actions" | "overlays" | "settings" (marks the
+ *                                 page: "dashboard" | "actions" | "media" | "overlays" | "settings" (marks the
  *                                 nav item). crumbs: string[] for the breadcrumb. actions: Node[]
  *                                 for the header's right side. Fills #sidebar and #page-header.
  *                                 Adds html.desktop-mac on macOS. Returns { setCrumbs(crumbs), setActions(nodes) }.
@@ -109,6 +110,7 @@ export const INVALID_USERNAME =
 export const NAV = Object.freeze([
   { id: "dashboard", label: "Dashboard", href: "/", icon: "dashboard" },
   { id: "actions", label: "Actions", href: "/actions.html", icon: "actions" },
+  { id: "media", label: "Media", href: "/media.html", icon: "media" },
   { id: "overlays", label: "Overlays", href: "/overlays.html", icon: "overlays" },
   { id: "settings", label: "Settings", href: "/settings.html", icon: "settings" },
 ]);
@@ -315,6 +317,56 @@ const SVG_ICONS = {
     ["path", { d: "M21 3v5h-5" }],
     ["path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }],
     ["path", { d: "M8 16H3v5" }],
+  ],
+  // From Lucide (ISC license), https://lucide.dev
+  media: [
+    ["rect", { width: 8, height: 18, x: 3, y: 3, rx: 1 }],
+    ["path", { d: "M7 3v18" }],
+    [
+      "path",
+      {
+        d: "M20.4 18.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L11.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z",
+      },
+    ],
+  ],
+  mic: [
+    ["path", { d: "M12 19v3" }],
+    ["path", { d: "M19 10v2a7 7 0 0 1-14 0v-2" }],
+    ["rect", { x: 9, y: 2, width: 6, height: 13, rx: 3 }],
+  ],
+  stop: [["rect", { x: 3, y: 3, width: 18, height: 18, rx: 2 }]],
+  play: [
+    [
+      "path",
+      {
+        d: "M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z",
+      },
+    ],
+  ],
+  pause: [
+    ["rect", { x: 14, y: 3, width: 5, height: 18, rx: 1 }],
+    ["rect", { x: 5, y: 3, width: 5, height: 18, rx: 1 }],
+  ],
+  upload: [
+    ["path", { d: "M12 3v12" }],
+    ["path", { d: "m17 8-5-5-5 5" }],
+    ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }],
+  ],
+  pencil: [
+    [
+      "path",
+      {
+        d: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",
+      },
+    ],
+    ["path", { d: "m15 5 4 4" }],
+  ],
+  trash: [
+    ["path", { d: "M10 11v6" }],
+    ["path", { d: "M14 11v6" }],
+    ["path", { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" }],
+    ["path", { d: "M3 6h18" }],
+    ["path", { d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" }],
   ],
 };
 

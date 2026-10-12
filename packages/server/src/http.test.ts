@@ -1107,6 +1107,29 @@ describe("media library", () => {
     }),
   );
 
+  it.live("renames a file, keeping its URL", () =>
+    serve({ dataDir: newDataDir() }, async (base) => {
+      const item = (await (await upload(base, PNG, "image/png")).json()) as Msg;
+      const rename = (id: string, body: unknown) =>
+        fetch(`${base.http}/api/media/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+      const renamed = await rename(item.id as string, { name: "Logo" });
+      expect(renamed.status).toBe(200);
+      expect(await renamed.json()).toEqual({ ...item, name: "Logo" });
+      const list = (await (await fetch(`${base.http}/api/media`)).json()) as { media: Array<Msg> };
+      expect(list.media).toEqual([{ ...item, name: "Logo" }]);
+
+      expect((await rename(item.id as string, { name: "" })).status).toBe(400);
+      expect((await rename(item.id as string, { title: "Logo" })).status).toBe(400);
+      expect((await rename("0123456789abcdef", { name: "Logo" })).status).toBe(404);
+      expect((await fetch(`${base.http}/api/media/${item.id}`, { method: "PUT" })).status).toBe(405);
+    }),
+  );
+
   it.live("rejects unsupported types with 415", () =>
     serve({ dataDir: newDataDir() }, async (base) => {
       const svg = await upload(base, new TextEncoder().encode("<svg/>"), "image/svg+xml", "x.svg");

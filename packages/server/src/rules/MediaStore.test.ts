@@ -202,6 +202,29 @@ describe("MediaStore on disk", () => {
     ),
   );
 
+  it.effect("renames an item without changing its file, and keeps the name across a restart", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const dir = yield* tempDir;
+        const item = yield* withFileStore(dir, (store) =>
+          Effect.gen(function* () {
+            const added = yield* store.add("Recording 1.wav", "audio/wav", PNG);
+            const renamed = yield* store.rename(added.id, "  Big\u0007 laugh  ");
+            expect(Option.getOrUndefined(renamed)).toEqual({ ...added, name: "Big laugh" });
+            expect(Option.isNone(yield* store.rename("0123456789abcdef", "x"))).toBe(true);
+            return added;
+          }),
+        );
+        yield* withFileStore(dir, (store) =>
+          Effect.gen(function* () {
+            expect(yield* store.list).toEqual([{ ...item, name: "Big laugh" }]);
+            expect(Option.isSome(yield* store.resolve(item.url.slice("/media/".length)))).toBe(true);
+          }),
+        );
+      }),
+    ),
+  );
+
   it.effect("resolves only names in the index, never paths", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -267,6 +290,7 @@ describe("MediaStore when uploads are disabled", () => {
       });
       expect(yield* store.list).toEqual([]);
       expect(yield* store.remove("anything")).toBe(false);
+      expect(Option.isNone(yield* store.rename("anything", "x"))).toBe(true);
       expect(Option.isNone(yield* store.resolve("anything.png"))).toBe(true);
     }).pipe(Effect.provide(layerDisabled)),
   );
