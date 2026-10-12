@@ -207,7 +207,9 @@ and players (`/overlays/actions.html`) only play what they're sent.
   library, so overlays never depend on myinstants.com. Downloads are limited to MyInstants sound URLs, and
   redirects are refused, so the server isn't an open proxy.
 - `RuleEngine` runs `evaluate` (`rules/evaluate.ts`, pure) for each event. It keeps cooldowns and like
-  counters per streamer, in memory. `SessionManager` passes it to each session when it's in context, and
+  counters per streamer, in memory. It also sends the `webhook` steps of the actions it fires (`rules/webhook.ts`
+  builds the requests). These go from the server, not the browser, so they can reach LAN addresses. They run in
+  fibers owned by the layer's scope, at most 4 at once, each with a 5 second timeout and no retries. `SessionManager` passes it to each session when it's in context, and
   `Session` publishes the results as `Action` messages after the event. Test events from `/simulate` and
   demo events go through the same path.
 - The WebSocket forwards `Action` messages only to subscriptions with `actions: true`. They skip the

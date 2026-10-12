@@ -288,8 +288,16 @@ The schemas are in [`packages/contracts/src/rules.ts`](../packages/contracts/src
   `friends` (mutual follows only), `subscribers` or `moderators`. `minFollowers` on `chat` and `join`
   sets the least follower count a viewer may have; followers and friends of the streamer always pass it,
   and so does a viewer whose count is unknown.
-- **Steps**: `sound`, `media`, `speak` (text to speech) and `obsScene`. Text can use placeholders
+- **Steps**: `sound`, `media`, `speak` (text to speech), `obsScene` and `webhook`. Text can use placeholders
   such as `{nickname}`, `{comment}` and `{followers}` (the viewer's follower count).
+- **`webhook` step**: `{kind: "webhook", url, method?, body?}`. `url` is an `http://` or `https://` URL that
+  parses, at most 2048 characters. Placeholders are allowed in its path and query, and the values are
+  percent-encoded. `method` is `POST` (the default), `PUT` or `GET`. `body` is at most 4000 characters, is
+  sent as-is for `POST` and `PUT` (as `application/json` if it parses as JSON, else `text/plain`), and is
+  ignored for `GET`. Without a `body`, `POST` and `PUT` send a JSON description of the action:
+  `{rule: {id, name}, event, user: {userId, uniqueId, nickname} | null, vars, timestamp}`, where `event` is
+  the event type (`like` for likes milestones) and `vars` holds every template variable. The server sends
+  these requests, not the browser player, and the player skips the step.
 - **`RuleSet`**: `{revision, rules}`, at most 200 rules. `revision` goes up on every save.
 - **`FiredAction`**: `id`, `ruleId`, `ruleName`, `timestamp`, `user` (when there is one), `test`, and
   `steps` with the placeholders already filled in.
@@ -345,6 +353,8 @@ with `PUT /api/rules`, sending the `revision` you last read. A save based on an 
   `/api/media`, `/api/media/import`, `/api/sounds/search` and `/media/:file` routes) was an additive change, so `PROTOCOL_VERSION` stays at 1.
   So were `PATCH /api/media/:id`, the follow fields on `LiveUser`, and `SessionStatus.hlsUrl`, and the
   rule additions: the `join` trigger, the `friends` audience, `minFollowers` and `oncePerStream`, and the `{followers}` placeholder.
+  The `webhook` step is another additive rule change, so `PROTOCOL_VERSION` stays at 1. Older players skip the
+  step kind they don't know.
 - The browser client (`packages/client`) checks `hello.protocolVersion` against its own
   constant and logs one warning on a mismatch. It doesn't refuse to connect.
 - When the version changes, update `PROTOCOL_VERSION`, this document, and the client together.
