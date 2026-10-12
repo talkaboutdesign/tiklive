@@ -3,7 +3,7 @@
  * state, the editor's Test button, and webhook steps (sent through a fake HttpClient).
  */
 import { describe, expect, it } from "@effect/vitest";
-import type { LiveEvent, Rule, WebhookStep } from "@tiklive/contracts";
+import type { LiveEvent, LiveUser, Rule, WebhookStep } from "@tiklive/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
@@ -14,8 +14,10 @@ import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as TestClock from "effect/testing/TestClock";
+import { templateVars } from "./evaluate.ts";
 import { layer as ruleEngineLayer, RuleEngine } from "./RuleEngine.ts";
 import * as RulesStore from "./RulesStore.ts";
+import { webhookPayload, webhookRequest } from "./webhook.ts";
 
 const USER = { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" };
 
@@ -89,6 +91,34 @@ const hookRule = (step: Partial<Omit<WebhookStep, "kind">> = {}): Rule =>
 const settle = Effect.gen(function* () {
   for (let i = 0; i < 5; i++) yield* Effect.yieldNow;
 });
+
+const chatEvent = (comment: string, user: LiveUser = USER): LiveEvent => ({
+  type: "chat",
+  timestamp: 0,
+  user,
+  comment,
+  emotes: [],
+});
+
+/** A chat rule whose webhook step has `body`. */
+const chatRule = (body: string): Rule => ({
+  id: "chat",
+  name: "Chat",
+  enabled: true,
+  trigger: { type: "chat", match: "any" },
+  steps: [{ kind: "webhook", url: HOOK, body }],
+});
+
+/** Fires `event` at a chat rule whose body is `template`, and returns the requests sent. */
+const sentBodies = (template: string, event: LiveEvent) => {
+  const sent: Array<Sent> = [];
+  return Effect.gen(function* () {
+    const engine = yield* RuleEngine;
+    yield* engine.fire("someone", event);
+    yield* settle;
+    return sent;
+  }).pipe(Effect.provide(engineWith([chatRule(template)], fakeHttp(sent))));
+};
 
 describe("RuleEngine.fire", () => {
   it.effect("returns an action per firing, with the steps rendered and the viewer attached", () =>
@@ -307,44 +337,71 @@ describe("RuleEngine webhook steps", () => {
     );
   });
 
-  it.effect("sends a body as JSON only when it starts like JSON and parses, so text stays text", () => {
+  it.effect(
+    "sends a body as JSON only when its template is a JSON object or array, whatever viewers type",
+    () => {
+      const hostile: LiveUser = { ...USER, nickname: '{"x":0' };
+      return Effect.gen(function* () {
+        // The blocker. It starts with `{nickname}`, so it's text: the viewer's text is sent as typed.
+        expect(
+          yield* sentBodies(
+            '{nickname},"action":"safe","said":"{comment}"}',
+            chatEvent('x","action":"evil","pad":"', hostile),
+          ),
+        ).toMatchObject([
+          { contentType: "text/plain", body: '{"x":0,"action":"safe","said":"x","action":"evil","pad":""}' },
+        ]);
+        // A lone placeholder is text, and so is text that starts with `[` or `"`.
+        expect(yield* sentBodies("{comment}", chatEvent('{"action":"evil"}'))).toMatchObject([
+          { contentType: "text/plain", body: '{"action":"evil"}' },
+        ]);
+        expect(yield* sentBodies("[Alert] {comment}", chatEvent('say "hi", {"a":1}'))).toMatchObject([
+          { contentType: "text/plain", body: '[Alert] say "hi", {"a":1}' },
+        ]);
+        expect(yield* sentBodies('"{comment}" said hi', chatEvent('x"}'))).toMatchObject([
+          { contentType: "text/plain", body: '"x"}" said hi' },
+        ]);
+        // An object is JSON, and a viewer's text stays inside its string, so `action` stays "safe".
+        const [json] = yield* sentBodies(
+          '{"viewer":"{nickname}","action":"safe"}',
+          chatEvent("hi", { ...USER, nickname: 'x", "action": "evil' }),
+        );
+        expect(json?.contentType).toBe("application/json");
+        expect(JSON.parse(json?.body ?? "")).toEqual({ viewer: 'x", "action": "evil', action: "safe" });
+        // A body with no placeholders is JSON when it parses, as it always was.
+        expect(yield* sentBodies("123", chatEvent("hi"))).toMatchObject([
+          { contentType: "application/json", body: "123" },
+        ]);
+      });
+    },
+  );
+
+  it.effect("sends the same kinds of body on the Test button, with the sample's values", () => {
     const sent: Array<Sent> = [];
-    const chatEvent: LiveEvent = {
-      type: "chat",
-      timestamp: 0,
-      user: USER,
-      comment: 'x","action":"evil"',
-      emotes: [],
-    };
-    const chatRule = (id: string, body: string): Rule => ({
+    const testRule = (id: string, text: string, body: string): Rule => ({
       id,
       name: id,
       enabled: true,
-      trigger: { type: "chat", match: "any" },
+      trigger: { type: "chat", match: "contains", text },
       steps: [{ kind: "webhook", url: HOOK, body }],
     });
     return Effect.gen(function* () {
       const engine = yield* RuleEngine;
-      yield* engine.fire("someone", chatEvent);
+      // The sample comment is the trigger's text, so the hostile text here is what the Test button sends.
+      yield* engine.test("someone", "json");
       yield* settle;
-      expect(sent.map((request) => [request.contentType, request.body])).toEqual([
-        // Finding 1: `0""` doesn't parse, so the viewer's text never reaches a key.
-        ["text/plain", '{"count":0"","action":"safe","said":"x\\",\\"action\\":\\"evil\\""}'],
-        // A text body that is a number parses as JSON, but it doesn't start like JSON.
-        ["text/plain", "123"],
-        // A stray backslash makes the body invalid, so it's kept as typed and sent as text.
-        ["text/plain", '{"said": "\\{comment}"}'],
-        // A lone placeholder is text, so the viewer's comment is sent as typed.
-        ["text/plain", 'x","action":"evil"'],
-      ]);
+      yield* engine.test("someone", "text");
+      yield* settle;
+      expect(sent).toHaveLength(2);
+      expect(sent[0]?.contentType).toBe("application/json");
+      expect(JSON.parse(sent[0]?.body ?? "")).toEqual({ viewer: "Test User", said: 'x","action":"evil' });
+      expect(sent[1]).toMatchObject({ contentType: "text/plain", body: '{"action":"evil"}' });
     }).pipe(
       Effect.provide(
         engineWith(
           [
-            chatRule("blocker", '{"count":0{count},"action":"safe","said":"{comment}"}'),
-            chatRule("number", "123"),
-            chatRule("stray", '{"said": "\\{comment}"}'),
-            chatRule("lone", "{comment}"),
+            testRule("json", 'x","action":"evil', '{"viewer":"{nickname}","said":"{comment}"}'),
+            testRule("text", '{"action":"evil"}', "{comment}"),
           ],
           fakeHttp(sent),
         ),
@@ -475,5 +532,23 @@ describe("RuleEngine webhook steps", () => {
       yield* settle;
       expect(sent).toHaveLength(101);
     }).pipe(Effect.provide(engineWith([hookRule()], stuck)));
+  });
+});
+
+describe("webhookRequest", () => {
+  it("sends a step that wasn't rendered as its body is typed, as JSON only when the template is", () => {
+    const payload = webhookPayload(
+      { id: "x", ruleId: "r", ruleName: "r", timestamp: 0, steps: [] },
+      "chat",
+      templateVars(chatEvent("hi")),
+    );
+    const contentTypeOf = (body: string) => {
+      const request = webhookRequest({ kind: "webhook", url: HOOK, body }, payload);
+      const sent = request.body;
+      return sent._tag === "Uint8Array" ? sent.contentType : undefined;
+    };
+    expect(contentTypeOf('{"viewer":"{nickname}"}')).toBe("application/json");
+    expect(contentTypeOf("123")).toBe("application/json");
+    expect(contentTypeOf("{nickname} sent a gift")).toBe("text/plain");
   });
 });

@@ -5,7 +5,7 @@
  */
 import type { FiredAction, LiveEvent, TemplateVariable, WebhookStep } from "@tiklive/contracts";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
-import type { TemplateValues } from "./evaluate.ts";
+import { bodyMode, type TemplateValues, webhookBodyMode } from "./evaluate.ts";
 
 /** Each request gives up after this long. */
 export const WEBHOOK_TIMEOUT = "5 seconds";
@@ -39,20 +39,10 @@ export const webhookPayload = (
 });
 
 /**
- * Whether a rendered body is JSON. It must start like JSON as well as parse: a text body that happens
- * to be a number, such as `123`, is sent as text.
+ * The request for a rendered webhook step. GET never has a body. A body is sent as JSON or text by its
+ * template's mode (see `bodyMode`), never by its filled text. A step that didn't come from `renderRule`
+ * has no recorded mode, so its body is taken as the template.
  */
-const isJson = (text: string): boolean => {
-  if (!/^\s*[{["]/.test(text)) return false;
-  try {
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-/** The request for a rendered webhook step. GET never has a body. */
 export const webhookRequest = (
   step: WebhookStep,
   payload: WebhookPayload,
@@ -61,11 +51,8 @@ export const webhookRequest = (
   if (method === "GET") return HttpClientRequest.get(step.url);
   const request = method === "PUT" ? HttpClientRequest.put(step.url) : HttpClientRequest.post(step.url);
   if (step.body === undefined) return HttpClientRequest.bodyJsonUnsafe(request, payload);
-  return HttpClientRequest.bodyText(
-    request,
-    step.body,
-    isJson(step.body) ? "application/json" : "text/plain",
-  );
+  const mode = webhookBodyMode.get(step) ?? bodyMode(step.body);
+  return HttpClientRequest.bodyText(request, step.body, mode === "json" ? "application/json" : "text/plain");
 };
 
 /** `origin/path` of a webhook URL, without the query. Query strings often hold tokens, so logs leave them out. */
