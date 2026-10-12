@@ -759,6 +759,90 @@ describe("evaluate: webhook steps", () => {
     expect(kept[0]?.steps).toEqual([{ kind: "webhook", url: "https://h.example/", body: padded }]);
   });
 
+  const bodyOf = (firing: ReturnType<typeof evaluate>[number] | undefined): string | undefined => {
+    const step = firing?.steps[0];
+    return step?.kind === "webhook" ? step.body : undefined;
+  };
+
+  it("escapes values inside quotes in a JSON body, so a viewer's text can't add keys", () => {
+    const hostile = 'x", "evil": "1\\ \n';
+    const firings = evaluate(
+      [
+        rule(
+          "w",
+          { type: "chat", match: "any" },
+          { steps: [hook("https://h.example/", '{"said": "{comment}", "by": "{nickname}"}')] },
+        ),
+      ],
+      emptyState(),
+      chat(hostile, { ...USER, nickname: hostile }),
+      NOW,
+    );
+    expect(JSON.parse(bodyOf(firings[0]) ?? "")).toEqual({ said: hostile, by: hostile });
+  });
+
+  it("keeps escaped quotes in the template working, so the value stays inside its string", () => {
+    const firings = evaluate(
+      [
+        rule(
+          "w",
+          { type: "chat", match: "any" },
+          { steps: [hook("https://h.example/", '{"q": "say \\"{comment}\\""}')] },
+        ),
+      ],
+      emptyState(),
+      chat('x", "evil": "1'),
+      NOW,
+    );
+    expect(JSON.parse(bodyOf(firings[0]) ?? "")).toEqual({ q: 'say "x", "evil": "1"' });
+  });
+
+  it("puts a bare placeholder in as a number when it is one, and as a quoted string otherwise", () => {
+    const counted = evaluate(
+      [
+        rule(
+          "w",
+          { type: "gift" },
+          { steps: [hook("https://h.example/", '{"count": {count}, "gift": {giftName}}')] },
+        ),
+      ],
+      emptyState(),
+      gift({ repeatCount: 3 }),
+      NOW,
+    );
+    expect(bodyOf(counted[0])).toBe('{"count": 3, "gift": "Rose"}');
+
+    const injected = evaluate(
+      [
+        rule(
+          "w",
+          { type: "chat", match: "any" },
+          { steps: [hook("https://h.example/", '{"said": {comment}}')] },
+        ),
+      ],
+      emptyState(),
+      chat('1, "evil": 2'),
+      NOW,
+    );
+    expect(JSON.parse(bodyOf(injected[0]) ?? "")).toEqual({ said: '1, "evil": 2' });
+  });
+
+  it("fills a text body as typed, because it isn't JSON", () => {
+    const firings = evaluate(
+      [
+        rule(
+          "w",
+          { type: "chat", match: "any" },
+          { steps: [hook("https://h.example/", '{nickname} said "{comment}"')] },
+        ),
+      ],
+      emptyState(),
+      chat('a "b" \\ c'),
+      NOW,
+    );
+    expect(bodyOf(firings[0])).toBe('Viewer said "a "b" \\ c"');
+  });
+
   it("keeps unknown placeholders as typed, and keeps the webhook even when its values are empty", () => {
     const firings = evaluate(
       [rule("w", { type: "follow" }, { steps: [hook("https://h.example/{nope}/{comment}")] })],

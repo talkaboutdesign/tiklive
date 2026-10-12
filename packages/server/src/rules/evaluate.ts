@@ -90,6 +90,33 @@ const fill = (text: string, vars: Vars, encode: (value: string) => string = (val
     return value === undefined ? placeholder : encode(value);
   });
 
+/**
+ * Fills a webhook body. A JSON template gets its values escaped for where they land, so a viewer's
+ * text can't close a string and add keys: inside a string it's JSON-escaped, and a bare placeholder
+ * becomes a number or a quoted string. Text templates are filled as typed.
+ */
+const fillBody = (template: string, vars: Vars): string => {
+  const probe = template.replace(/\{(\w+)\}/g, (placeholder: string, name: string) =>
+    isTemplateVariable(name) ? "0" : placeholder,
+  );
+  try {
+    JSON.parse(probe);
+  } catch {
+    return fill(template, vars);
+  }
+  let inString = false;
+  return template.replace(/\\[\s\S]|"|\{(\w+)\}/g, (token: string, name: string | undefined) => {
+    if (token === '"') {
+      inString = !inString;
+      return token;
+    }
+    const value = name !== undefined && isTemplateVariable(name) ? vars[name] : undefined;
+    if (value === undefined) return token;
+    if (inString) return JSON.stringify(value).slice(1, -1);
+    return /^-?\d+(\.\d+)?$/.test(value) ? value : JSON.stringify(value);
+  });
+};
+
 export const renderTemplate = (text: string, vars: Vars): string => truncate(fill(text, vars));
 
 /** Every template variable the event provides. Ones that don't apply are "". */
@@ -134,7 +161,7 @@ const renderStep = (step: RuleStep, vars: Vars): RuleStep | undefined => {
       return {
         ...step,
         url: fill(step.url, vars, encodeURIComponent),
-        ...(step.body === undefined ? {} : { body: fill(step.body, vars) }),
+        ...(step.body === undefined ? {} : { body: fillBody(step.body, vars) }),
       };
     default:
       return step;
