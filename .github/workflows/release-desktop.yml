@@ -23,6 +23,10 @@ on:
         description: App version (defaults to packages/server's version)
         type: string
         required: false
+      ref:
+        description: Commit to build (defaults to the triggering commit)
+        type: string
+        required: false
   workflow_dispatch:
     inputs:
       version:
@@ -36,8 +40,8 @@ permissions:
 jobs:
   build:
     name: Desktop ${{ matrix.label }}
-    # The signing secrets live in the protected `release` environment: only the
-    # repository owner can start this, and it waits for their approval.
+    # The signing secrets live in the `release` environment, which allows only
+    # main. Only the repository owner can start this.
     if: github.triggering_actor == github.repository_owner
     environment: release
     runs-on: ${{ matrix.os }}
@@ -54,6 +58,8 @@ jobs:
             platform: win
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Read Bun version from package.json
         id: bun

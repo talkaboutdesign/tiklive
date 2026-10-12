@@ -1,10 +1,10 @@
 /**
  * Publishes every @tiklive/* package whose current version isn't on npm yet.
  *
- *   bun scripts/release.ts            # publish (expects `bun run build` first)
+ *   bun scripts/release.ts            # publish (what CI does; expects `bun run build` first)
  *   bun scripts/release.ts --dry-run  # pack and show what would be published
  *   bun scripts/release.ts --otp=123456  # local publish with a 2FA code
- *   bun scripts/release.ts --stage    # stage instead of publish (what CI does)
+ *   bun scripts/release.ts --stage    # stage instead of publish (needs 2FA approval)
  *
  * Packages are packed with `bun pm pack` (which rewrites `workspace:` and
  * `catalog:` versions) and handed to npm, which handles npm trusted publishing

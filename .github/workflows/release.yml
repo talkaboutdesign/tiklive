@@ -1,14 +1,24 @@
 name: Release
 
-# Runs only when started by hand (Actions → Release → Run workflow on main), by
-# the repository owner, after they approve the `release` environment.
-# With pending changesets, changesets/action opens or updates a
-# "Release: version packages" PR. After that PR is merged, run the workflow
-# again to stage the new versions on npm (a maintainer approves them with 2FA),
-# build the desktop app (release-desktop.yml) and create a GitHub Release with
-# its installers and updater files attached.
+# Every push to main ships. Merging is the release decision; nothing waits for
+# an approval.
+#
+# 1. CI (ci.yml) runs against the pushed commit.
+# 2. With pending changesets, `changeset version` bumps the version and writes
+#    the changelog, and the result is committed straight to main as
+#    "Release: vX.Y.Z".
+# 3. `tiklive` is published to npm (trusted publishing, OIDC) if its version
+#    isn't there yet. A push without changesets publishes nothing.
+# 4. The desktop app is built (release-desktop.yml), then the vX.Y.Z GitHub
+#    Release is created with its installers and updater files attached.
+#
+# Run it by hand (Actions → Release → Run workflow on main) only to retry a
+# failed publish: with no pending changesets it publishes whatever version on
+# main isn't on npm yet.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -17,23 +27,32 @@ concurrency:
 
 permissions:
   contents: write # push version commits, tags and GitHub Releases
-  pull-requests: write # open the version PR
   id-token: write # npm trusted publishing (OIDC) + provenance
 
 jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   release:
-    name: Version or publish
-    # Only the repository owner can start a release, and the protected `release`
-    # environment (main branch only) waits for their approval before this runs.
+    name: Version and publish
+    needs: ci
+    # Only the repository owner can push to main, and the `release` environment
+    # (which holds the secrets and the npm trusted publisher) allows only main.
     if: github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main'
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
-      published: ${{ steps.changesets.outputs.published }}
+      published: ${{ steps.publish.outputs.published }}
+      version: ${{ steps.publish.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
     steps:
+      # The tip of main, not the pushed commit: runs are queued one at a time,
+      # and an earlier run may have added a version commit since this push.
       - uses: actions/checkout@v6
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Read Bun version from package.json
@@ -53,25 +72,48 @@ jobs:
       - run: npm install -g npm@latest
 
       - run: bun install --frozen-lockfile
+
+      # Committed and pushed before publishing: if main moved in the meantime
+      # the push fails and nothing is published.
+      - name: Version
+        id: version
+        run: |
+          set -euo pipefail
+          if [[ -n "$(find .changeset -name '*.md' ! -name README.md)" ]]; then
+            bun run version-packages
+            version=$(jq -r .version packages/server/package.json)
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Release: v$version"
+            git push origin HEAD:main
+          else
+            echo "No pending changesets."
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - run: bun run build
 
-      - name: Version PR or publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          version: bun run version-packages
-          publish: bun run release --stage
-          title: "Release: version packages"
-          commit: "Release: version packages"
-          createGithubReleases: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish
+        id: publish
+        run: |
+          set -euo pipefail
+          bun run release | tee release.log
+          echo "version=$(jq -r .version packages/server/package.json)" >> "$GITHUB_OUTPUT"
+          if grep -q '^New tag:' release.log; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
 
   desktop:
     name: Desktop
     needs: release
     if: needs.release.outputs.published == 'true'
     uses: ./.github/workflows/release-desktop.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+      ref: ${{ needs.release.outputs.sha }}
     secrets: inherit
 
   # Created only once every installer is built, like t3code: the desktop
@@ -85,6 +127,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release.outputs.sha }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -95,9 +139,9 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
-          version=$(jq -r .version packages/server/package.json)
           # Release notes: this version's section of the server changelog.
-          awk -v v="## $version" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
-          git tag "v$version" && git push origin "v$version"
-          gh release create "v$version" --title "v$version" --notes-file notes.md release-assets/*
+          awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
+          git tag "v$VERSION" && git push origin "v$VERSION"
+          gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md release-assets/*

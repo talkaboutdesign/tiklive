@@ -1,9 +1,9 @@
 name: CI
 
+# Pushes to main run this through release.yml, which ships only if it passes.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
