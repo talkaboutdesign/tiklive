@@ -67,6 +67,8 @@ export const SessionStatus = Schema.Struct({
   streamStartedAt: Schema.optionalKey(Schema.Finite),
   /** Stream cover image URL. */
   coverUrl: Schema.optionalKey(Schema.String),
+  /** HLS playlist URL for watching the stream. Signed by TikTok and only valid for the current stream. */
+  hlsUrl: Schema.optionalKey(Schema.String),
   error: Schema.optionalKey(Schema.String),
   stats: SessionStats,
 });

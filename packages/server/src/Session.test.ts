@@ -91,13 +91,14 @@ describe("Session with a live streamer", () => {
     ),
   );
 
-  it.live("reports TikTok's stream start time and cover when the room has them", () =>
+  it.live("reports TikTok's stream start time, cover and HLS URL when the room has them", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const session = yield* Session.make("someone");
         const status = yield* waitForState(session, "live");
         expect(status.streamStartedAt).toBe(1791770120000);
         expect(status.coverUrl).toBe("https://example.test/cover.webp");
+        expect(status.hlsUrl).toBe("https://example.test/live.m3u8");
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
@@ -105,6 +106,7 @@ describe("Session with a live streamer", () => {
               live: true,
               streamStartedAt: 1791770120000,
               coverUrl: "https://example.test/cover.webp",
+              hlsUrl: "https://example.test/live.m3u8",
             }),
             fakeWebSocketLayer().layer,
           ),
@@ -113,13 +115,14 @@ describe("Session with a live streamer", () => {
     ),
   );
 
-  it.live("omits the stream start time and cover when the room has none", () =>
+  it.live("omits the stream start time, cover and HLS URL when the room has none", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const session = yield* Session.make("someone");
         const status = yield* waitForState(session, "live");
         expect(status.streamStartedAt).toBeUndefined();
         expect(status.coverUrl).toBeUndefined();
+        expect(status.hlsUrl).toBeUndefined();
       }).pipe(Effect.provide(liveLayer())),
     ),
   );

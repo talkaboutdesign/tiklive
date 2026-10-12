@@ -88,8 +88,9 @@ const STATIC_HEADERS = {
   ...SECURITY_HEADERS,
   "cache-control": "no-cache",
   // Overlays are plain HTML with inline scripts/styles; remote images (avatars, gifts) are allowed.
+  // The dashboard's video preview fetches the HLS playlist and segments from TikTok's video CDNs.
   "content-security-policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'self'",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src 'self' ws: wss: https://*.tiktokcdn.com https://*.tiktokcdn-us.com https://*.tiktokcdn-eu.com; frame-ancestors 'self'",
 };
 
 const MIME: Record<string, string> = {

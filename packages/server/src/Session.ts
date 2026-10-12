@@ -90,6 +90,7 @@ export const make = (
       ...(liveSince ? { liveSince } : {}),
       ...(streamStartedAt ? { streamStartedAt } : {}),
       ...(room?.coverUrl ? { coverUrl: room.coverUrl } : {}),
+      ...(room?.hlsUrl ? { hlsUrl: room.hlsUrl } : {}),
       ...(error ? { error } : {}),
       stats: { ...stats },
     });

@@ -44,7 +44,8 @@
  *   avatar(url, name, size)       Profile picture over a letter. size: "" | "sm" | "lg".
  *   pill(state)                   Status pill. state: live | waiting | connecting | error | idle.
  *   icon(name, size)              Inline SVG: dashboard | actions | overlays | settings | speaker |
- *                                 speakerOff | menu | external.
+ *                                 speakerOff | menu | external | video | filters | silence | volume | muted |
+ *                                 mod | friend | gift | arrowDown | close | retry.
  *   debounce(fn, ms)              Delayed call. Has .cancel().
  *   toast(message, { error })     Shows a short notice at the bottom. Auto-hides after 3 s.
  *
@@ -231,6 +232,90 @@ const SVG_ICONS = {
   ],
   menu: [["path", { d: "M4 6h16M4 12h16M4 18h16" }]],
   external: [["path", { d: "M14 4h6v6M20 4 10 14M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" }]],
+  // From Lucide (ISC license), https://lucide.dev
+  video: [
+    ["path", { d: "m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" }],
+    ["rect", { x: 2, y: 6, width: 14, height: 12, rx: 2 }],
+  ],
+  filters: [
+    ["path", { d: "M10 5H3" }],
+    ["path", { d: "M12 19H3" }],
+    ["path", { d: "M14 3v4" }],
+    ["path", { d: "M16 17v4" }],
+    ["path", { d: "M21 12h-9" }],
+    ["path", { d: "M21 19h-5" }],
+    ["path", { d: "M21 5h-7" }],
+    ["path", { d: "M8 10v4" }],
+    ["path", { d: "M8 12H3" }],
+  ],
+  silence: [
+    [
+      "path",
+      { d: "M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" },
+    ],
+    ["path", { d: "M14.084 14.158a3 3 0 0 1-4.242-4.242" }],
+    [
+      "path",
+      { d: "M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" },
+    ],
+    ["path", { d: "m2 2 20 20" }],
+  ],
+  volume: [
+    [
+      "path",
+      {
+        d: "M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z",
+      },
+    ],
+    ["path", { d: "M16 9a5 5 0 0 1 0 6" }],
+    ["path", { d: "M19.364 18.364a9 9 0 0 0 0-12.728" }],
+  ],
+  muted: [
+    [
+      "path",
+      {
+        d: "M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z",
+      },
+    ],
+    ["line", { x1: 22, x2: 16, y1: 9, y2: 15 }],
+    ["line", { x1: 16, x2: 22, y1: 9, y2: 15 }],
+  ],
+  mod: [
+    [
+      "path",
+      {
+        d: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
+      },
+    ],
+  ],
+  friend: [
+    [
+      "path",
+      {
+        d: "M19.414 14.414C21 12.828 22 11.5 22 9.5a5.5 5.5 0 0 0-9.591-3.676.6.6 0 0 1-.818.001A5.5 5.5 0 0 0 2 9.5c0 2.3 1.5 4 3 5.5l5.535 5.362a2 2 0 0 0 2.879.052 2.12 2.12 0 0 0-.004-3 2.124 2.124 0 1 0 3-3 2.124 2.124 0 0 0 3.004 0 2 2 0 0 0 0-2.828l-1.881-1.882a2.41 2.41 0 0 0-3.409 0l-1.71 1.71a2 2 0 0 1-2.828 0 2 2 0 0 1 0-2.828l2.823-2.762",
+      },
+    ],
+  ],
+  gift: [
+    ["rect", { x: 3, y: 8, width: 18, height: 4, rx: 1 }],
+    ["path", { d: "M12 8v13" }],
+    ["path", { d: "M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" }],
+    ["path", { d: "M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5" }],
+  ],
+  arrowDown: [
+    ["path", { d: "M12 5v14" }],
+    ["path", { d: "m19 12-7 7-7-7" }],
+  ],
+  close: [
+    ["path", { d: "M18 6 6 18" }],
+    ["path", { d: "m6 6 12 12" }],
+  ],
+  retry: [
+    ["path", { d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" }],
+    ["path", { d: "M21 3v5h-5" }],
+    ["path", { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" }],
+    ["path", { d: "M8 16H3v5" }],
+  ],
 };
 
 // Inline SVG icon, drawn in this file (stroke 2, 24×24 grid).

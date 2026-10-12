@@ -22,6 +22,11 @@ export const LiveUser = Schema.Struct({
   isSubscriber: Schema.optionalKey(Schema.Boolean),
   isFollower: Schema.optionalKey(Schema.Boolean),
   isGifter: Schema.optionalKey(Schema.Boolean),
+  /** The viewer's own follower and following counts. Present when TikTok includes them. */
+  followerCount: Schema.optionalKey(Count),
+  followingCount: Schema.optionalKey(Count),
+  /** How the viewer relates to the streamer. `friend` means they follow each other. */
+  followStatus: Schema.optionalKey(Schema.Literals(["none", "follower", "friend"])),
 });
 export type LiveUser = typeof LiveUser.Type;
 

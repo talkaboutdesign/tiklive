@@ -161,6 +161,8 @@ export interface FakeTikTokWebOptions {
   readonly streamStartedAt?: number;
   /** Cover image URL reported for the room. Omitted when not given. */
   readonly coverUrl?: string;
+  /** HLS URL reported for the room. Omitted when not given. */
+  readonly hlsUrl?: string;
   /** Gifts returned by `getGifts`. Default: two sample gifts. */
   readonly gifts?: ReadonlyArray<GiftInfo>;
 }
@@ -210,6 +212,7 @@ export const fakeTikTokWebLayer = (options: FakeTikTokWebOptions = {}): Layer.La
             },
             ...(options.streamStartedAt ? { streamStartedAt: options.streamStartedAt } : {}),
             ...(options.coverUrl ? { coverUrl: options.coverUrl } : {}),
+            ...(options.hlsUrl ? { hlsUrl: options.hlsUrl } : {}),
           };
           return room;
         });
