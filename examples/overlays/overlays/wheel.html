@@ -1,0 +1,366 @@
+<!doctype html>
+<!--
+  Spin the wheel. A gift or a chat command spins it, and it lands on a random option.
+    http://localhost:8080/overlays/wheel.html?username=YOURNAME&gift=Rose
+  options: comma-separated segments (Dance,Sing,Push-ups,Shout out,Spin again,Free pick)
+  gift: gift name that spins it (optional)      minCoins: finished gifts worth this many coins spin it (0 = off)
+  command: chat command that spins it, e.g. !spin (optional)
+  commandFrom: moderators (default) | everyone
+  speak=1: read the result aloud          hideIdle=1: hide the wheel when it's not spinning
+  title: heading above the wheel           &token=… if the server requires one
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>tiklive wheel</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        color: #fff;
+      }
+      /* Centered, so it stays in view however the OBS source is sized or cropped. */
+      .wheel-wrap {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        width: 440px;
+        text-align: center;
+        transform: translate(-50%, -50%);
+        transition:
+          opacity 0.6s ease,
+          transform 0.6s ease;
+      }
+      .wheel-wrap.idle {
+        opacity: 0.35;
+        transform: translate(-50%, -50%) scale(0.8);
+      }
+      .wheel-wrap.idle.hide {
+        opacity: 0;
+      }
+      .heading {
+        display: inline-block;
+        margin-bottom: 8px;
+        padding: 6px 16px;
+        border-radius: 14px;
+        background: rgba(16, 16, 22, 0.72);
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #ffd166;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      }
+      .stage {
+        position: relative;
+        width: 440px;
+        height: 440px;
+      }
+      canvas {
+        width: 440px;
+        height: 440px;
+        display: block;
+        filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.5));
+      }
+      .pointer {
+        position: absolute;
+        top: -4px;
+        left: 50%;
+        width: 0;
+        height: 0;
+        transform: translateX(-50%);
+        border-left: 18px solid transparent;
+        border-right: 18px solid transparent;
+        border-top: 34px solid #fff;
+        filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
+      }
+      .queue {
+        margin-top: 6px;
+        font-size: 18px;
+        font-weight: 700;
+        color: #b8b8c8;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+        min-height: 1.4em;
+      }
+      .result {
+        position: fixed;
+        left: 50%;
+        bottom: 40px;
+        transform: translate(-50%, 0);
+        padding: 14px 26px;
+        border-radius: 18px;
+        background: rgba(16, 16, 22, 0.8);
+        font-size: 30px;
+        font-weight: 700;
+        white-space: nowrap;
+        opacity: 0;
+        transition:
+          opacity 0.5s ease,
+          transform 0.5s ease;
+        pointer-events: none;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      }
+      .result.show {
+        opacity: 1;
+        transform: translate(-50%, -8px);
+      }
+      .result .who {
+        color: #7fdcff;
+      }
+      .result .pick {
+        color: #ffd166;
+        font-weight: 800;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .wheel-wrap,
+        .result {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wheel-wrap idle" id="wrap">
+      <div class="heading" id="heading"></div>
+      <div class="stage">
+        <canvas id="canvas" width="440" height="440" aria-label="Spin the wheel"></canvas>
+        <div class="pointer"></div>
+      </div>
+      <div class="queue" id="queue"></div>
+    </div>
+    <div class="result" id="result" role="status"></div>
+    <script type="module">
+      import { TikLive } from "/tiklive.js";
+
+      const params = new URLSearchParams(location.search);
+      const flag = (k) => params.get(k) === "1";
+      const DEFAULT_OPTIONS = "Dance,Sing,Push-ups,Shout out,Spin again,Free pick";
+      const parseOptions = (text) =>
+        text
+          .split(",")
+          .map((s) => s.trim().slice(0, 40))
+          .filter(Boolean)
+          .slice(0, 20);
+      let options = parseOptions(params.get("options") ?? DEFAULT_OPTIONS);
+      if (options.length < 2) options = parseOptions(DEFAULT_OPTIONS);
+
+      const gift = (params.get("gift") ?? "").trim().toLowerCase();
+      const minCoins = Math.max(0, Number(params.get("minCoins")) || 0);
+      const command = (params.get("command") ?? "").trim().toLowerCase();
+      const commandFrom = params.get("commandFrom") === "everyone" ? "everyone" : "moderators";
+      // The streamer can always use the command, like a moderator.
+      const streamer = (params.get("username") ?? "").trim().replace(/^@/, "").toLowerCase();
+      const speak = flag("speak");
+      const hideIdle = flag("hideIdle");
+      const title = params.get("title")?.trim().slice(0, 60) || "Spin the wheel";
+      const MAX_QUEUE = 10;
+      const RESULT_MS = 6000;
+      const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      const wrap = document.getElementById("wrap");
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const queueEl = document.getElementById("queue");
+      const resultEl = document.getElementById("result");
+      document.getElementById("heading").textContent = title;
+      if (hideIdle) wrap.classList.add("hide");
+
+      // Segment colors are spread around the hue circle, so neighbours differ. Labels are black or white,
+      // whichever has the better contrast on that color.
+      function hslToRgb(h, s, l) {
+        const a = s * Math.min(l, 1 - l);
+        const f = (n) => {
+          const k = (n + h / 30) % 12;
+          return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+        };
+        return [f(0), f(8), f(4)].map((v) => Math.round(v * 255));
+      }
+      const luminance = ([r, g, b]) => {
+        const lin = (c) => {
+          const v = c / 255;
+          return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      };
+      const contrast = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      function segmentStyle(index, count) {
+        const rgb = hslToRgb((index * 360) / count, 0.68, 0.5);
+        const lum = luminance(rgb);
+        const text = contrast(lum, 1) >= contrast(lum, 0) ? "#fff" : "#111";
+        return { fill: `rgb(${rgb.join(",")})`, text };
+      }
+
+      const SIZE = 440;
+      const RADIUS = SIZE / 2 - 8;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = SIZE * dpr;
+      canvas.height = SIZE * dpr;
+
+      // The wheel's rotation is `angle` (radians, clockwise). Segment k spans [k, k+1) * slice from the top,
+      // so the pointer (at the top, -PI/2) reads the segment whose center is at -PI/2 + angle.
+      let angle = 0;
+      function draw() {
+        const n = options.length;
+        const slice = (Math.PI * 2) / n;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, SIZE, SIZE);
+        ctx.save();
+        ctx.translate(SIZE / 2, SIZE / 2);
+        ctx.rotate(angle);
+        options.forEach((label, k) => {
+          const start = -Math.PI / 2 + k * slice;
+          const style = segmentStyle(k, n);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.arc(0, 0, RADIUS, start, start + slice);
+          ctx.closePath();
+          ctx.fillStyle = style.fill;
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.85)";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.save();
+          ctx.rotate(start + slice / 2);
+          ctx.fillStyle = style.text;
+          ctx.font = "700 22px system-ui, -apple-system, 'Segoe UI', sans-serif";
+          ctx.textAlign = "right";
+          ctx.textBaseline = "middle";
+          ctx.fillText(label, RADIUS - 22, 0, RADIUS - 60);
+          ctx.restore();
+        });
+        ctx.beginPath();
+        ctx.arc(0, 0, RADIUS, 0, Math.PI * 2);
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = "#fff";
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        ctx.fillStyle = "#16161e";
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#fff";
+        ctx.stroke();
+        ctx.restore();
+      }
+      draw();
+
+      // ---------- Spins and queue ----------
+
+      const queue = [];
+      let busy = false;
+      let resultTimer;
+
+      const mod = (x, m) => ((x % m) + m) % m;
+
+      // Spins to a random segment: several full turns, then easing out onto the chosen segment's center
+      // (with a little jitter so it isn't always dead center).
+      function spin(index, done) {
+        const slice = (Math.PI * 2) / options.length;
+        const target = -(index + 0.5) * slice + (Math.random() - 0.5) * slice * 0.6;
+        const start = angle;
+        const base = start + (4 + Math.floor(Math.random() * 2)) * Math.PI * 2;
+        const end = base + mod(target - base, Math.PI * 2);
+        const duration = reduceMotion ? 800 : 4000 + Math.random() * 2000;
+        const t0 = performance.now();
+        const step = (now) => {
+          const t = Math.min(1, (now - t0) / duration);
+          angle = start + (end - start) * (1 - (1 - t) ** 3);
+          draw();
+          if (t < 1) requestAnimationFrame(step);
+          else done();
+        };
+        requestAnimationFrame(step);
+      }
+
+      function showResult(nick, pick) {
+        resultEl.replaceChildren();
+        const who = document.createElement("span");
+        who.className = "who";
+        who.textContent = nick;
+        const pickEl = document.createElement("span");
+        pickEl.className = "pick";
+        pickEl.textContent = pick;
+        resultEl.append(who, ": ", pickEl);
+        resultEl.classList.add("show");
+        clearTimeout(resultTimer);
+        resultTimer = setTimeout(() => resultEl.classList.remove("show"), RESULT_MS);
+        if (speak && "speechSynthesis" in window) {
+          speechSynthesis.cancel();
+          speechSynthesis.speak(new SpeechSynthesisUtterance(`${nick} spun ${pick}`));
+        }
+      }
+
+      function renderQueue() {
+        queueEl.textContent = queue.length > 0 ? `${queue.length} waiting` : "";
+        wrap.classList.toggle("idle", !busy);
+      }
+
+      function next() {
+        const job = queue.shift();
+        if (!job) {
+          busy = false;
+          renderQueue();
+          return;
+        }
+        busy = true;
+        renderQueue();
+        const index = Math.floor(Math.random() * options.length);
+        spin(index, () => {
+          showResult(job.nick, options[index]);
+          // A short pause after the landing, so the result reads before the next spin starts.
+          setTimeout(next, 1200);
+        });
+      }
+
+      function enqueue(user) {
+        if (queue.length >= MAX_QUEUE) return;
+        queue.push({ nick: user.nickname || user.uniqueId || "" });
+        renderQueue();
+        if (!busy) next();
+      }
+
+      // ---------- Triggers ----------
+
+      // Each event counts once, however many times it arrives.
+      const seen = new Set();
+      function fresh(msgId) {
+        if (!msgId) return true;
+        if (seen.has(msgId)) return false;
+        seen.add(msgId);
+        if (seen.size > 5000) seen.delete(seen.values().next().value);
+        return true;
+      }
+
+      const live = new TikLive({ events: ["gift", "chat"] });
+
+      live.on("gift", (e, meta) => {
+        // Only the final event of a combo counts, with its total.
+        if (meta.replay || e.streaking) return;
+        const byName = gift !== "" && e.giftName.trim().toLowerCase() === gift;
+        const byCoins = minCoins > 0 && (Number(e.totalDiamonds) || 0) >= minCoins;
+        if (!(byName || byCoins) || !fresh(e.msgId)) return;
+        enqueue(e.user);
+      });
+
+      live.on("chat", (e, meta) => {
+        if (meta.replay || command === "") return;
+        const word = e.comment.trim().split(/\s+/)[0]?.toLowerCase();
+        if (word !== command) return;
+        const isStreamer = streamer !== "" && e.user.uniqueId.toLowerCase() === streamer;
+        if (commandFrom === "moderators" && !e.user.isModerator && !isStreamer) return;
+        if (!fresh(e.msgId)) return;
+        enqueue(e.user);
+      });
+
+      renderQueue();
+    </script>
+  </body>
+</html>

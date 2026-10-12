@@ -1,0 +1,446 @@
+<!doctype html>
+<!--
+  Top supporters for the current stream: coins from gifts, likes, or both.
+    http://localhost:8080/overlays/leaderboard.html?username=YOURNAME
+  metric: gifts (coins, default) | likes | both (two columns)
+  limit: rows per column, 1 to 10 (default 5)   title: heading (default per metric)
+  id: saved-state name (default)   reset=1: clear saved totals on load
+  &token=… if the server requires one
+  Totals are saved per stream, so a browser reload keeps them. A new stream starts from zero.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>tiklive leaderboard</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        color: #fff;
+      }
+      .board {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        padding: 14px 16px;
+        border-radius: 20px;
+        background: rgba(16, 16, 22, 0.72);
+        min-width: 380px;
+      }
+      .title {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #ffd166;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+        margin: 0 4px 10px;
+      }
+      .columns {
+        display: flex;
+        gap: 16px;
+      }
+      .column {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+      .column h2 {
+        margin: 0 4px 6px;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #b8b8c8;
+      }
+      .list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        position: relative;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 56px;
+        padding: 0 12px 0 10px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.07);
+        box-sizing: border-box;
+      }
+      .row.enter {
+        animation: enter 0.4s ease-out;
+      }
+      .rank {
+        flex: none;
+        width: 46px;
+        font-size: 22px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        color: #b8b8c8;
+        text-align: center;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+      }
+      .avatar {
+        flex: none;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        background: #3a3a55;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 18px;
+        color: #fff;
+      }
+      .name {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 22px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+      }
+      .value {
+        flex: none;
+        font-size: 24px;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+      }
+      .column.coins .value {
+        color: #ffd166;
+      }
+      .column.likes .value {
+        color: #ff7ad9;
+      }
+      .row.rank-1 {
+        background: linear-gradient(90deg, rgba(255, 209, 102, 0.35), rgba(255, 255, 255, 0.07));
+      }
+      .row.rank-1 .rank {
+        color: #ffd166;
+      }
+      .row.rank-1 .rank::before {
+        content: "👑";
+        margin-right: 2px;
+      }
+      .row.rank-1 .avatar {
+        box-shadow: 0 0 0 3px #ffd166;
+      }
+      .row.rank-2 .rank {
+        color: #d5dce6;
+      }
+      .row.rank-3 .rank {
+        color: #e0a06b;
+      }
+      .row.rank-2 .avatar {
+        box-shadow: 0 0 0 2px #d5dce6;
+      }
+      .row.rank-3 .avatar {
+        box-shadow: 0 0 0 2px #e0a06b;
+      }
+      .empty {
+        height: 56px;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.05);
+        color: #b8b8c8;
+        font-size: 18px;
+        box-sizing: border-box;
+      }
+      @keyframes enter {
+        from {
+          opacity: 0;
+          transform: translateX(16px);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .row.enter {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="board" id="board">
+      <div class="title" id="title"></div>
+      <div class="columns" id="columns"></div>
+    </div>
+    <script type="module">
+      import { TikLive } from "/tiklive.js";
+
+      const params = new URLSearchParams(location.search);
+      const METRICS = { gifts: "Top gifters", likes: "Top likers", both: "Top supporters" };
+      const metric = Object.hasOwn(METRICS, params.get("metric")) ? params.get("metric") : "gifts";
+      const limit = Math.min(10, Math.max(1, Number(params.get("limit")) || 5));
+      const id = (params.get("id") || "default").replace(/[^\w-]/g, "_").slice(0, 40);
+      const reset = params.get("reset") === "1";
+      const title = params.get("title")?.trim().slice(0, 60) || METRICS[metric];
+
+      // One column per tally. `field` is the tally this column ranks by.
+      const COLUMNS = {
+        coins: { heading: "Coins", field: "coins", css: "coins" },
+        likes: { heading: "Likes", field: "likes", css: "likes" },
+      };
+      const columnKeys = metric === "both" ? ["coins", "likes"] : [metric === "likes" ? "likes" : "coins"];
+
+      document.getElementById("title").textContent = title;
+      const columnsEl = document.getElementById("columns");
+      const boards = columnKeys.map((key) => {
+        const col = COLUMNS[key];
+        const wrap = document.createElement("div");
+        wrap.className = `column ${col.css}`;
+        if (metric === "both") {
+          const h = document.createElement("h2");
+          h.textContent = col.heading;
+          wrap.append(h);
+        }
+        const list = document.createElement("ol");
+        list.className = "list";
+        wrap.append(list);
+        columnsEl.append(wrap);
+        return { col, list, rows: new Map() };
+      });
+
+      const live = new TikLive({ events: ["gift", "like"] });
+      const prefix = `tiklive.leaderboard.${live.username}.${id}.`;
+
+      // Storage can be unavailable (private windows), so every access is optional.
+      const storageKeys = () => {
+        const keys = [];
+        try {
+          for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+        } catch {
+          // Storage is unavailable.
+        }
+        return keys.filter((k) => k?.startsWith(prefix));
+      };
+      const removeKeys = (keys) => {
+        try {
+          for (const k of keys) localStorage.removeItem(k);
+        } catch {
+          // Storage is unavailable.
+        }
+      };
+
+      if (reset) removeKeys(storageKeys());
+
+      // Per-stream state: which stream the totals belong to, and the totals by user.
+      let streamKey = null;
+      let users = new Map();
+      let nextSeq = 0;
+      let pending = [];
+      const seen = new Set();
+
+      function load(key) {
+        try {
+          const saved = JSON.parse(localStorage.getItem(prefix + key) ?? "null");
+          if (!Array.isArray(saved)) return new Map();
+          return new Map(saved.map((u) => [u.userId, u]));
+        } catch {
+          return new Map();
+        }
+      }
+
+      function save() {
+        if (streamKey === null) return;
+        // Keep the 500 biggest tallies so a long stream doesn't fill up storage.
+        const top = [...users.values()].sort((a, b) => b.coins - a.coins || b.likes - a.likes).slice(0, 500);
+        try {
+          localStorage.setItem(prefix + streamKey, JSON.stringify(top));
+        } catch {
+          // Storage is unavailable: totals still update for this visit.
+        }
+      }
+
+      // A new stream starts from zero. Saved totals for other streams are dropped.
+      function switchStream(key) {
+        streamKey = key;
+        removeKeys(storageKeys().filter((k) => k !== prefix + key));
+        users = load(key);
+        nextSeq = Math.max(0, ...[...users.values()].map((u) => u.seq + 1));
+      }
+
+      function fresh(msgId) {
+        if (!msgId) return true;
+        if (seen.has(msgId)) return false;
+        seen.add(msgId);
+        if (seen.size > 5000) seen.delete(seen.values().next().value);
+        return true;
+      }
+
+      function tally(user, field, amount) {
+        const userId = user.userId || user.uniqueId;
+        let entry = users.get(userId);
+        if (!entry) {
+          entry = { userId, nickname: "", avatar: "", coins: 0, likes: 0, seq: nextSeq++ };
+          users.set(userId, entry);
+        }
+        entry.nickname = user.nickname || user.uniqueId || "";
+        entry.avatar = user.profilePictureUrl || "";
+        entry[field] += amount;
+      }
+
+      function apply(event) {
+        if (event.type === "gift") {
+          // Streakable gifts repeat while the combo runs. Count the combo once, when it ends.
+          if (event.streaking) return;
+          const coins = Number(event.totalDiamonds) || 0;
+          if (coins <= 0) return;
+          tally(event.user, "coins", coins);
+        } else {
+          const likes = Number(event.likeCount) || 0;
+          if (likes <= 0) return;
+          tally(event.user, "likes", likes);
+        }
+        save();
+        render();
+      }
+
+      // Only http(s) URLs may reach an <img>.
+      const safeUrl = (u) => {
+        try {
+          const url = new URL(String(u ?? ""));
+          return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+        } catch {
+          return "";
+        }
+      };
+
+      const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      function buildRow(entry) {
+        const li = document.createElement("li");
+        li.className = "row enter";
+        li.addEventListener("animationend", () => li.classList.remove("enter"), { once: true });
+        const rank = document.createElement("span");
+        rank.className = "rank";
+        const avatar = document.createElement(safeUrl(entry.avatar) ? "img" : "span");
+        avatar.className = "avatar";
+        if (avatar.tagName === "IMG") {
+          avatar.src = safeUrl(entry.avatar);
+          avatar.referrerPolicy = "no-referrer";
+          avatar.alt = "";
+          avatar.addEventListener("error", () => avatar.replaceWith(initialBadge(entry.nickname)));
+        } else {
+          avatar.textContent = initial(entry.nickname);
+        }
+        const name = document.createElement("span");
+        name.className = "name";
+        const value = document.createElement("span");
+        value.className = "value";
+        li.append(rank, avatar, name, value);
+        li.dataset.userId = entry.userId;
+        return li;
+      }
+
+      const initial = (nick) => (nick.trim()[0] ?? "?").toUpperCase();
+      function initialBadge(nick) {
+        const span = document.createElement("span");
+        span.className = "avatar";
+        span.textContent = initial(nick);
+        return span;
+      }
+
+      function updateRow(li, entry, field, rank) {
+        li.querySelector(".rank").textContent = String(rank);
+        li.querySelector(".name").textContent = entry.nickname;
+        li.querySelector(".value").textContent = entry[field].toLocaleString();
+        li.classList.toggle("rank-1", rank === 1);
+        li.classList.toggle("rank-2", rank === 2);
+        li.classList.toggle("rank-3", rank === 3);
+      }
+
+      // Rows move with FLIP: measure, reorder, then animate each row from its old spot.
+      function renderBoard({ col, list, rows }) {
+        const ranked = [...users.values()]
+          .filter((u) => u[col.field] > 0)
+          .sort((a, b) => b[col.field] - a[col.field] || a.seq - b.seq)
+          .slice(0, limit);
+
+        const before = new Map();
+        if (!reduceMotion()) for (const [id, li] of rows) before.set(id, li.getBoundingClientRect().top);
+
+        const keep = new Set();
+        ranked.forEach((entry, i) => {
+          let li = rows.get(entry.userId);
+          if (!li) {
+            li = buildRow(entry);
+            rows.set(entry.userId, li);
+          }
+          updateRow(li, entry, col.field, i + 1);
+          list.append(li);
+          keep.add(entry.userId);
+        });
+        for (const [id, li] of rows) {
+          if (!keep.has(id)) {
+            li.remove();
+            rows.delete(id);
+          }
+        }
+        list.querySelector(".empty")?.remove();
+        if (ranked.length === 0) {
+          const empty = document.createElement("li");
+          empty.className = "empty";
+          empty.textContent = col.field === "coins" ? "No gifts yet" : "No likes yet";
+          list.append(empty);
+        }
+
+        if (reduceMotion()) return;
+        for (const [id, li] of rows) {
+          const top = before.get(id);
+          if (top === undefined) continue;
+          const dy = top - li.getBoundingClientRect().top;
+          if (dy !== 0)
+            li.animate([{ transform: `translateY(${dy}px)` }, { transform: "translateY(0)" }], {
+              duration: 450,
+              easing: "ease-out",
+            });
+        }
+      }
+
+      function render() {
+        for (const board of boards) renderBoard(board);
+      }
+
+      // Status carries the stream's start. streamStartedAt doesn't change on reconnect, so it's the
+      // preferred key. liveSince is used when TikTok doesn't say when the stream started.
+      live.on("status", (status) => {
+        const start = status.streamStartedAt ?? status.liveSince;
+        if (start === undefined && streamKey !== null) return;
+        const key = start === undefined ? "default" : String(start);
+        if (key !== streamKey) {
+          switchStream(key);
+          render();
+        }
+        for (const event of pending.splice(0)) apply(event);
+      });
+
+      // Events that arrive before the first status wait for the stream key.
+      const onEvent = (event, meta) => {
+        if (meta.replay || !fresh(event.msgId)) return;
+        if (streamKey === null) pending.push(event);
+        else apply(event);
+      };
+      live.on("gift", onEvent);
+      live.on("like", onEvent);
+      render();
+    </script>
+  </body>
+</html>
