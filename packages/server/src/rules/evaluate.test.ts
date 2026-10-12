@@ -852,6 +852,10 @@ describe("evaluate: webhook steps", () => {
     expect(chatBody("{comment}", chat('a "quoted" \\ line'))).toBe('a "quoted" \\ line');
   });
 
+  it("keeps a body that starts with an unknown {word} as text, since it can't be JSON", () => {
+    expect(chatBody("{wave} {nickname} waved", chat("hi"))).toBe("{wave} Viewer waved");
+  });
+
   it("keeps a hostile nickname inside its string in a JSON body, so it can't add keys", () => {
     const body = chatBody('{"viewer":"{nickname}"}', chat("hi", { ...USER, nickname: 'x", "evil": "1' }));
     expect(JSON.parse(body ?? "")).toEqual({ viewer: 'x", "evil": "1' });

@@ -161,8 +161,8 @@ Streamer.bot, a Minecraft plugin, Home Assistant or Zapier.
 - **Body.** For `POST` and `PUT` only. Leave it empty to send a JSON description of the action: the rule's
   `id` and `name`, the event type, the viewer (`userId`, `uniqueId`, `nickname`), every placeholder's value under
   `vars`, and a `timestamp`. If you type a body, it's sent with its placeholders filled in, up to 4,000
-  characters. A body that starts with `{`, `[` or `"` is treated as JSON, except a body that starts with a
-  placeholder such as `{nickname}`, which is plain text. In a JSON body, placeholder values are escaped, so a
+  characters. A body that starts with `{`, `[` or `"` is treated as JSON, except a body that starts with
+  `{name}` (such as `{nickname}`), which is plain text. In a JSON body, placeholder values are escaped, so a
   viewer's name or comment can't change the JSON's structure. A placeholder outside quotes becomes a number
   when its value is one, and a quoted string otherwise. Placeholders in key names are not filled. Any other
   body is plain text.

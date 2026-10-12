@@ -96,14 +96,13 @@ const asJsonValue = (value: string): string => (JSON_NUMBER.test(value) ? value 
 
 /**
  * Whether a body template is JSON. It is when it starts with `[` or `"`, or with `{` that doesn't open
- * a known placeholder. A body that starts with a placeholder, such as `{nickname} sent a gift`, is text.
+ * a `{word}` placeholder. `{word}` can never begin valid JSON, so a body that starts with one, such as
+ * `{nickname} sent a gift` or `{wave} {nickname} waved`, is text.
  */
 const isJsonTemplate = (template: string): boolean => {
   const text = template.trim();
   if (/^["[]/.test(text)) return true;
-  if (!text.startsWith("{")) return false;
-  const lead = /^\{(\w+)\}/.exec(text)?.[1];
-  return lead === undefined || !isTemplateVariable(lead);
+  return text.startsWith("{") && !/^\{\w+\}/.test(text);
 };
 
 /**

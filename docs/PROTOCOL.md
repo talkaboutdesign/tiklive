@@ -306,7 +306,7 @@ The schemas are in [`packages/contracts/src/rules.ts`](../packages/contracts/src
   percent-encoded. `method` is `POST` (the default), `PUT` or `GET`. `body` is at most 4000 characters, is
   sent as-is for `POST` and `PUT` (as `application/json` if it starts with `{`, `[` or `"` and parses as JSON,
   else `text/plain`), and is
-  ignored for `GET`. A body that starts with a placeholder is filled as text. Otherwise a body that starts with
+  ignored for `GET`. A body that starts with `{name}` is filled as text. Otherwise a body that starts with
   `{`, `[` or `"` is filled as JSON, with values escaped. Without a `body`, `POST` and `PUT` send a JSON
   description of the action:
   `{rule: {id, name}, event, user: {userId, uniqueId, nickname} | null, vars, timestamp}`, where `event` is
