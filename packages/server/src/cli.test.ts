@@ -49,19 +49,22 @@ const captureExit = (fn: () => void) => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   let code: number | undefined;
+  let errors: string[] = [];
+  let warnings: string[] = [];
   try {
     fn();
   } catch (cause) {
     if (!(cause instanceof ExitSignal)) throw cause;
     code = cause.code;
   } finally {
+    errors = error.mock.calls.map(String);
+    warnings = warn.mock.calls.map(String);
     exit.mockRestore();
+    error.mockRestore();
+    warn.mockRestore();
     log.mockRestore();
   }
-  const result = { code, errors: error.mock.calls.map(String), warnings: warn.mock.calls.map(String) };
-  error.mockRestore();
-  warn.mockRestore();
-  return result;
+  return { code, errors, warnings };
 };
 
 describe("parseCli", () => {
@@ -129,6 +132,25 @@ describe("parseCli", () => {
       expect(result.code).toBeUndefined();
       expect(result.errors).toEqual([]);
       expect(result.warnings).toEqual([]);
+    });
+  });
+
+  it("starts without a token on every loopback spelling", () => {
+    withTokenEnv(undefined, () => {
+      for (const host of ["localhost", "LOCALHOST", "[::1]", "::1", "127.0.0.2", "0:0:0:0:0:0:0:1"]) {
+        const result = captureExit(() => parseCli(["--host", host]));
+        expect(result.code, host).toBeUndefined();
+        expect(result.errors, host).toEqual([]);
+        expect(result.warnings, host).toEqual([]);
+      }
+    });
+  });
+
+  it("still exits 1 for 0.0.0.0 and :: without a token", () => {
+    withTokenEnv(undefined, () => {
+      for (const host of ["0.0.0.0", "::"]) {
+        expect(captureExit(() => parseCli(["--host", host])).code, host).toBe(1);
+      }
     });
   });
 

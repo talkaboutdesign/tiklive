@@ -21,6 +21,15 @@ export interface CliConfig {
   readonly helpFooter?: string;
 }
 
+/** True for localhost, any 127.x.x.x address, and ::1 in its short or expanded form. */
+const isLoopback = (host: string): boolean => {
+  const h = host
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, "$1");
+  return h === "localhost" || /^127(\.\d{1,3}){3}$/.test(h) || h === "::1" || h === "0:0:0:0:0:0:0:1";
+};
+
 export const parseCli = (argv: ReadonlyArray<string>, config: CliConfig = {}): ServerOptions => {
   const { values } = parseArgs({
     args: [...argv],
@@ -72,7 +81,7 @@ Clients connect to ws://HOST:PORT/ws. Use the username "demo" for fake events.${
   const host = values.host ?? process.env.HOST ?? "127.0.0.1";
   const staticDir = values.static ?? config.defaultStaticDir;
   const token = values.token ?? process.env.TIKLIVE_TOKEN;
-  const loopback = ["127.0.0.1", "localhost", "::1"].includes(host);
+  const loopback = isLoopback(host);
   const allowNoToken = values["allow-no-token"] ?? false;
   if (!loopback && !token && !allowNoToken) {
     console.error(

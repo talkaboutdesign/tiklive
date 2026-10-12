@@ -62,7 +62,8 @@ the streamer goes live.
   `Authorization: Bearer <token>` or as `?token=` on the URL. Overlays take it as `&token=`.
 - The server binds to `127.0.0.1` by default. To reach it from another machine, pass `--host 0.0.0.0`
   (or another interface). A token is required for that: without `--token` (or `TIKLIVE_TOKEN`), the server
-  refuses to start on a non-loopback `--host` and exits with an error.
+  refuses to start on a non-loopback `--host` and exits with an error. The `tiklive` CLI enforces this; if you
+  embed the server with `Server.layer`, you set `token` and `allowedHosts` yourself.
 - `--allow-no-token` lets the server listen beyond localhost without a token. It prints a warning and is not
   recommended: anyone who can reach the port can edit rules (including webhooks to LAN addresses), upload and
   delete media, and reset points.
