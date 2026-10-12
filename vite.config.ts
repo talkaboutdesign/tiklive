@@ -14,16 +14,16 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["packages/*/src/**/*.test.ts"],
+    include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts"],
   },
   lint: {
-    ignorePatterns: [".repos/**", "**/dist/**"],
+    ignorePatterns: [".repos/**", "**/dist/**", "**/dist-electron/**", "**/release/**"],
     options: {
       reportUnusedDisableDirectives: "error",
     },
   },
   fmt: {
-    ignorePatterns: [".repos/**", "**/dist/**"],
+    ignorePatterns: [".repos/**", "**/dist/**", "**/dist-electron/**", "**/release/**"],
     printWidth: 110,
   },
 });

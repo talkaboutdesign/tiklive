@@ -4,7 +4,8 @@
   "workspaces": {
     "packages": [
       "packages/*",
-      "examples/*"
+      "examples/*",
+      "apps/*"
     ],
     "catalog": {
       "@effect/platform-bun": "4.0.2",
@@ -19,6 +20,7 @@
   },
   "type": "module",
   "scripts": {
+    "desktop:dev": "bun run --filter @tiklive/client build && bun run --filter @tiklive/desktop dev",
     "dev": "bun run --filter @tiklive/client build && bun --conditions=@tiklive/source --watch packages/server/src/bin.ts --static examples/overlays",
     "start": "bun run --filter @tiklive/client build && bun --conditions=@tiklive/source packages/server/src/bin.ts --static examples/overlays",
     "build": "bun run --filter './packages/*' build",

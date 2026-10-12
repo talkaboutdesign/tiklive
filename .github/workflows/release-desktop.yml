@@ -1,0 +1,135 @@
+name: Desktop build
+
+# Builds the desktop app installers: macOS (arm64 + x64, signed and notarized
+# when the Apple secrets are set) and Windows x64 (unsigned for now).
+#
+# - Called by release.yml, which attaches the installers and updater files to
+#   the vX.Y.Z GitHub Release.
+# - Run by hand (Actions → Desktop build → Run workflow) to test the build;
+#   installers are then only uploaded as workflow artifacts.
+#
+# Secrets (all optional; without them the mac build is unsigned):
+#   CSC_LINK          base64 of the Developer ID Application .p12
+#   CSC_KEY_PASSWORD  password of that .p12
+#   APPLE_API_KEY     contents of the App Store Connect AuthKey_XXXX.p8
+#   APPLE_API_KEY_ID  its key ID
+#   APPLE_API_ISSUER  its issuer ID
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: App version (defaults to packages/server's version)
+        type: string
+        required: false
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App version (defaults to packages/server's version)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Desktop ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS
+            os: macos-latest
+            platform: mac
+          - label: Windows x64
+            os: windows-latest
+            platform: win
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read Bun version from package.json
+        id: bun
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').packageManager?.split('@')[1] ?? '1.4.3'")" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - run: bun install --frozen-lockfile
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: echo "version=${INPUT_VERSION:-$(node -p "require('./packages/server/package.json').version")}" >> "$GITHUB_OUTPUT"
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+
+      - name: Build the client and bundle the app
+        shell: bash
+        run: |
+          bun run --filter @tiklive/client build
+          bun run --filter @tiklive/desktop build
+
+      - name: Build installers
+        shell: bash
+        working-directory: apps/desktop
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PLATFORM: ${{ matrix.platform }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          # electron-builder treats an empty env var as set, so unset the empty ones.
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            [[ -n "${!name}" ]] || unset "$name"
+          done
+
+          if [[ "$PLATFORM" == "mac" && -n "${CSC_LINK:-}" && -n "${CSC_KEY_PASSWORD:-}" ]]; then
+            if [[ -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" ]]; then
+              # electron-builder wants a path to the .p8, not its contents.
+              key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+              printf '%s' "$APPLE_API_KEY" > "$key_path"
+              export APPLE_API_KEY="$key_path"
+              echo "macOS: signing and notarizing"
+            else
+              unset APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
+              echo "::warning::macOS: signing without notarization (APPLE_API_* secrets missing)"
+            fi
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            echo "::warning::$PLATFORM: building unsigned"
+          fi
+
+          bun run electron-builder "--$PLATFORM" --publish never "-c.extraMetadata.version=$VERSION"
+
+      - name: Verify macOS signature
+        if: matrix.platform == 'mac' && env.SIGNED == 'true'
+        env:
+          SIGNED: ${{ secrets.CSC_LINK != '' && secrets.APPLE_API_KEY != '' }}
+        working-directory: apps/desktop/release
+        run: |
+          for app in mac/tiklive.app mac-arm64/tiklive.app; do
+            codesign --verify --deep --strict "$app"
+            spctl -a -t exec -vv "$app"
+            xcrun stapler validate "$app"
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml

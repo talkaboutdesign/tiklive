@@ -1,0 +1,46 @@
+appId: dev.tiklive.desktop
+productName: tiklive
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist-electron/**/*
+  - package.json
+extraResources:
+  - from: ../../examples/overlays
+    to: overlays
+    filter:
+      - "**/*"
+      - "!package.json"
+      - "!README.md"
+  - from: ../../packages/client/dist/tiklive.js
+    to: tiklive.js
+mac:
+  category: public.app-category.video
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  # Signed with the "Developer ID Application" certificate from the keychain (or CSC_LINK
+  # + CSC_KEY_PASSWORD), and notarized when APPLE_API_KEY, APPLE_API_KEY_ID and
+  # APPLE_API_ISSUER are set. See signing.env.example.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  differentialPackage: true
+linux:
+  target:
+    - target: AppImage
+publish:
+  provider: github
+  owner: talkaboutdesign
+  repo: tiklive
+artifactName: "tiklive-${version}-${os}-${arch}.${ext}"
