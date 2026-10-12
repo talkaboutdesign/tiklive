@@ -173,6 +173,11 @@ changes publish immediately.
 
 ## HTTP layer (`server/http`)
 
+Live event, status and action publications are JSON-encoded once and shared by their WebSocket
+subscribers. The cache uses weak publication keys, so it does not retain old messages. Event filters,
+action opt-in and replay handling still run per subscription; snapshots and replay envelopes are
+encoded separately.
+
 Built with `HttpRouter`. Every route except `/api/health` and the static files goes through a `guarded`
 wrapper, which does this in order:
 

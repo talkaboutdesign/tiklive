@@ -1364,9 +1364,12 @@ describe("actions on the WebSocket", () => {
       try {
         const withActions = await connect(`${base.ws}/ws`, open);
         withActions.send({ action: "subscribe", username: "demo", actions: true });
+        const anotherWithActions = await connect(`${base.ws}/ws`, open);
+        anotherWithActions.send({ action: "subscribe", username: "demo", actions: true });
         const plain = await connect(`${base.ws}/ws`, open);
         plain.send({ action: "subscribe", username: "demo" });
         await withActions.waitFor((m) => m.type === "status" && m.username === "demo", "status");
+        await anotherWithActions.waitFor((m) => m.type === "status" && m.username === "demo", "status");
         await plain.waitFor((m) => m.type === "status" && m.username === "demo", "status");
 
         await chatCommand(base, "chat-action-1");
@@ -1375,8 +1378,15 @@ describe("actions on the WebSocket", () => {
           username: "demo",
           action: { ruleId: "dance", user: { uniqueId: "viewer" }, steps: [{ text: "Viewer dances" }] },
         });
+        expect(await anotherWithActions.waitFor((m) => m.type === "action", "shared action")).toEqual(action);
         // The chat itself still reaches the plain subscriber, but no action does.
         await plain.waitFor((m) => m.type === "event" && m.event.msgId === "chat-action-1", "chat");
+        expect(
+          await anotherWithActions.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "chat-action-1",
+            "shared chat",
+          ),
+        ).toEqual(eventMessages(plain).find((m) => m.event.msgId === "chat-action-1"));
         expect(actionMessages(plain)).toHaveLength(0);
       } finally {
         closeAll(open);
