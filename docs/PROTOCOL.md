@@ -278,8 +278,8 @@ interface SessionStats {
 }
 ```
 
-Stats are running totals for the current stream. They reset when a connection is established
-(see the caveat in [ARCHITECTURE.md](ARCHITECTURE.md#known-gaps)).
+Stats are running totals for the current stream. They reset when a new stream (room) starts, and keep
+their totals across reconnects to the same room.
 
 ## Actions
 
