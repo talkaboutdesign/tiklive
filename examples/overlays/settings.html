@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Settings · tiklive</title>
+    <script>
+      try {
+        var t = localStorage.getItem("tiklive.theme");
+        document.documentElement.dataset.theme = t === "light" || t === "dark" ? t : "system";
+      } catch {}
+    </script>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/app/app.css" />
+    <style>
+      #username-form .input {
+        width: 200px;
+      }
+      #username-edit {
+        align-items: flex-end;
+      }
+      .row-value {
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside id="sidebar"></aside>
+      <main id="main">
+        <header id="page-header"></header>
+        <div class="page" id="page">
+          <h1 class="sr-only">Settings</h1>
+
+          <section class="section" aria-labelledby="sec-account">
+            <h2 class="section-title" id="sec-account">TikTok account</h2>
+            <div class="group">
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title">Username</div>
+                  <div class="row-desc">
+                    The TikTok account tiklive watches. Overlays and the dashboard use it too.
+                  </div>
+                </div>
+                <div class="row-control" id="username-view">
+                  <span class="row-value" id="username-value"></span>
+                  <button class="btn btn-small" type="button" id="username-change">Change</button>
+                </div>
+                <div class="stack" id="username-edit" hidden>
+                  <form class="row-control" id="username-form" novalidate>
+                    <label class="affix">
+                      <span aria-hidden="true">@</span>
+                      <input
+                        class="input"
+                        id="username-input"
+                        type="text"
+                        autocomplete="off"
+                        autocapitalize="off"
+                        spellcheck="false"
+                        aria-label="TikTok username"
+                        aria-describedby="username-error"
+                      />
+                    </label>
+                    <button class="btn btn-primary btn-small" type="submit">Save</button>
+                    <button class="btn btn-ghost btn-small" type="button" id="username-cancel">Cancel</button>
+                  </form>
+                  <div class="error-text" id="username-error" hidden></div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title">Status</div>
+                  <div class="row-desc" id="status-text">Connecting…</div>
+                </div>
+                <div class="row-control" id="status-pill"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="sec-sounds">
+            <h2 class="section-title" id="sec-sounds">Sounds</h2>
+            <div class="group" id="sounds-browser" hidden>
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title">Action sounds</div>
+                  <div class="row-desc">
+                    The desktop app plays action sounds and speech. In a browser, the actions player in OBS
+                    plays them.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="group" id="sounds-desktop" hidden>
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title" id="audio-label">App sound</div>
+                  <div class="row-desc">Plays action sounds and speech in the app.</div>
+                </div>
+                <div class="row-control">
+                  <button
+                    class="switch"
+                    id="audio-switch"
+                    type="button"
+                    role="switch"
+                    aria-checked="true"
+                    aria-labelledby="audio-label"
+                  ></button>
+                </div>
+              </div>
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title" id="volume-label">Volume</div>
+                  <div class="row-desc">How loud action sounds and speech are.</div>
+                </div>
+                <div class="row-control">
+                  <input
+                    class="range"
+                    id="audio-volume"
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    aria-labelledby="volume-label"
+                  />
+                  <span
+                    class="tabular muted"
+                    id="audio-volume-value"
+                    style="min-width: 3.2em; text-align: right"
+                  ></span>
+                </div>
+              </div>
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title">Player</div>
+                  <div class="row-desc" id="player-desc">Waiting for the player…</div>
+                </div>
+                <div class="row-control">
+                  <span id="player-pill"></span>
+                  <button class="btn btn-small" type="button" id="player-skip" disabled>Skip</button>
+                  <button class="btn btn-small" type="button" id="player-clear" disabled>Clear</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="sec-appearance">
+            <h2 class="section-title" id="sec-appearance">Appearance</h2>
+            <div class="group">
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title">Theme</div>
+                  <div class="row-desc">Follows your system setting unless you choose one here.</div>
+                </div>
+                <div class="row-control">
+                  <div class="segmented" role="radiogroup" aria-label="Theme">
+                    <label><input type="radio" name="theme" value="system" /> System</label>
+                    <label><input type="radio" name="theme" value="light" /> Light</label>
+                    <label><input type="radio" name="theme" value="dark" /> Dark</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="sec-about">
+            <h2 class="section-title" id="sec-about">About</h2>
+            <div class="group">
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title">Version</div>
+                  <div class="row-desc">The tiklive server this page is connected to.</div>
+                </div>
+                <div class="row-control">
+                  <span class="row-value" id="version">—</span>
+                </div>
+              </div>
+              <div class="row" id="updates-row" hidden>
+                <div class="row-text">
+                  <div class="row-title">Updates</div>
+                  <div class="row-desc" id="update-text">Checking…</div>
+                </div>
+                <div class="row-control">
+                  <button class="btn btn-small" type="button" id="update-check">Check for updates</button>
+                </div>
+              </div>
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title">Data folder</div>
+                  <div class="row-desc" id="data-desc"></div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="row-text">
+                  <div class="row-title">Docs</div>
+                  <div class="row-desc">Guides, the protocol and the source code on GitHub.</div>
+                </div>
+                <div class="row-control">
+                  <a
+                    class="btn btn-small"
+                    href="https://github.com/talkaboutdesign/tiklive"
+                    target="_blank"
+                    rel="noreferrer"
+                    >Open on GitHub</a
+                  >
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script type="module">
+      import {
+        mountShell,
+        getUsername,
+        saveUsername,
+        onUsernameChange,
+        normalizeUsername,
+        USERNAME,
+        INVALID_USERNAME,
+        onStatus,
+        pill,
+        onHello,
+        isDesktop,
+        onPlayer,
+        playerCommand,
+        onAppAudio,
+        setAppAudio,
+        getTheme,
+        setTheme,
+        toast,
+        el,
+      } from "/app/shell.js";
+
+      const $ = (id) => document.getElementById(id);
+      mountShell({ page: "settings", crumbs: ["Settings"] });
+
+      // ---- TikTok account ----
+      const view = $("username-view");
+      const edit = $("username-edit");
+      const input = $("username-input");
+      const error = $("username-error");
+
+      function renderUsername() {
+        const name = getUsername();
+        $("username-value").textContent = name ? `@${name}` : "Not set";
+        $("username-value").classList.toggle("muted", !name);
+        $("username-change").textContent = name ? "Change" : "Set";
+      }
+
+      function openEdit() {
+        input.value = getUsername();
+        input.removeAttribute("aria-invalid");
+        error.hidden = true;
+        error.textContent = "";
+        view.hidden = true;
+        edit.hidden = false;
+        input.focus();
+        input.select();
+      }
+
+      function closeEdit() {
+        edit.hidden = true;
+        view.hidden = false;
+        $("username-change").focus();
+      }
+
+      $("username-change").addEventListener("click", openEdit);
+      $("username-cancel").addEventListener("click", closeEdit);
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeEdit();
+      });
+      $("username-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const name = normalizeUsername(input.value);
+        if (!USERNAME.test(name)) {
+          error.textContent = INVALID_USERNAME;
+          error.hidden = false;
+          input.setAttribute("aria-invalid", "true");
+          input.focus();
+          return;
+        }
+        saveUsername(name);
+        closeEdit();
+        toast(`Now watching @${name}`);
+      });
+      onUsernameChange(() => {
+        renderUsername();
+        if (!edit.hidden) closeEdit();
+      });
+      renderUsername();
+
+      // The pill names the state, so the description says what it means.
+      const statusDetail = (status) => {
+        if (!status) return "Set a username to connect.";
+        switch (status.state) {
+          case "live": {
+            const viewers = Number(status.stats?.viewers) || 0;
+            return viewers ? `Streaming now · ${viewers.toLocaleString()} viewers` : "Streaming now.";
+          }
+          case "waiting":
+            return "Not live right now. tiklive checks again automatically and connects when you go live.";
+          case "connecting":
+            return "Connecting to TikTok…";
+          case "error":
+            return status.error || "Something went wrong.";
+          default:
+            return "Not connected.";
+        }
+      };
+      onStatus((status) => {
+        $("status-text").textContent = statusDetail(status);
+        $("status-pill").replaceChildren(pill(status ? status.state : "idle"));
+      });
+
+      // ---- Sounds (desktop app only) ----
+      $("sounds-desktop").hidden = !isDesktop;
+      $("sounds-browser").hidden = isDesktop;
+      if (isDesktop) {
+        const audioSwitch = $("audio-switch");
+        const volume = $("audio-volume");
+        audioSwitch.addEventListener("click", () =>
+          setAppAudio({ enabled: audioSwitch.getAttribute("aria-checked") !== "true" }),
+        );
+        volume.addEventListener("input", () => setAppAudio({ volume: Number(volume.value) / 100 }));
+        onAppAudio((audio) => {
+          const percent = Math.round(audio.volume * 100);
+          audioSwitch.setAttribute("aria-checked", String(audio.enabled));
+          volume.value = String(percent);
+          $("audio-volume-value").textContent = `${percent}%`;
+        });
+
+        $("player-skip").addEventListener("click", () => playerCommand("skip"));
+        $("player-clear").addEventListener("click", () => playerCommand("clear"));
+        onPlayer((v) => {
+          const busy = !v.offline && Boolean(v.playing || v.queued > 0);
+          let text = "Idle. Nothing is queued.";
+          if (v.offline) text = "The sound player isn't responding.";
+          else if (busy) {
+            text = v.playing ? `▶ ${v.playing}` : `${v.queued} queued`;
+            if (v.playing && v.queued > 0) text += ` · ${v.queued} queued`;
+          }
+          $("player-desc").textContent = text;
+          $("player-pill").replaceChildren(
+            v.offline
+              ? el("span", { class: "pill idle" }, "Offline")
+              : el(
+                  "span",
+                  { class: v.connected ? "pill ok" : "pill idle" },
+                  v.connected ? "Connected" : "Offline",
+                ),
+          );
+          $("player-skip").disabled = v.offline || !v.playing;
+          $("player-clear").disabled = v.offline || !busy;
+        });
+      }
+
+      // ---- Appearance ----
+      const themes = document.querySelectorAll('input[name="theme"]');
+      const showTheme = () => {
+        for (const radio of themes) radio.checked = radio.value === getTheme();
+      };
+      for (const radio of themes) {
+        radio.addEventListener("change", () => {
+          if (radio.checked) setTheme(radio.value);
+        });
+      }
+      showTheme();
+      window.addEventListener("storage", (event) => {
+        if (event.key === null || event.key === "tiklive.theme") showTheme();
+      });
+
+      // ---- About ----
+      onHello((hello) => {
+        $("version").textContent = hello.serverVersion;
+      });
+
+      const dataDesc = $("data-desc");
+      if (isDesktop) {
+        const platform = window.tikliveDesktop.platform;
+        const path =
+          platform === "darwin"
+            ? "~/Library/Application Support/tiklive"
+            : platform === "win32"
+              ? "%APPDATA%\\tiklive"
+              : "~/.config/tiklive";
+        dataDesc.replaceChildren(el("span", { class: "mono" }, path));
+      } else {
+        dataDesc.replaceChildren(
+          el("span", { class: "mono" }, "~/.tiklive"),
+          " by default, or the folder passed to ",
+          el("span", { class: "mono" }, "--data-dir"),
+          ".",
+        );
+      }
+
+      if (isDesktop) {
+        const updates = window.tikliveDesktop.updates;
+        $("updates-row").hidden = false;
+
+        // Plain-language status for the Updates row.
+        const updateText = (s) => {
+          switch (s.status) {
+            case "disabled":
+              return s.message ?? "Updates are off in this build.";
+            case "checking":
+              return "Checking for updates…";
+            case "up-to-date":
+              return `tiklive ${s.currentVersion} is the latest version.`;
+            case "available":
+              return `Version ${s.availableVersion} is available. Use the Update button in the sidebar to install it.`;
+            case "downloading":
+              return `Downloading version ${s.availableVersion}… ${Math.round(s.downloadPercent ?? 0)}%`;
+            case "downloaded":
+              return `Version ${s.availableVersion} is ready. Restart to install it.`;
+            case "error":
+              return s.errorContext === "check"
+                ? `Couldn't check for updates: ${s.message ?? "unknown error"}`
+                : `The update failed: ${s.message ?? "unknown error"}`;
+            default:
+              return `tiklive ${s.currentVersion}. Not checked yet.`;
+          }
+        };
+        const renderUpdate = (s) => {
+          $("update-text").textContent = updateText(s);
+          $("update-check").disabled = ["checking", "downloading", "disabled"].includes(s.status);
+        };
+        $("update-check").addEventListener("click", () => updates.check());
+        let pushed = false;
+        updates.onState((s) => {
+          pushed = true;
+          renderUpdate(s);
+        });
+        updates
+          .getState()
+          .then((s) => {
+            if (!pushed) renderUpdate(s);
+          })
+          .catch(() => {});
+      }
+    </script>
+  </body>
+</html>

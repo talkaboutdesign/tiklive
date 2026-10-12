@@ -4,22 +4,23 @@ Actions are rules for your stream. "When someone sends a Rose, play a sound, sho
 You make them on the **Actions** page (`/actions.html`), and the **actions player** in OBS runs them on
 your stream.
 
-The page is linked from the dashboard header. Open it with `?token=` if the server runs with `--token`,
-the same as the dashboard.
+The page is linked from the sidebar. Open it with `?token=` if the server runs with `--token`, the same as the
+dashboard.
 
 ## 1. Add the player to OBS
 
-The Actions page shows the player's URL at the top. To add it:
+The player's URL and setup steps are on the **Overlays** page, in the **Actions player** section (sidebar →
+**Overlays**, or `/overlays.html#actions`). In short:
 
 1. In OBS, add a **Browser Source** and paste the URL. Set the size to 1920×1080.
-2. With the command line, tick **Control audio via OBS**, so sounds and speech go through OBS's mixer. Skip this in
-   the desktop app, which plays sounds and speech itself; its URL leaves them out.
+2. With the command line, tick **Control audio via OBS**, so sounds and speech go through OBS's mixer. Leave it off
+   in the desktop app, which plays sounds and speech itself; its URL leaves them out.
 3. For scene switching, set the source's **Page permissions** to **Advanced access to OBS**.
 
-The player is invisible until an action plays. In the desktop app, the header of the Actions page also has sound
-controls: a button to turn sounds and speech on or off, a volume slider, a chip showing what's playing and how many
-are waiting, and **Skip** and **Clear**. Setup details are in the
-[Actions player section of Overlays](./overlays.md#actions-player-overlaysactionshtml).
+The player is invisible until an action plays. In the desktop app, the sidebar has the sound controls: a switch to
+turn sounds and speech on or off, a volume slider, what's playing and how many are waiting, and **Skip** and
+**Clear**. The line under **Actions** on this page links to the player's setup on the
+[Overlays](./overlays.md) page.
 
 ## 2. Create an action
 
@@ -27,7 +28,9 @@ Click **New action**. Each action has a name, a trigger (**When…**), one or mo
 optional cooldowns. If you leave the name empty, tiklive names it from the trigger and steps, for example
 "When someone sends Rose (100+ coins) → Sound · Speak".
 
-Or start from a template. Templates are saved straight away, then open in the editor so you can change them:
+Or start from a template. When there are no actions yet, the page shows the templates as cards; once you have
+actions, a **Start from a template** line sits under the list. Templates are saved straight away, then open in
+the editor so you can change them:
 
 | Template                     | Trigger                  | Step                                                 |
 | ---------------------------- | ------------------------ | ---------------------------------------------------- |
@@ -115,9 +118,11 @@ Both are optional. Leave them empty for none.
 
 Use the switch on the action's row. Switching saves straight away, and an action that's off is dimmed in the list.
 
+Click an action's name to edit it. The **⋯** menu on each row has **Test**, **Edit**, **Duplicate** and **Delete**.
+
 ## 3. Test it
 
-- **Test** on an action's row sends a fake firing to the player in OBS. The page shows "Sent to the player".
+- **Test**, in an action's **⋯** menu, sends a fake firing to the player in OBS. The page shows "Sent to the player".
   The Activity list on the page shows the firing with a **test** badge. This needs your stream session to
   be running, which the Actions page keeps open for you while it's loaded.
 - The test buttons on the dashboard also trigger your actions.
@@ -142,6 +147,9 @@ problem is OBS's audio or browser source, not tiklive.
   [Run the server](./server.md).
 
 Uploads need a data folder. Without one, the server turns uploads off and the library says so.
+
+Uploads, pasted links and imported sounds are managed in the **Media library** at the bottom of the Actions page.
+It's collapsed until you open it.
 
 ## Limits
 

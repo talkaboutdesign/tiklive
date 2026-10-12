@@ -2,288 +2,71 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>tiklive</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard · tiklive</title>
+    <script>
+      try {
+        var t = localStorage.getItem("tiklive.theme");
+        document.documentElement.dataset.theme = t === "light" || t === "dark" ? t : "system";
+      } catch {}
+    </script>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/app/app.css" />
     <style>
-      :root {
-        color-scheme: dark;
-        --bg: #0f1016;
-        --panel: #181a24;
-        --line: #2a2d3c;
-        --muted: #8b8fa7;
-        --accent: #ff4f8b;
-        --text: #e9e9f1;
-        --error: #ff8a8a;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      [hidden] {
-        display: none !important;
-      }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font:
-          15px/1.45 system-ui,
-          -apple-system,
-          "Segoe UI",
-          sans-serif;
-      }
-      p {
-        margin: 0;
-      }
-      h1,
-      h2 {
-        font-weight: 600;
-      }
-      h2 {
-        margin: 0 0 12px;
-        font-size: 13px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-      }
-      :focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 1px;
-      }
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .logo {
-        font-size: 20px;
-        font-weight: 800;
-        letter-spacing: -0.01em;
-      }
-      .logo span {
-        color: var(--accent);
-      }
-      .muted {
-        color: var(--muted);
-      }
-      .hint {
-        margin-top: 8px;
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .error {
-        color: var(--error);
-        font-size: 13px;
-      }
-      .error:not(:empty) {
-        margin-top: 8px;
-      }
-
-      /* Buttons and inputs */
-      button,
-      .button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 8px 14px;
-        font: inherit;
-        font-weight: 500;
-        color: var(--text);
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        cursor: pointer;
-        text-decoration: none;
-      }
-      button:hover:not(:disabled),
-      .button:hover {
-        border-color: var(--muted);
-      }
-      button:disabled {
-        opacity: 0.5;
-        cursor: default;
-      }
-      button.primary {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: #fff;
-        font-weight: 600;
-      }
-      button.primary:hover:not(:disabled) {
-        filter: brightness(1.08);
-      }
-      button.ghost {
-        background: transparent;
-        border-color: transparent;
-        color: var(--muted);
-      }
-      button.ghost:hover:not(:disabled) {
-        border-color: var(--line);
-        color: var(--text);
-      }
-      button.link {
-        background: none;
-        border: 0;
-        color: var(--accent);
-        font-weight: 600;
-      }
-      button.link:hover:not(:disabled) {
-        text-decoration: underline;
-      }
-      button.small,
-      .button.small {
-        padding: 5px 10px;
-        font-size: 13px;
-      }
-      button.wide {
-        width: 100%;
-        margin-top: 12px;
-        padding: 12px;
-        font-size: 16px;
-      }
-      input,
-      select {
-        font: inherit;
-        color: inherit;
-        padding: 8px 12px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-      }
-
-      /* Pills and avatars */
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        flex: none;
-        padding: 2px 10px;
-        border-radius: 999px;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-        background: #333;
-      }
-      .pill.live {
-        background: #e0245e;
-      }
-      .pill.live::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        margin-right: 6px;
-        border-radius: 50%;
-        background: #fff;
-        animation: pulse 1.6s ease-out infinite;
-      }
-      @keyframes pulse {
-        0% {
-          box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6);
-        }
-        70% {
-          box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
-        }
-        100% {
-          box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .pill.live::before {
-          animation: none;
-        }
-      }
-      .pill.waiting {
-        background: #6b5b16;
-      }
-      .pill.connecting {
-        background: #22517a;
-      }
-      .pill.error {
-        background: #7a2222;
-      }
-      .avatar {
-        position: relative;
-        display: grid;
-        place-items: center;
-        flex: none;
-        width: 28px;
-        height: 28px;
-        overflow: hidden;
-        border-radius: 50%;
-        background: var(--line);
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 700;
-      }
-      .avatar.lg {
-        width: 56px;
-        height: 56px;
-        font-size: 22px;
-      }
-      .avatar.mini {
-        width: 22px;
-        height: 22px;
-        font-size: 10px;
-      }
-      .avatar img {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-
-      /* Onboarding */
+      /* ---------- Onboarding (no sidebar) ---------- */
       .onboarding {
-        min-height: 100vh;
+        position: fixed;
+        inset: 0;
+        overflow-y: auto;
+        background: var(--bg);
+      }
+      .onb-inner {
+        box-sizing: border-box;
+        min-height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 28px;
-        padding: 24px;
+        padding: 32px 24px;
       }
       .onb-card {
         width: 100%;
-        max-width: 440px;
+        max-width: 420px;
         padding: 28px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 14px;
       }
       .onb-card h1 {
-        margin: 18px 0 10px;
+        margin: 20px 0 10px;
         font-size: 22px;
         line-height: 1.25;
       }
       .onb-card form {
-        margin-top: 20px;
+        margin-top: 22px;
       }
-      .field {
-        position: relative;
-      }
-      .field .prefix {
-        position: absolute;
-        left: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--muted);
-        pointer-events: none;
-      }
-      .field input {
-        width: 100%;
-        padding: 12px 12px 12px 30px;
-        font-size: 16px;
-      }
-      .onb-card button.link,
-      .onb-card button.ghost {
+      .onb-card .affix {
         display: flex;
-        margin: 14px auto 0;
+        width: 100%;
+      }
+      .onb-card .input {
+        width: 100%;
+        height: 40px;
+        font-size: 15px;
+      }
+      .btn-block {
+        width: 100%;
+        height: 40px;
+        margin-top: 12px;
+        font-size: 14px;
+      }
+      .onb-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        margin-top: 10px;
       }
       .fine {
-        margin-top: 20px;
+        margin-top: 18px;
         color: var(--muted);
         font-size: 12px;
         text-align: center;
@@ -311,390 +94,271 @@
         width: 22px;
         height: 22px;
         border-radius: 50%;
-        background: color-mix(in srgb, var(--accent) 18%, transparent);
+        background: var(--accent-soft);
         color: var(--accent);
         font-size: 12px;
         font-weight: 700;
       }
 
-      /* Dashboard shell */
-      #dashboard {
-        min-height: 100vh;
+      /* ---------- Dashboard page ---------- */
+      .dash {
         display: flex;
         flex-direction: column;
+        min-height: calc(100dvh - 52px);
+        padding-bottom: 32px;
       }
-      .top {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 12px 24px;
-        background: var(--bg);
-        border-bottom: 1px solid var(--line);
-      }
-      .nav {
-        display: flex;
-        gap: 4px;
-      }
-      .nav a {
-        padding: 6px 12px;
-        color: var(--muted);
-        border: 1px solid transparent;
-        border-radius: 10px;
-        text-decoration: none;
-        font-weight: 500;
-      }
-      .nav a:hover {
-        color: var(--text);
-      }
-      .nav a[aria-current="page"] {
-        color: var(--text);
-        background: var(--panel);
-        border-color: var(--line);
-      }
-      .top-right {
-        margin-left: auto;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 12px;
-        min-width: 0;
-      }
-      .account {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        min-width: 0;
-        padding: 4px 6px 4px 4px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-      }
-      .account-name {
-        min-width: 0;
-        overflow: hidden;
-        font-weight: 600;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      /* Desktop app only: sound controls for the Actions player (hidden in a normal browser) */
-      .app-sound {
+      .notice {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        justify-content: flex-end;
-        gap: 8px;
-        min-width: 0;
+        justify-content: space-between;
+        gap: 10px 16px;
+        margin-bottom: 16px;
+        padding: 10px 14px;
+        background: var(--accent-soft);
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        border-radius: var(--radius-sm);
+        font-size: 13.5px;
       }
-      .app-toggle {
-        padding: 6px 8px;
-        color: var(--muted);
+
+      /* Test events menu (in the page header) */
+      .menu-wrap {
+        position: relative;
       }
-      .app-toggle[aria-pressed="true"] {
-        color: var(--text);
+      .menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 20;
+        min-width: 210px;
+        padding: 6px;
+        background: var(--surface);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        box-shadow: var(--shadow);
       }
-      .app-volume {
-        flex: none;
-        width: 90px;
-        margin: 0;
-        padding: 0;
-        background: none;
+      .menu-item {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        height: 32px;
+        padding: 0 10px;
+        background: transparent;
         border: 0;
-        accent-color: var(--accent);
-        cursor: pointer;
-      }
-      .app-now {
-        display: flex;
-        flex: none;
-        align-items: center;
-        gap: 6px;
-        min-width: 0;
-        padding: 3px 4px 3px 12px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
+        border-radius: 6px;
+        color: var(--text);
         font-size: 13px;
+        text-align: left;
       }
-      .app-now-text {
-        min-width: 0;
-        max-width: 220px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .app-now button {
-        flex: none;
-        padding: 3px 9px;
-        font-size: 13px;
-      }
-      .app-offline {
-        color: var(--muted);
-        font-size: 13px;
-        white-space: nowrap;
-      }
-      .demo-banner {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 24px;
-        font-size: 14px;
-        background: color-mix(in srgb, var(--accent) 14%, transparent);
-        border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-      }
-      main {
-        flex: 1;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 380px;
-        gap: 16px;
-        min-height: 0;
-        padding: 16px 24px;
-      }
-      .col {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        min-width: 0;
-        min-height: 0;
-      }
-      .card {
-        padding: 16px 18px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 14px;
+      .menu-item:hover,
+      .menu-item:focus-visible {
+        background: var(--hover);
       }
 
       /* Status card */
+      .status-card {
+        padding: 20px 22px;
+      }
       .status-head {
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: 16px;
       }
       .who {
         flex: 1;
         min-width: 0;
       }
-      #owner-name {
-        display: block;
+      .who-name {
         overflow: hidden;
         font-size: 17px;
+        font-weight: 600;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      #owner-handle,
-      #followers {
+      .who-meta {
         color: var(--muted);
         font-size: 13px;
       }
       .status-line {
-        margin-top: 14px;
-        font-size: 14px;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
       }
       .status-line.error {
-        color: var(--error);
+        color: var(--danger);
       }
-      .status-line .title {
-        margin-bottom: 2px;
+      .status-title {
         font-weight: 600;
       }
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 8px;
-        margin-top: 16px;
-      }
-      .stat {
-        padding: 10px 12px;
-        background: var(--bg);
-        border-radius: 10px;
-      }
-      .stat b {
-        display: block;
-        font-size: 20px;
-      }
-      .stat span {
+      .status-meta {
+        margin-top: 2px;
         color: var(--muted);
-        font-size: 12px;
-      }
-      #notice:not(:empty) {
-        margin-top: 12px;
-        color: var(--error);
         font-size: 13px;
       }
 
-      /* Events */
-      .events-card {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
+      /* Stat tiles */
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 16px;
       }
-      .events-head {
+      .stat {
+        min-width: 0;
+        padding: 14px 16px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      .stat-label {
+        display: block;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 12.5px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .stat-value {
+        display: block;
+        margin-top: 4px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      /* Events */
+      .events {
+        display: flex;
+        flex: 1 0 auto;
+        flex-direction: column;
+        margin-top: 28px;
+      }
+      .events-group {
+        display: flex;
+        flex: 1 0 auto;
+        flex-direction: column;
+        min-height: 360px;
+      }
+      .events-bar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-      }
-      .events-head h2 {
-        margin: 0;
+        gap: 12px;
+        padding: 10px 12px 10px 16px;
+        border-bottom: 1px solid var(--line);
       }
       .filters {
         display: flex;
+        flex: 1;
         flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 12px;
+        gap: 5px;
+        min-width: 0;
       }
       .chip {
-        padding: 3px 10px;
-        font-size: 12px;
-        color: var(--muted);
+        --tag: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        height: 24px;
+        padding: 0 8px;
+        background: transparent;
+        border: 1px solid var(--line-strong);
         border-radius: 999px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .chip:hover {
+        color: var(--text);
+        background: var(--hover);
       }
       .chip[aria-pressed="true"] {
-        color: var(--tag, var(--text));
-        border-color: var(--tag, var(--muted));
-        background: color-mix(in srgb, var(--tag, var(--muted)) 18%, transparent);
+        color: var(--tag);
+        background: color-mix(in srgb, var(--tag) 12%, transparent);
+        border-color: color-mix(in srgb, var(--tag) 45%, transparent);
       }
       .log-wrap {
         position: relative;
-        flex: 1;
-        min-height: 320px;
+        flex: 1 1 auto;
+        min-height: 280px;
       }
       .log {
         position: absolute;
         inset: 0;
         overflow-y: auto;
-        font-size: 14px;
+        padding: 4px 0;
+        font-size: 13.5px;
       }
-      .empty {
+      .log-empty {
         position: absolute;
-        inset: 0;
-        display: grid;
-        place-items: center;
-        padding: 24px;
-        color: var(--muted);
-        text-align: center;
+        inset: 20px;
+        margin: 0;
+        font-size: 13px;
       }
-      .row {
+      .log-row {
         display: flex;
         align-items: center;
         gap: 10px;
-        padding: 6px 0;
-        border-bottom: 1px solid #1f2230;
+        min-height: 38px;
+        padding: 6px 16px;
       }
-      .time {
+      .log-row + .log-row {
+        border-top: 1px solid var(--line);
+      }
+      .log-time {
         flex: none;
-        color: var(--muted);
+        width: 58px;
+        color: var(--faint);
         font-size: 12px;
-        font-variant-numeric: tabular-nums;
       }
-      .tag {
+      .log-tag {
+        --tag: var(--muted);
         flex: none;
-        min-width: 72px;
-        color: var(--tag, var(--muted));
-        font-size: 11px;
-        font-weight: 700;
+        min-width: 88px;
+        color: var(--tag);
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
         text-transform: uppercase;
       }
-      .name {
+      .log-gap {
         flex: none;
-        max-width: 160px;
+        width: 24px;
+      }
+      .log-name {
+        flex: none;
+        max-width: 150px;
         overflow: hidden;
+        font-weight: 600;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .desc {
+      .log-desc {
         flex: 1;
         min-width: 0;
         overflow-wrap: anywhere;
       }
-      .desc img {
+      .log-desc img {
         vertical-align: middle;
       }
       .gift-img {
-        width: 28px;
-        height: 28px;
+        width: 22px;
+        height: 22px;
         margin-right: 4px;
         object-fit: contain;
       }
       .t-gift {
-        --tag: #ffd166;
+        --tag: var(--warning);
       }
       .t-chat {
-        --tag: #7fdcff;
+        --tag: var(--info);
       }
       .t-follow,
       .t-subscribe {
-        --tag: #ff7ad9;
+        --tag: var(--accent);
       }
       .t-share {
-        --tag: #9dff9d;
+        --tag: var(--success);
       }
 
-      /* Overlays and tests */
-      #overlays {
-        margin-top: 14px;
-      }
-      .overlay + .overlay {
-        margin-top: 14px;
-        padding-top: 14px;
-        border-top: 1px solid var(--line);
-      }
-      .overlay b {
-        display: block;
-      }
-      .overlay .hint {
-        margin-top: 2px;
-      }
-      .controls {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 10px;
-      }
-      .ctl {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        color: var(--muted);
-        font-size: 12px;
-      }
-      .ctl input,
-      .ctl select {
-        width: 110px;
-        padding: 6px 8px;
-        font-size: 13px;
-      }
-      .url-row {
-        display: flex;
-        gap: 6px;
-        margin-top: 10px;
-      }
-      .url-row .url {
-        flex: 1;
-        min-width: 0;
-        padding: 6px 8px;
-        color: var(--muted);
-        font-size: 12px;
-      }
-      .url-row button,
-      .url-row .button {
-        padding: 6px 12px;
-        font-size: 13px;
-      }
-      .tests {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-      }
-
-      @media (max-width: 960px) {
-        main {
-          grid-template-columns: minmax(0, 1fr);
-          align-content: start;
-        }
-      }
       @media (max-width: 560px) {
         .stats {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -704,171 +368,91 @@
   </head>
   <body>
     <section id="onboarding" class="onboarding">
-      <div class="onb-card">
-        <div class="logo">tik<span>live</span></div>
-        <h1>Connect your TikTok LIVE</h1>
-        <p class="muted">
-          Enter your TikTok username. tiklive remembers it, so you only do this once. You don't need to be
-          live right now: tiklive waits and connects when you go live.
-        </p>
-        <form id="form" autocomplete="off">
-          <label for="username" class="sr-only">TikTok username</label>
-          <div class="field">
-            <span class="prefix" aria-hidden="true">@</span>
-            <input
-              id="username"
-              placeholder="yourusername"
-              autocomplete="off"
-              spellcheck="false"
-              autocapitalize="off"
-              aria-describedby="form-hint form-error"
-            />
+      <div class="onb-inner">
+        <div class="card onb-card">
+          <div class="brand">tik<span>live</span></div>
+          <h1>Connect your TikTok LIVE</h1>
+          <p class="muted">
+            Enter your TikTok username. tiklive remembers it, so you only do this once. You don't need to be
+            live right now: tiklive waits and connects when you go live.
+          </p>
+          <form id="form" autocomplete="off" novalidate>
+            <label class="affix">
+              <span aria-hidden="true">@</span>
+              <input
+                class="input"
+                id="username"
+                type="text"
+                placeholder="yourusername"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                aria-label="TikTok username"
+                aria-describedby="form-hint form-error"
+              />
+            </label>
+            <p id="form-hint" class="hint">You can also paste your profile link.</p>
+            <p id="form-error" class="error-text" role="alert"></p>
+            <button class="btn btn-primary btn-block" type="submit">Continue</button>
+          </form>
+          <div class="onb-actions">
+            <button id="try-demo" class="btn btn-ghost btn-small" type="button">
+              Just looking? Try the demo
+            </button>
+            <button id="cancel" class="btn btn-ghost btn-small" type="button" hidden>Cancel</button>
           </div>
-          <p id="form-hint" class="hint">You can also paste your profile link.</p>
-          <p id="form-error" class="error" role="alert"></p>
-          <button class="primary wide" type="submit">Continue</button>
-        </form>
-        <button id="try-demo" class="link" type="button">Just looking? Try the demo</button>
-        <button id="cancel" class="ghost" type="button" hidden>Cancel</button>
-        <p class="fine">No TikTok login needed. tiklive only reads your public LIVE.</p>
+          <p class="fine">No TikTok login needed. tiklive only reads your public LIVE.</p>
+        </div>
+        <ol class="steps">
+          <li><span class="num" aria-hidden="true">1</span>Enter your username</li>
+          <li><span class="num" aria-hidden="true">2</span>Add an overlay to OBS</li>
+          <li><span class="num" aria-hidden="true">3</span>Go live on TikTok</li>
+        </ol>
       </div>
-      <ol class="steps">
-        <li><span class="num" aria-hidden="true">1</span>Enter your username</li>
-        <li><span class="num" aria-hidden="true">2</span>Add an overlay to OBS</li>
-        <li><span class="num" aria-hidden="true">3</span>Go live on TikTok</li>
-      </ol>
     </section>
 
-    <div id="dashboard" hidden>
-      <header class="top">
-        <div class="logo">tik<span>live</span></div>
-        <nav class="nav" aria-label="Pages">
-          <a id="nav-dashboard" href="/" aria-current="page">Dashboard</a>
-          <a id="nav-actions" href="/actions.html">Actions</a>
-        </nav>
-        <div class="top-right">
-          <div id="app-sound" class="app-sound" hidden>
-            <button
-              id="app-toggle"
-              class="ghost small app-toggle"
-              type="button"
-              aria-label="App sound"
-              aria-pressed="true"
-              title="Sounds and speech from the app: on/off"
-            >
-              <svg
-                id="app-icon-on"
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M11 5 6 9H3v6h3l5 4z" />
-                <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
-              </svg>
-              <svg
-                id="app-icon-off"
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                focusable="false"
-                hidden
-              >
-                <path d="M11 5 6 9H3v6h3l5 4z" />
-                <path d="m16 9 6 6m0-6-6 6" />
-              </svg>
-            </button>
-            <input
-              id="app-volume"
-              class="app-volume"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              aria-label="App volume"
-            />
-            <div id="app-now" class="app-now" hidden>
-              <span id="app-now-text" class="app-now-text"></span>
-              <button id="app-skip" class="ghost small" type="button" title="Skip the action that's playing">
-                Skip
-              </button>
-              <button
-                id="app-clear"
-                class="ghost small"
-                type="button"
-                title="Drop the queue and stop what's playing"
-              >
-                Clear
-              </button>
-            </div>
-            <span id="app-offline" class="app-offline" hidden>Sound player offline</span>
+    <div class="app" id="app" hidden>
+      <aside id="sidebar"></aside>
+      <main id="main">
+        <header id="page-header"></header>
+        <div class="page dash" id="page">
+          <h1 class="sr-only">Dashboard</h1>
+
+          <div id="demo-notice" class="notice" hidden>
+            <span>You're watching demo events.</span>
+            <a id="demo-set" class="btn btn-small" href="/settings.html">Set your username</a>
           </div>
-          <button id="update" class="primary" hidden></button>
-          <div class="account">
-            <span id="account-avatar"></span>
-            <b id="account-name" class="account-name"></b>
-            <span id="header-pill"></span>
-            <button id="change" class="ghost small" type="button">Change</button>
-          </div>
-        </div>
-      </header>
-      <div id="demo-banner" class="demo-banner" hidden>
-        <span>You're watching demo events.</span>
-        <button id="demo-set" class="primary small" type="button">Set your username</button>
-      </div>
-      <main>
-        <div class="col">
-          <section class="card">
+
+          <section class="card status-card" aria-label="Stream status">
             <div class="status-head">
               <span id="status-avatar"></span>
               <div class="who">
-                <b id="owner-name"></b>
-                <div id="owner-handle"></div>
-                <div id="followers" hidden></div>
+                <div class="who-name" id="owner-name"></div>
+                <div class="who-meta" id="owner-handle"></div>
+                <div class="who-meta" id="followers" hidden></div>
               </div>
               <span id="status-pill"></span>
             </div>
             <div id="status-line" class="status-line">Starting…</div>
-            <div id="stats" class="stats"></div>
-            <p id="notice" role="alert"></p>
           </section>
-          <section class="card events-card">
-            <div class="events-head">
-              <h2>Events</h2>
-              <button id="clear" class="ghost small" type="button">Clear</button>
+
+          <div class="stats" id="stats"></div>
+
+          <section class="events" aria-labelledby="sec-events">
+            <h2 class="section-title" id="sec-events">Events</h2>
+            <div class="group events-group">
+              <div class="events-bar">
+                <div id="filters" class="filters" role="group" aria-label="Show event types"></div>
+                <button id="clear" class="btn btn-ghost btn-small" type="button">Clear</button>
+              </div>
+              <div class="log-wrap">
+                <div id="log" class="log" role="log" aria-label="Events" tabindex="0"></div>
+                <p id="log-empty" class="empty log-empty">
+                  No events yet. They show up here while you're live. Use Send test event at the top to try
+                  your overlays.
+                </p>
+              </div>
             </div>
-            <div id="filters" class="filters"></div>
-            <div class="log-wrap">
-              <div id="log" class="log" role="log" aria-label="Events" tabindex="0"></div>
-              <p id="log-empty" class="empty">
-                No events yet. They show up here while you're live. Use Test events on the right to try your
-                overlays.
-              </p>
-            </div>
-          </section>
-        </div>
-        <div class="col">
-          <section class="card">
-            <h2>OBS overlays</h2>
-            <p class="hint">Add as a Browser Source in OBS, size 1920×1080.</p>
-            <div id="overlays"></div>
-          </section>
-          <section class="card">
-            <h2>Test events</h2>
-            <div id="tests" class="tests"></div>
-            <p id="test-hint" class="hint">Sends a fake event to every overlay connected to this streamer.</p>
           </section>
         </div>
       </main>
@@ -876,6 +460,24 @@
 
     <script type="module">
       import { TikLive } from "/tiklive.js";
+      import {
+        mountShell,
+        getUsername,
+        saveUsername,
+        onUsernameChange,
+        normalizeUsername,
+        USERNAME,
+        INVALID_USERNAME,
+        onStatus,
+        pill,
+        avatar,
+        img,
+        icon,
+        el,
+        api,
+        toast,
+        withToken,
+      } from "/app/shell.js";
 
       const $ = (id) => document.getElementById(id);
       const num = (x) => Number(x) || 0;
@@ -896,16 +498,6 @@
         "chatDelete",
       ];
       const shown = new Set(TYPES.filter((t) => !["like", "viewers", "join"].includes(t)));
-      const STORAGE_KEY = "tiklive.username";
-      const USERNAME = /^[a-z0-9._]{1,32}$/;
-      const INVALID = "That doesn't look like a TikTok username. Use letters, numbers, dots and underscores.";
-      const PILL = {
-        live: "LIVE",
-        waiting: "OFFLINE",
-        connecting: "CONNECTING",
-        error: "ERROR",
-        idle: "IDLE",
-      };
       const STAT_TILES = [
         ["Viewers", "viewers"],
         ["Peak viewers", "peakViewers"],
@@ -924,122 +516,57 @@
         ["Subscribe", "subscribe"],
         ["Likes", "like"],
       ];
-      const METRICS = [
-        ["likes", "Likes"],
-        ["diamonds", "Coins"],
-        ["follows", "Follows"],
-        ["shares", "Shares"],
-        ["viewers", "Viewers"],
-      ];
-      let live = null; // the current TikLive connection
-      let activeName = ""; // the username of the current session
-
-      // Mirrors normalizeUsername() in packages/contracts/src/protocol.ts.
-      function normalizeUsername(input) {
-        const trimmed = input.trim();
-        const fromUrl = trimmed.match(/tiktok\.com\/@([^/?#]+)/i);
-        return (fromUrl?.[1] ?? trimmed).replace(/^@/, "").toLowerCase();
-      }
-
-      // localStorage can throw (private mode, storage disabled). The app still works without it.
-      function readSaved() {
-        try {
-          const saved = localStorage.getItem(STORAGE_KEY) ?? "";
-          return USERNAME.test(saved) ? saved : "";
-        } catch {
-          // Not available: nothing is remembered.
-          return "";
-        }
-      }
-
-      function saveName(name) {
-        try {
-          localStorage.setItem(STORAGE_KEY, name);
-        } catch {
-          // Not available: nothing is remembered.
-        }
-      }
-
-      // Only http(s) URLs may reach an <img>; anything else renders as nothing.
-      const safeUrl = (u) => {
-        try {
-          const url = new URL(String(u ?? ""));
-          return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
-        } catch {
-          return "";
-        }
+      const testUser = {
+        userId: "0",
+        uniqueId: "test_user",
+        nickname: "Test User",
+        profilePictureUrl: "https://api.dicebear.com/9.x/thumbs/svg?seed=test",
+      };
+      // Bodies per events.ts. `timestamp` and `user` are added to every event on send.
+      const sample = {
+        chat: { comment: "This is a test message!", emotes: [] },
+        gift: {
+          giftId: 5655,
+          giftName: "Rose",
+          giftImageUrl:
+            "https://p16-webcast.tiktokcdn.com/img/maliva/webcast-va/eba3a9bb85c33e017f3648eaf88d7189~tplv-obj.webp",
+          diamondCount: 1,
+          repeatCount: 5,
+          streaking: false,
+          totalDiamonds: 5,
+          groupId: "0",
+        },
+        follow: {},
+        share: {},
+        subscribe: { subMonth: 1 },
+        like: { likeCount: 10, totalLikeCount: 10 },
       };
 
-      // Small DOM builder: strings become text nodes, so nothing is parsed as HTML.
-      function el(tag, props = {}, ...children) {
-        const node = document.createElement(tag);
-        for (const [key, value] of Object.entries(props)) {
-          if (value === undefined || value === null || value === false) continue;
-          if (key === "class") node.className = value;
-          else node.setAttribute(key, String(value));
-        }
-        node.append(...children.filter((c) => c !== undefined && c !== null && c !== false));
-        return node;
-      }
+      let live = null; // the current events connection
+      let activeName = ""; // the streamer the dashboard shows, or "" on onboarding
+      let lastStatus = null;
 
-      function img(src, props = {}) {
-        const url = safeUrl(src);
-        if (!url) return null;
-        const node = el("img", { ...props, src: url, referrerpolicy: "no-referrer" });
-        node.addEventListener("error", () => {
-          node.style.visibility = "hidden";
-        });
-        return node;
-      }
-
-      // A profile picture when there is a safe URL, otherwise a circle with the first letter of the name.
-      function avatar(url, name, size = "") {
-        const letter = (name || "?").charAt(0).toUpperCase();
-        return el(
-          "span",
-          { class: `avatar ${size}`.trim(), "aria-hidden": "true" },
-          letter,
-          img(url, { alt: "" }),
-        );
-      }
-
-      function pill(state) {
-        return el("span", { class: `pill ${state}` }, PILL[state]);
-      }
-
-      function setNotice(message) {
-        $("notice").textContent = message;
-      }
-
-      function whole(value, fallback) {
-        return Math.max(1, Math.floor(Number(value)) || fallback);
-      }
+      // ---- Views ----
 
       function showView(view) {
         $("onboarding").hidden = view !== "onboarding";
-        $("dashboard").hidden = view !== "dashboard";
+        $("app").hidden = view !== "dashboard";
       }
 
-      // Puts ?username= and ?token= in the address bar (or removes them) without a reload.
-      function setPageUrl(username) {
-        const parts = [];
-        if (username) parts.push(`username=${encodeURIComponent(username)}`);
-        if (token) parts.push(`token=${encodeURIComponent(token)}`);
-        history.replaceState(null, "", parts.length ? `?${parts.join("&")}` : location.pathname);
-      }
-
-      function openOnboarding(
-        prefill = readSaved() || (activeName !== "demo" ? activeName : ""),
-        error = "",
-      ) {
+      function openOnboarding(prefill = activeName !== "demo" ? activeName : "", error = "") {
         const input = $("username");
         input.value = prefill;
         $("form-error").textContent = error;
         if (error) input.setAttribute("aria-invalid", "true");
         else input.removeAttribute("aria-invalid");
-        $("cancel").hidden = !live;
+        $("cancel").hidden = !activeName;
         showView("onboarding");
         input.focus();
+      }
+
+      function enterDashboard(name) {
+        if (name !== activeName) connect(name);
+        showView("dashboard");
       }
 
       function submitOnboarding(e) {
@@ -1047,7 +574,7 @@
         const input = $("username");
         const name = normalizeUsername(input.value);
         if (!USERNAME.test(name)) {
-          $("form-error").textContent = INVALID;
+          $("form-error").textContent = INVALID_USERNAME;
           input.setAttribute("aria-invalid", "true");
           input.focus();
           return;
@@ -1058,24 +585,137 @@
           startDemo();
           return;
         }
-        saveName(name);
-        // Same streamer as now: keep the connection and the event log.
-        if (live && name === activeName) {
-          setPageUrl(null);
-          showView("dashboard");
-          return;
-        }
-        connect(name);
-        setPageUrl(null);
-        showView("dashboard");
+        // Saving fires onUsernameChange, which opens the dashboard.
+        saveUsername(name);
       }
 
-      // The demo is never saved.
+      // The demo is never saved. ?username=demo makes the shell's status socket follow it too,
+      // so the page reloads with it set.
       function startDemo() {
-        connect("demo");
-        setPageUrl("demo");
-        showView("dashboard");
+        const url = new URL(location.href);
+        url.searchParams.set("username", "demo");
+        location.replace(url);
       }
+
+      // ---- Events connection ----
+
+      function connect(name) {
+        live?.close();
+        const client = new TikLive({ username: name, token, replay: true });
+        // Anything from a connection that has since been replaced is ignored.
+        const mine =
+          (handler) =>
+          (...args) => {
+            if (client === live) handler(...args);
+          };
+        live = client;
+        activeName = name;
+        $("log").replaceChildren();
+        updateLogEmpty();
+        client.on("*", mine(addRow));
+        client.on(
+          "error",
+          mine((e) => toast(e.message, { error: true })),
+        );
+        trigger.disabled = false;
+        $("demo-notice").hidden = name !== "demo";
+        $("demo-set").href = withToken("/settings.html");
+      }
+
+      // ---- Test events menu (header) ----
+
+      const trigger = el(
+        "button",
+        {
+          type: "button",
+          class: "btn btn-small",
+          "aria-haspopup": "menu",
+          "aria-expanded": "false",
+          "aria-controls": "test-menu",
+          disabled: true,
+        },
+        icon("actions", 15),
+        "Send test event",
+      );
+      const menuItems = TESTS.map(([label, type]) => {
+        const item = el("button", { type: "button", role: "menuitem", class: "menu-item" }, label);
+        item.addEventListener("click", () => {
+          closeMenu(true);
+          simulate(type);
+        });
+        return item;
+      });
+      const menu = el(
+        "div",
+        { id: "test-menu", class: "menu", role: "menu", "aria-label": "Test events", hidden: true },
+        ...menuItems,
+      );
+      const menuWrap = el("div", { class: "menu-wrap" }, trigger, menu);
+      mountShell({ page: "dashboard", crumbs: ["Dashboard"], actions: [menuWrap] });
+
+      function openMenu(focusFirst) {
+        menu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+        if (focusFirst) menuItems[0].focus();
+      }
+
+      function closeMenu(refocus) {
+        if (menu.hidden) return;
+        menu.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+        if (refocus) trigger.focus();
+      }
+
+      trigger.addEventListener("click", () => (menu.hidden ? openMenu(true) : closeMenu(false)));
+      trigger.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          openMenu(true);
+        }
+      });
+      menu.addEventListener("keydown", (e) => {
+        const i = menuItems.indexOf(document.activeElement);
+        const last = menuItems.length - 1;
+        if (e.key === "Escape") {
+          e.preventDefault();
+          closeMenu(true);
+        } else if (e.key === "ArrowDown") {
+          e.preventDefault();
+          menuItems[i >= last ? 0 : i + 1].focus();
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          menuItems[i <= 0 ? last : i - 1].focus();
+        } else if (e.key === "Home") {
+          e.preventDefault();
+          menuItems[0].focus();
+        } else if (e.key === "End") {
+          e.preventDefault();
+          menuItems[last].focus();
+        } else if (e.key === "Tab") {
+          closeMenu(false);
+        }
+      });
+      menuWrap.addEventListener("focusout", (e) => {
+        if (!menuWrap.contains(e.relatedTarget)) closeMenu(false);
+      });
+      document.addEventListener("pointerdown", (e) => {
+        if (!menuWrap.contains(e.target)) closeMenu(false);
+      });
+
+      async function simulate(type) {
+        const name = activeName;
+        if (!name) return;
+        try {
+          await api(`/api/sessions/${encodeURIComponent(name)}/simulate`, {
+            method: "POST",
+            json: { ...sample[type], type, user: testUser, timestamp: Date.now() },
+          });
+        } catch (err) {
+          toast(`Test event failed: ${err.message}`, { error: true });
+        }
+      }
+
+      // ---- Event log ----
 
       $("filters").replaceChildren(
         ...TYPES.map((t) =>
@@ -1091,7 +731,7 @@
           ),
         ),
       );
-      $("filters").onclick = (e) => {
+      $("filters").addEventListener("click", (e) => {
         const chip = e.target.closest("button[data-t]");
         if (!chip) return;
         const t = chip.dataset.t;
@@ -1099,11 +739,11 @@
         if (on) shown.add(t);
         else shown.delete(t);
         chip.setAttribute("aria-pressed", String(on));
-      };
-      $("clear").onclick = () => {
+      });
+      $("clear").addEventListener("click", () => {
         $("log").replaceChildren();
         updateLogEmpty();
-      };
+      });
 
       function describe(e) {
         switch (e.type) {
@@ -1145,17 +785,25 @@
         $("log-empty").hidden = $("log").children.length > 0;
       }
 
-      function log(e, meta) {
+      function addRow(e, meta) {
         if (!shown.has(e.type)) return;
         const u = e.user;
         const name = u ? u.nickname || u.uniqueId || "" : "";
+        const replay = meta?.replay === true;
         const row = el(
           "div",
-          { class: "row" },
-          el("span", { class: "time" }, timeOf(e)),
-          el("span", { class: `tag t-${e.type}` }, `${e.type}${meta?.replay ? "*" : ""}`),
-          ...(u ? [avatar(u.profilePictureUrl, name, "mini"), el("b", { class: "name" }, name)] : []),
-          el("span", { class: "desc" }, ...describe(e)),
+          { class: "log-row" },
+          el("span", { class: "log-time tabular" }, timeOf(e)),
+          el(
+            "span",
+            { class: `log-tag t-${e.type}`, title: replay ? "Replayed from earlier" : undefined },
+            `${e.type}${replay ? "*" : ""}`,
+          ),
+          u
+            ? avatar(u.profilePictureUrl, name, "sm")
+            : el("span", { class: "log-gap", "aria-hidden": "true" }),
+          el("span", { class: "log-name" }, name),
+          el("span", { class: "log-desc" }, ...describe(e)),
         );
         const box = $("log");
         const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
@@ -1165,6 +813,17 @@
         updateLogEmpty();
       }
 
+      // ---- Status card and stats ----
+
+      const statValues = new Map();
+      $("stats").replaceChildren(
+        ...STAT_TILES.map(([label, key]) => {
+          const value = el("span", { class: "stat-value tabular" }, "0");
+          statValues.set(key, value);
+          return el("div", { class: "stat" }, el("span", { class: "stat-label" }, label), value);
+        }),
+      );
+
       function liveForText(since) {
         const mins = Math.max(0, Math.floor((Date.now() - since) / 60000));
         const h = Math.floor(mins / 60);
@@ -1172,415 +831,66 @@
         return `Live for ${h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`}`;
       }
 
-      // One timer for the page. It only re-renders the "Live for" text.
-      setInterval(() => {
-        const node = $("live-for");
-        const since = Number(node?.dataset.since);
-        if (node && since > 0) node.textContent = liveForText(since);
-      }, 30000);
-
-      function renderStatusLine(s, state) {
+      function renderStatusLine(s) {
         const line = $("status-line");
-        if (state === "live") {
+        line.classList.toggle("error", s.state === "error");
+        if (s.state === "live") {
           const since = Number(s.streamStartedAt ?? s.liveSince);
-          const children = [];
-          if (s.title) children.push(el("div", { class: "title" }, s.title));
-          children.push(
-            since > 0
-              ? el("div", { class: "muted", id: "live-for", "data-since": since }, liveForText(since))
-              : el("div", { class: "muted" }, "Live now"),
-          );
-          line.className = "status-line";
-          line.replaceChildren(...children);
+          const parts = [];
+          if (s.title) parts.push(el("div", { class: "status-title" }, s.title));
+          parts.push(el("div", { class: "status-meta" }, since > 0 ? liveForText(since) : "Live now"));
+          line.replaceChildren(...parts);
           return;
         }
         let text = "Starting…";
-        if (state === "waiting") {
+        if (s.state === "waiting") {
           text = "Not live right now. tiklive checks again automatically and connects when you go live.";
-        } else if (state === "connecting") {
+        } else if (s.state === "connecting") {
           text = "Connecting to TikTok…";
-        } else if (state === "error") {
+        } else if (s.state === "error") {
           text = s.error || "Something went wrong.";
         }
-        line.className = state === "error" ? "status-line error" : "status-line";
-        line.textContent = text;
+        line.replaceChildren(text);
       }
 
-      function renderStatus(s) {
-        const state = PILL[s.state] ? s.state : "idle";
+      // The shell's status socket follows the saved username, so it's the source for the card.
+      onStatus((s) => {
+        if (!s) return;
+        lastStatus = s;
         const owner = s.owner;
-        const st = s.stats ?? {};
-        $("header-pill").replaceChildren(pill(state));
-        $("status-pill").replaceChildren(pill(state));
-        $("account-avatar").replaceChildren(avatar(owner?.profilePictureUrl, activeName, "sm"));
-        $("status-avatar").replaceChildren(avatar(owner?.profilePictureUrl, activeName, "lg"));
-        $("owner-name").textContent = owner?.nickname || activeName;
-        $("owner-handle").textContent = `@${activeName}`;
+        const stats = s.stats ?? {};
+        $("status-avatar").replaceChildren(avatar(owner?.profilePictureUrl, s.username, "lg"));
+        $("status-pill").replaceChildren(pill(s.state));
+        $("owner-name").textContent = owner?.nickname || s.username;
+        $("owner-handle").textContent = `@${s.username}`;
         $("followers").hidden = !owner;
         $("followers").textContent = owner ? `${num(owner.followerCount).toLocaleString()} followers` : "";
-        renderStatusLine(s, state);
-        $("stats").replaceChildren(
-          ...STAT_TILES.map(([label, key]) =>
-            el("div", { class: "stat" }, el("b", {}, num(st[key]).toLocaleString()), el("span", {}, label)),
-          ),
-        );
-      }
-
-      // Query string for an overlay URL: username and token, then the overlay's own options.
-      function overlayUrl(path, extra) {
-        const parts = [`username=${encodeURIComponent(activeName)}`];
-        if (token) parts.push(`token=${encodeURIComponent(token)}`);
-        for (const [k, v] of extra) parts.push(`${k}=${encodeURIComponent(v)}`);
-        return `${location.origin}${path}?${parts.join("&")}`;
-      }
-
-      const overlayRows = [];
-      function overlayBlock({ name, desc, path, fields = [], query = () => [] }) {
-        const input = el("input", { class: "url", readonly: true, "aria-label": `${name} URL` });
-        const copy = el("button", { type: "button" }, "Copy");
-        const open = el("a", { class: "button small", target: "_blank", rel: "noopener" }, "Open");
-        const refresh = () => {
-          const url = overlayUrl(path, query());
-          input.value = url;
-          open.setAttribute("href", url);
-        };
-        let timer;
-        copy.onclick = async () => {
-          try {
-            await navigator.clipboard.writeText(input.value);
-            copy.textContent = "Copied";
-            clearTimeout(timer);
-            timer = setTimeout(() => (copy.textContent = "Copy"), 1500);
-          } catch {
-            input.select();
-          }
-        };
-        for (const [, field] of fields) field.addEventListener("input", refresh);
-        overlayRows.push(refresh);
-        const controls =
-          fields.length > 0
-            ? el(
-                "div",
-                { class: "controls" },
-                ...fields.map(([label, field]) =>
-                  el("label", { class: "ctl" }, el("span", {}, label), field),
-                ),
-              )
-            : null;
-        return el(
-          "div",
-          { class: "overlay" },
-          el("b", {}, name),
-          el("p", { class: "hint" }, desc),
-          controls,
-          el("div", { class: "url-row" }, input, copy, open),
-        );
-      }
-
-      const minCoins = el("input", { type: "number", min: "1", value: "1", "aria-label": "Minimum coins" });
-      const goalMetric = el(
-        "select",
-        { "aria-label": "Goal metric" },
-        ...METRICS.map(([value, label]) => el("option", { value }, label)),
-      );
-      const goalTarget = el("input", {
-        type: "number",
-        min: "1",
-        value: "10000",
-        "aria-label": "Goal target",
+        renderStatusLine(s);
+        for (const [key, node] of statValues) node.textContent = num(stats[key]).toLocaleString();
       });
-      $("overlays").replaceChildren(
-        overlayBlock({ name: "Chat", desc: "Live chat messages.", path: "/overlays/chat.html" }),
-        overlayBlock({
-          name: "Alerts",
-          desc: "Gift, follow, subscribe and share pop-ups.",
-          path: "/overlays/alerts.html",
-          fields: [["Min coins", minCoins]],
-          query: () => {
-            const min = whole(minCoins.value, 1);
-            return min === 1 ? [] : [["min", min]];
-          },
-        }),
-        overlayBlock({
-          name: "Goal bar",
-          desc: "A progress bar toward a target.",
-          path: "/overlays/goal.html",
-          fields: [
-            ["Metric", goalMetric],
-            ["Target", goalTarget],
-          ],
-          query: () => [
-            ["metric", goalMetric.value],
-            ["target", String(whole(goalTarget.value, 10000))],
-          ],
-        }),
-      );
 
-      const testUser = {
-        userId: "0",
-        uniqueId: "test_user",
-        nickname: "Test User",
-        profilePictureUrl: "https://api.dicebear.com/9.x/thumbs/svg?seed=test",
-      };
-      // Bodies per events.ts. `timestamp` and `user` are added to every event on send.
-      const sample = {
-        chat: { comment: "This is a test message!", emotes: [] },
-        gift: {
-          giftId: 5655,
-          giftName: "Rose",
-          giftImageUrl:
-            "https://p16-webcast.tiktokcdn.com/img/maliva/webcast-va/eba3a9bb85c33e017f3648eaf88d7189~tplv-obj.webp",
-          diamondCount: 1,
-          repeatCount: 5,
-          streaking: false,
-          totalDiamonds: 5,
-          groupId: "0",
-        },
-        follow: {},
-        share: {},
-        subscribe: { subMonth: 1 },
-        like: { likeCount: 10, totalLikeCount: 10 },
-      };
+      // "Live for" counts up, so refresh it every 30 s.
+      setInterval(() => {
+        if (lastStatus?.state === "live") renderStatusLine(lastStatus);
+      }, 30000);
 
-      async function errorMessage(res) {
-        const text = await res.text().catch(() => "");
-        try {
-          const body = JSON.parse(text);
-          return body?.message ?? body?.error ?? (text || `HTTP ${res.status}`);
-        } catch {
-          return text || `HTTP ${res.status}`;
-        }
-      }
+      // ---- Startup ----
 
-      async function simulate(type) {
-        if (!live) return;
-        setNotice("");
-        try {
-          const res = await fetch(`/api/sessions/${encodeURIComponent(live.username)}/simulate`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-            body: JSON.stringify({ ...sample[type], type, user: testUser, timestamp: Date.now() }),
-          });
-          if (!res.ok) setNotice(`Test event failed: ${await errorMessage(res)}`);
-        } catch (err) {
-          setNotice(`Test event failed: ${err.message}`);
-        }
-      }
+      onUsernameChange((name) => {
+        if (name) enterDashboard(name);
+        else openOnboarding();
+      });
+      $("form").addEventListener("submit", submitOnboarding);
+      $("try-demo").addEventListener("click", startDemo);
+      $("cancel").addEventListener("click", () => showView("dashboard"));
 
-      $("tests").replaceChildren(
-        ...TESTS.map(([label, type]) => {
-          const button = el("button", { type: "button", disabled: true }, label);
-          button.addEventListener("click", () => simulate(type));
-          return button;
-        }),
-      );
-
-      function connect(username) {
-        live?.close();
-        const client = new TikLive({ username, token, replay: true });
-        // Anything from a connection that has since been replaced is ignored.
-        const mine =
-          (handler) =>
-          (...args) => {
-            if (client === live) handler(...args);
-          };
-        live = client;
-        activeName = username;
-        $("log").replaceChildren();
-        updateLogEmpty();
-        setNotice("");
-        client.on("*", mine(log));
-        client.on("status", mine(renderStatus));
-        client.on(
-          "error",
-          mine((e) => setNotice(e.message)),
-        );
-        renderStatus({ username, state: "idle", stats: {} });
-        $("account-name").textContent = `@${username}`;
-        $("demo-banner").hidden = username !== "demo";
-        $("test-hint").textContent = `Sends a fake event to every overlay connected to @${username}.`;
-        for (const button of $("tests").querySelectorAll("button")) button.disabled = false;
-        for (const refresh of overlayRows) refresh();
-      }
-
-      // Desktop app only. window.tikliveDesktop is undefined in a normal browser, so this block never runs there.
-      if (window.tikliveDesktop) {
-        const updates = window.tikliveDesktop.updates;
-        const updateButton = $("update");
-        let updateState;
-
-        // Mirrors actionFor() in apps/desktop/src/updates/updateMachine.ts.
-        const updateAction = (s) => {
-          if (s.status === "downloaded") return "install";
-          if (s.status === "available" || (s.status === "error" && s.errorContext === "download"))
-            return "download";
-          return "none";
-        };
-
-        const updateLabel = (s) => {
-          if (s.status === "downloading") return `Downloading… ${Math.round(s.downloadPercent ?? 0)}%`;
-          if (s.status === "downloaded") return "Restart to update";
-          if (s.status === "available") return `Update to v${s.availableVersion}`;
-          return "Retry update";
-        };
-
-        function renderUpdate(s) {
-          updateState = s;
-          const busy = s.status === "downloading";
-          const hasError = s.status === "error" || s.errorContext === "install";
-          updateButton.hidden = updateAction(s) === "none" && !busy;
-          updateButton.disabled = busy;
-          updateButton.textContent = updateLabel(s);
-          updateButton.title = hasError ? (s.message ?? "") : "";
-        }
-
-        updateButton.onclick = async () => {
-          const action = updateState ? updateAction(updateState) : "none";
-          if (action === "download") {
-            await updates.download();
-          } else if (action === "install") {
-            const version = updateState.availableVersion ?? "";
-            if (confirm(`Restart tiklive to install v${version}? Live connections will drop briefly.`)) {
-              await updates.install();
-            }
-          }
-        };
-
-        // Subscribe before reading the current state so no change is missed. A pushed state
-        // always beats the getState() snapshot, which may have been taken before it.
-        let pushed = false;
-        updates.onState((s) => {
-          pushed = true;
-          renderUpdate(s);
-        });
-        updates
-          .getState()
-          .then((s) => {
-            if (!pushed) renderUpdate(s);
-          })
-          .catch(() => {});
-      }
-
-      // App sound: the desktop app plays sounds and speech itself. These controls write the settings the
-      // player reads, and show what it's doing. Desktop app only.
-      if (window.tikliveDesktop) {
-        const APP_AUDIO_KEY = "tiklive.appAudio";
-        const PLAYER_OFFLINE_MS = 5000;
-        const PLAYER_POLL_MS = 1000;
-        const channel = new BroadcastChannel("tiklive-player");
-        const loadedAt = Date.now();
-        let player = null; // the last status the player sent
-        let heardAt = loadedAt; // when the player last sent anything
-        let disconnectedAt = null; // when the player began reporting that it isn't connected
-
-        function readAppAudio() {
-          try {
-            const saved = JSON.parse(localStorage.getItem(APP_AUDIO_KEY) ?? "null");
-            return {
-              enabled: typeof saved?.enabled === "boolean" ? saved.enabled : true,
-              volume: Number.isFinite(saved?.volume) ? Math.min(1, Math.max(0, saved.volume)) : 1,
-            };
-          } catch {
-            // Not available: the defaults apply.
-            return { enabled: true, volume: 1 };
-          }
-        }
-
-        function writeAppAudio(settings) {
-          try {
-            localStorage.setItem(APP_AUDIO_KEY, JSON.stringify(settings));
-          } catch {
-            // Not available: the change isn't saved.
-          }
-        }
-
-        function renderSound() {
-          const settings = readAppAudio();
-          $("app-toggle").setAttribute("aria-pressed", String(settings.enabled));
-          // SVG elements have no hidden property, so toggle the attribute.
-          $("app-icon-on").toggleAttribute("hidden", !settings.enabled);
-          $("app-icon-off").toggleAttribute("hidden", settings.enabled);
-          $("app-volume").value = String(Math.round(settings.volume * 100));
-        }
-
-        function renderPlayer() {
-          // The player counts as offline when it has been silent for 5 s, or has reported that it isn't
-          // connected for 5 s. Only while a username is saved.
-          const now = Date.now();
-          const offline =
-            readSaved() !== "" &&
-            (now - heardAt > PLAYER_OFFLINE_MS ||
-              (disconnectedAt !== null && now - disconnectedAt > PLAYER_OFFLINE_MS));
-          const busy = Boolean(player && (player.playing || player.queued > 0));
-          $("app-offline").hidden = !offline;
-          $("app-now").hidden = offline || !busy;
-          if (busy && !offline) {
-            const parts = [player.playing ? `▶ ${player.playing}` : `${player.queued} queued`];
-            if (player.playing && player.queued > 0) parts.push(`${player.queued} queued`);
-            $("app-now-text").textContent = parts.join(" · ");
-            $("app-skip").disabled = !player.playing;
-          }
-        }
-
-        channel.addEventListener("message", (event) => {
-          const message = event.data;
-          if (message?.type !== "status") return;
-          const now = Date.now();
-          player = message;
-          heardAt = now;
-          if (message.connected) disconnectedAt = null;
-          else disconnectedAt ??= now;
-          renderPlayer();
-        });
-
-        $("app-toggle").onclick = () => {
-          const settings = readAppAudio();
-          writeAppAudio({ ...settings, enabled: !settings.enabled });
-          renderSound();
-        };
-        $("app-volume").oninput = (event) => {
-          writeAppAudio({ ...readAppAudio(), volume: Number(event.target.value) / 100 });
-          renderSound();
-        };
-        $("app-skip").onclick = () => channel.postMessage({ type: "skip" });
-        $("app-clear").onclick = () => channel.postMessage({ type: "clear" });
-
-        // Other tabs can change the settings or the saved username.
-        window.addEventListener("storage", (event) => {
-          if (event.key === null || event.key === APP_AUDIO_KEY) renderSound();
-          if (event.key === null || event.key === STORAGE_KEY) renderPlayer();
-        });
-
-        $("app-sound").hidden = false;
-        renderSound();
-        renderPlayer();
-        // Ask now, then poll: a silent player shows as offline, and a stale status clears.
-        channel.postMessage({ type: "status?" });
-        setInterval(() => {
-          channel.postMessage({ type: "status?" });
-          renderPlayer();
-        }, PLAYER_POLL_MS);
-      }
-
-      $("form").onsubmit = submitOnboarding;
-      $("try-demo").onclick = () => startDemo();
-      $("cancel").onclick = () => showView("dashboard");
-      $("change").onclick = () => openOnboarding();
-      $("demo-set").onclick = () => openOnboarding();
-
-      $("nav-actions").href = `/actions.html${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-
-      // Startup: ?username= (this visit only), then the saved name, then onboarding.
+      // ?username= in the address bar (this visit only), then the saved name, then onboarding.
+      // An invalid ?username= always shows onboarding with the error.
       const fromUrl = params.get("username") ?? "";
-      const startName = fromUrl ? normalizeUsername(fromUrl) : readSaved();
-      if (startName && USERNAME.test(startName)) {
-        connect(startName);
-        showView("dashboard");
-      } else if (fromUrl) {
-        openOnboarding(fromUrl, INVALID);
+      if (fromUrl && !USERNAME.test(normalizeUsername(fromUrl))) {
+        openOnboarding(fromUrl, INVALID_USERNAME);
+      } else if (getUsername()) {
+        enterDashboard(getUsername());
       } else {
         openOnboarding();
       }

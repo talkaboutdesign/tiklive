@@ -20,7 +20,7 @@ terminal, the app shows an error instead of starting. Quit the other one first.
 
 The app checks GitHub Releases for a newer version. It doesn't download anything on its own:
 
-1. When a new version is out, the dashboard header shows an update button.
+1. When a new version is out, an update button appears at the bottom of the sidebar.
 2. Click the button to download the update.
 3. When the download finishes, click **Restart to update**.
 
@@ -39,15 +39,16 @@ You don't click anything to enable it, and you don't set anything up in OBS. To 
 computer's audio: with TikTok LIVE Studio or OBS's desktop-audio capture, or by streaming from a phone with the
 sound from the room.
 
-- **Header controls:** the dashboard and the Actions page both have them. The speaker button turns sounds and speech
-  on or off, and the slider sets the volume. While an action is playing or waiting, a chip shows its name and how
+- **Sidebar controls:** the bottom of the sidebar has them on every page, and **Settings → Sounds** has the same
+  controls. The switch turns sounds and speech on or off, and the slider sets the volume. While an action is playing or waiting, a chip shows its name and how
   many are queued. **Skip** stops the action that's playing and moves to the next one. **Clear** drops everything
   waiting and stops what's playing, for when chat spams speech.
-- **Sound player offline:** the header shows this when the app's sound player isn't running or can't reach tiklive
+- **Sound player offline:** the sidebar shows this when the app's sound player isn't running or can't reach tiklive
   for a few seconds. Restart the app if it stays.
-- **OBS:** use the OBS player link from the Actions page. The app plays sounds and speech, so the link leaves them
+- **OBS:** use the Actions player link from **Overlays**. The app plays sounds and speech, so the link leaves them
   out (`sounds=0&speech=0`) and OBS shows only pictures, GIFs, videos and scene switches. To have OBS play sounds and
-  speech too, tick **OBS plays sounds and speech too** on the Actions page, and turn off app sound in the header.
+  speech too, turn on **OBS plays sounds and speech too** in the Actions player's settings on **Overlays**, and turn off app
+  sound in the sidebar.
 - **Closing the window:** on Windows and Linux, closing the window quits the app. On macOS the app keeps running
   after you close the window, so sound keeps playing until you choose **Quit**.
 - **Links:** other pages on the tiklive server open in a new tiklive window. Other web links open in your browser.

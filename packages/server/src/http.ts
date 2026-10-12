@@ -89,7 +89,7 @@ const STATIC_HEADERS = {
   "cache-control": "no-cache",
   // Overlays are plain HTML with inline scripts/styles; remote images (avatars, gifts) are allowed.
   "content-security-policy":
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'self'",
 };
 
 const MIME: Record<string, string> = {
