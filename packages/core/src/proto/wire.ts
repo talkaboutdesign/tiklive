@@ -127,6 +127,19 @@ export class ProtoMessage {
     return v instanceof Uint8Array ? textDecoder.decode(v) : "";
   }
 
+  /**
+   * Repeated uint64 field as decimal strings. Accepts both encodings: packed (one
+   * length-delimited field holding concatenated varints) and unpacked (one varint per entry).
+   */
+  ids(field: number): string[] {
+    const out: string[] = [];
+    for (const v of this.fields.get(field) ?? []) {
+      if (typeof v === "bigint") out.push(BigInt.asIntN(64, v).toString());
+      else for (const packed of readVarints(v)) out.push(BigInt.asIntN(64, packed).toString());
+    }
+    return out;
+  }
+
   strs(field: number): string[] {
     return (this.fields.get(field) ?? [])
       .filter((v): v is Uint8Array => v instanceof Uint8Array)
@@ -143,6 +156,26 @@ export class ProtoMessage {
       .filter((v): v is Uint8Array => v instanceof Uint8Array)
       .map((v) => new ProtoMessage(v));
   }
+}
+
+/** Reads a buffer of back-to-back varints (the payload of a packed repeated scalar field). */
+function readVarints(buf: Uint8Array): bigint[] {
+  const out: bigint[] = [];
+  let pos = 0;
+  while (pos < buf.length) {
+    let result = 0n;
+    let shift = 0n;
+    for (;;) {
+      if (pos >= buf.length) throw new ProtoDecodeError("Truncated packed varint");
+      const byte = buf[pos++]!;
+      result |= BigInt(byte & 0x7f) << shift;
+      if ((byte & 0x80) === 0) break;
+      shift += 7n;
+      if (shift > 70n) throw new ProtoDecodeError("Varint too long");
+    }
+    out.push(result);
+  }
+  return out;
 }
 
 export function decode(buffer: Uint8Array): ProtoMessage {
@@ -175,6 +208,14 @@ export class ProtoWriter {
     this.tag(field, WireType.Varint);
     this.pushVarint(big);
     return this;
+  }
+
+  /** Repeated varint field in packed form (one length-delimited field). Zeros are kept, as proto3 does. */
+  packedVarints(field: number, values: ReadonlyArray<number | bigint | string>): this {
+    if (values.length === 0) return this;
+    const inner = new ProtoWriter();
+    for (const value of values) inner.pushVarint(BigInt(value));
+    return this.bytes(field, inner.finish());
   }
 
   bytes(field: number, value: Uint8Array | undefined): this {

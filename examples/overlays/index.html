@@ -263,6 +263,7 @@
         "emote",
         "viewers",
         "streamEnd",
+        "chatDelete",
       ];
       const shown = new Set(TYPES.filter((t) => !["like", "viewers", "join"].includes(t)));
       let live;
@@ -333,6 +334,8 @@
             return (e.emotes ?? []).map((m) => img(m.imageUrl, { height: 24 }));
           case "streamEnd":
             return [`stream ${e.reason}`];
+          case "chatDelete":
+            return [`deleted ${num(e.msgIds?.length)} chat message(s)`];
           default:
             return [e.type];
         }

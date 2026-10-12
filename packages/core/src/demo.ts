@@ -65,6 +65,8 @@ export const demoEvents: Stream.Stream<LiveEvent> = Stream.suspend(() => {
   let viewers = 120;
   let seq = 0;
   let streak: GiftStreak | undefined;
+  // msgIds of chat messages not yet deleted, so chatDelete events point at real chat.
+  const recentChats: string[] = [];
 
   const base = () => ({ timestamp: Date.now(), msgId: `demo-${++seq}` });
 
@@ -94,9 +96,24 @@ export const demoEvents: Stream.Stream<LiveEvent> = Stream.suspend(() => {
       return event;
     }
 
+    // Occasionally a moderator deletes one of the recent chat messages.
+    if (recentChats.length > 0 && Math.random() < 0.03) {
+      const [msgId] = recentChats.splice(Math.floor(Math.random() * recentChats.length), 1);
+      return { type: "chatDelete", ...base(), msgIds: [msgId!], userIds: [] };
+    }
+
     const roll = Math.random();
     if (roll < 0.35) {
-      return { type: "chat", ...base(), user: fakeUser(), comment: pick(COMMENTS), emotes: [] };
+      const chat = {
+        type: "chat" as const,
+        ...base(),
+        user: fakeUser(),
+        comment: pick(COMMENTS),
+        emotes: [],
+      };
+      recentChats.push(chat.msgId);
+      if (recentChats.length > 20) recentChats.shift();
+      return chat;
     } else if (roll < 0.55) {
       const likeCount = 1 + Math.floor(Math.random() * 15);
       likes += likeCount;

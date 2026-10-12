@@ -170,21 +170,26 @@ de-duplication). `user` is a `LiveUser`:
 }
 ```
 
-| `type`      | Fields (besides `type`, `timestamp`, `msgId?`)                                                                                                                                                                                          |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `chat`      | `user`, `comment: string`, `emotes: Emote[]`                                                                                                                                                                                            |
-| `gift`      | `user`, `giftId`, `giftName`, `giftImageUrl`, `diamondCount` (coins per gift), `repeatCount` (count within the combo), `streaking: boolean`, `totalDiamonds` (`diamondCount × repeatCount`), `groupId`, `receiver?: {userId, nickname}` |
-| `like`      | `user`, `likeCount`, `totalLikeCount`                                                                                                                                                                                                   |
-| `follow`    | `user`                                                                                                                                                                                                                                  |
-| `share`     | `user`                                                                                                                                                                                                                                  |
-| `join`      | `user`                                                                                                                                                                                                                                  |
-| `subscribe` | `user`, `subMonth`                                                                                                                                                                                                                      |
-| `question`  | `user`, `question: string`                                                                                                                                                                                                              |
-| `emote`     | `user`, `emotes: Emote[]`                                                                                                                                                                                                               |
-| `viewers`   | `viewerCount`, `topViewers: TopViewer[]` (`{user, coinCount, rank}`)                                                                                                                                                                    |
-| `streamEnd` | `reason: "ended" \| "suspended"`                                                                                                                                                                                                        |
+| `type`       | Fields (besides `type`, `timestamp`, `msgId?`)                                                                                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat`       | `user`, `comment: string`, `emotes: Emote[]`                                                                                                                                                                                            |
+| `chatDelete` | `msgIds: string[]` (msgIds of earlier `chat` events that were deleted), `userIds: string[]` (authors of deleted messages, when TikTok sends them; often empty)                                                                          |
+| `gift`       | `user`, `giftId`, `giftName`, `giftImageUrl`, `diamondCount` (coins per gift), `repeatCount` (count within the combo), `streaking: boolean`, `totalDiamonds` (`diamondCount × repeatCount`), `groupId`, `receiver?: {userId, nickname}` |
+| `like`       | `user`, `likeCount`, `totalLikeCount`                                                                                                                                                                                                   |
+| `follow`     | `user`                                                                                                                                                                                                                                  |
+| `share`      | `user`                                                                                                                                                                                                                                  |
+| `join`       | `user`                                                                                                                                                                                                                                  |
+| `subscribe`  | `user`, `subMonth`                                                                                                                                                                                                                      |
+| `question`   | `user`, `question: string`                                                                                                                                                                                                              |
+| `emote`      | `user`, `emotes: Emote[]`                                                                                                                                                                                                               |
+| `viewers`    | `viewerCount`, `topViewers: TopViewer[]` (`{user, coinCount, rank}`)                                                                                                                                                                    |
+| `streamEnd`  | `reason: "ended" \| "suspended"`                                                                                                                                                                                                        |
 
 `Emote` is `{ emoteId, imageUrl }`.
+
+**Chat deletes.** `chatDelete` is sent when a moderator or the host deletes chat. Remove any chat
+message whose `msgId` is in `msgIds`. `userIds` carries user IDs when TikTok includes them, and is
+usually empty.
 
 **Gift streaks.** Streakable gifts (Rose, and so on) send one event per repeat while the viewer
 holds the combo. Each has `streaking: true` and a rising `repeatCount`. The last one has

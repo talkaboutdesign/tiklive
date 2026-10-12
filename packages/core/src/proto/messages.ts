@@ -103,6 +103,15 @@ const decoders: Record<string, Decoder> = {
     };
   },
 
+  // Chat deletion by a moderator or host. Field numbers: 2=deleted msgIds (packed uint64),
+  // 3=user ids whose messages were deleted (packed uint64, may be absent).
+  WebcastImDeleteMessage(m) {
+    const msgIds = m.ids(2);
+    const userIds = m.ids(3);
+    if (msgIds.length === 0 && userIds.length === 0) return undefined;
+    return { type: "chatDelete", ...base(m), msgIds, userIds };
+  },
+
   WebcastGiftMessage(m) {
     const gift = m.msg(15);
     const giftType = gift?.num(11) ?? 0;
