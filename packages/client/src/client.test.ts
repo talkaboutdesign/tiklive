@@ -352,3 +352,26 @@ describe("protocol", () => {
     expect(PROTOCOL_VERSION).toBe(CONTRACT_PROTOCOL_VERSION);
   });
 });
+
+describe("gifts", () => {
+  it("fetches the catalog over HTTP from the server, with the token", async () => {
+    const gift = { giftId: 5655, name: "Rose", diamondCount: 1, imageUrl: "", streakable: true };
+    const fetchMock = vi.fn(async (_input: URL | string) => new Response(JSON.stringify({ gifts: [gift] })));
+    vi.stubGlobal("fetch", fetchMock);
+    const live = new TikLive({ server: "wss://overlays.test/ws", token: "t0k", WebSocket: FakeWebSocket });
+
+    expect(await live.gifts()).toEqual([gift]);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe("https://overlays.test/api/gifts?token=t0k");
+    live.close();
+  });
+
+  it("uses http for a ws server and rejects on an error status", async () => {
+    const fetchMock = vi.fn(async (_input: URL | string) => new Response("nope", { status: 502 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const live = new TikLive({ server, WebSocket: FakeWebSocket });
+
+    await expect(live.gifts()).rejects.toThrow("HTTP 502");
+    expect(String(fetchMock.mock.calls[0]![0])).toBe("http://test.local/api/gifts");
+    live.close();
+  });
+});

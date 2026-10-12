@@ -72,6 +72,7 @@ export const make = (
     let room: RoomStatus | undefined;
     let roomId: string | undefined;
     let liveSince: number | undefined;
+    let streamStartedAt: number | undefined;
     let stats = emptyStats();
     let statsDirty = false;
     const history: Array<LiveEvent> = [];
@@ -82,6 +83,8 @@ export const make = (
       ...(roomId ? { roomId } : {}),
       ...(room ? { title: room.title, owner: room.owner } : {}),
       ...(liveSince ? { liveSince } : {}),
+      ...(streamStartedAt ? { streamStartedAt } : {}),
+      ...(room?.coverUrl ? { coverUrl: room.coverUrl } : {}),
       ...(error ? { error } : {}),
       stats: { ...stats },
     });
@@ -142,6 +145,7 @@ export const make = (
             if (event.roomId !== roomId) {
               roomId = event.roomId;
               liveSince = Date.now();
+              streamStartedAt = event.room?.streamStartedAt;
               stats = emptyStats();
               stats.viewers = event.room?.viewerCount ?? 0;
               stats.peakViewers = stats.viewers;
@@ -183,7 +187,10 @@ export const make = (
       }
     });
 
-    if (username === DEMO_USERNAME) liveSince = Date.now();
+    if (username === DEMO_USERNAME) {
+      liveSince = Date.now();
+      streamStartedAt = liveSince;
+    }
     const runDemo = Effect.gen(function* () {
       yield* setState("live");
       yield* Stream.runForEach(demoEvents, handleEvent);

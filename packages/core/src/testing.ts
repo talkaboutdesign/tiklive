@@ -4,6 +4,7 @@
  * `connect` without a network.
  */
 import { gzipSync } from "node:zlib";
+import type { GiftInfo } from "@tiklive/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Socket from "effect/socket/Socket";
@@ -156,16 +157,41 @@ export interface FakeTikTokWebOptions {
   /** Room ID returned by lookups. Default "7000000000000000001". */
   readonly roomId?: string;
   readonly userAgent?: string;
+  /** Unix ms reported as the room's `streamStartedAt`. Omitted when not given. */
+  readonly streamStartedAt?: number;
+  /** Cover image URL reported for the room. Omitted when not given. */
+  readonly coverUrl?: string;
+  /** Gifts returned by `getGifts`. Default: two sample gifts. */
+  readonly gifts?: ReadonlyArray<GiftInfo>;
 }
+
+const SAMPLE_GIFTS: ReadonlyArray<GiftInfo> = [
+  {
+    giftId: 5655,
+    name: "Rose",
+    diamondCount: 1,
+    imageUrl: "https://example.test/rose.webp",
+    streakable: true,
+  },
+  {
+    giftId: 1,
+    name: "Lion",
+    diamondCount: 29999,
+    imageUrl: "https://example.test/lion.webp",
+    streakable: false,
+  },
+];
 
 /** `TikTokWeb` that never touches the network. `ttwid` is always "fake-ttwid". */
 export const fakeTikTokWebLayer = (options: FakeTikTokWebOptions = {}): Layer.Layer<TikTokWeb> => {
   const roomId = options.roomId ?? "7000000000000000001";
   const userAgent = options.userAgent ?? "fake-user-agent";
+  const gifts = options.gifts ?? SAMPLE_GIFTS;
   return Layer.succeed(TikTokWeb)(
     TikTokWeb.of({
       userAgent,
       getTtwid: () => Effect.succeed("fake-ttwid"),
+      getGifts: () => Effect.succeed(gifts),
       getRoomStatus: (username) => {
         if (options.notFound) return Effect.fail(new UserNotFound({ username }));
         return Effect.sync(() => {
@@ -182,6 +208,8 @@ export const fakeTikTokWebLayer = (options: FakeTikTokWebOptions = {}): Layer.La
               profilePictureUrl: "",
               followerCount: 0,
             },
+            ...(options.streamStartedAt ? { streamStartedAt: options.streamStartedAt } : {}),
+            ...(options.coverUrl ? { coverUrl: options.coverUrl } : {}),
           };
           return room;
         });

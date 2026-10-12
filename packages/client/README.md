@@ -56,5 +56,11 @@ live.on("*", (e) => console.log(e.type));
 
 A handler that throws is logged with `console.error`, and the other handlers still run.
 
+## Gifts
+
+`await live.gifts()` returns the gift catalog (`GiftInfo[]`: `giftId`, `name`, `diamondCount`, `imageUrl`,
+`streakable`, sorted by price). It fetches `/api/gifts` from the same server, with the same token. The server caches
+the catalog for an hour. The promise rejects if the request fails.
+
 The full protocol is in [docs/PROTOCOL.md](https://github.com/talkaboutdesign/tiklive/blob/main/docs/PROTOCOL.md). Build the bundle with `bun run build` in this
 package or from the root. It writes `dist/tiklive.js`, which the server serves.
