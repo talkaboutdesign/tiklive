@@ -11,7 +11,7 @@
       "@effect/platform-node": "4.0.2",
       "@effect/vitest": "4.0.2",
       "@types/bun": "1.4.2",
-      "@types/node": "26.6.5",
+      "@types/node": "26.6.4",
       "effect": "4.0.2",
       "typescript": "7.0.2",
       "vite-plus": "1.1.0"
@@ -19,8 +19,8 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "bun run --filter @tiklive/client build && bun --watch packages/server/src/bin.ts --static examples/overlays",
-    "start": "bun run --filter @tiklive/client build && bun packages/server/src/bin.ts --static examples/overlays",
+    "dev": "bun run --filter @tiklive/client build && bun --conditions=@tiklive/source --watch packages/server/src/bin.ts --static examples/overlays",
+    "start": "bun run --filter @tiklive/client build && bun --conditions=@tiklive/source packages/server/src/bin.ts --static examples/overlays",
     "build": "bun run --filter './packages/*' build",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun --bun vp test run",

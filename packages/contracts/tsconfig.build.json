@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Resolve sibling packages through their published `dist/` types, as consumers will.
+    "customConditions": []
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
+}

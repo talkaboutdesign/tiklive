@@ -2,6 +2,18 @@
   "name": "@tiklive/client",
   "version": "0.1.0",
   "description": "Typed browser/Node client for tiklive servers. Zero runtime dependencies.",
+  "keywords": [
+    "livestream",
+    "obs",
+    "overlay",
+    "tiktok",
+    "tiktok-live",
+    "webcast"
+  ],
+  "homepage": "https://github.com/talkaboutdesign/tiklive#readme",
+  "bugs": {
+    "url": "https://github.com/talkaboutdesign/tiklive/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,14 +26,23 @@
     "!src/**/*.test.ts"
   ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "@tiklive/source": "./src/index.ts",
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
     "./tiklive.js": "./dist/tiklive.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
-    "build": "bun build src/index.ts --target browser --format esm --outfile dist/tiklive.js",
+    "build": "vp pack && bun build src/index.ts --target browser --format esm --outfile dist/tiklive.js",
     "typecheck": "tsc --noEmit -p .",
-    "test": "vp test run"
+    "test": "vp test run",
+    "prepack": "cp ../../LICENSE LICENSE"
   },
   "dependencies": {
     "@tiklive/contracts": "workspace:*"

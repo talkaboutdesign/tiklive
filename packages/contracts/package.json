@@ -2,6 +2,18 @@
   "name": "@tiklive/contracts",
   "version": "0.1.0",
   "description": "Event and wire-protocol schemas shared by tiklive packages",
+  "keywords": [
+    "livestream",
+    "obs",
+    "overlay",
+    "tiktok",
+    "tiktok-live",
+    "webcast"
+  ],
+  "homepage": "https://github.com/talkaboutdesign/tiklive#readme",
+  "bugs": {
+    "url": "https://github.com/talkaboutdesign/tiklive/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,17 +26,29 @@
     "!src/**/*.test.ts"
   ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "@tiklive/source": "./src/index.ts",
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
-    "test": "vp test run"
+    "test": "vp test run",
+    "build": "vp pack",
+    "prepack": "cp ../../LICENSE LICENSE"
   },
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
     "effect": "catalog:"
   },
-  "devDependencies": {
-    "@effect/vitest": "catalog:"
+  "peerDependencies": {
+    "effect": "^4.0.2"
   }
 }

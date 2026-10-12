@@ -28,11 +28,12 @@
     "packages/contracts": {
       "name": "@tiklive/contracts",
       "version": "0.1.0",
-      "dependencies": {
-        "effect": "catalog:",
-      },
       "devDependencies": {
         "@effect/vitest": "catalog:",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "^4.0.2",
       },
     },
     "packages/core": {
@@ -40,31 +41,37 @@
       "version": "0.1.0",
       "dependencies": {
         "@tiklive/contracts": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "@types/node": "catalog:",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "^4.0.2",
       },
     },
     "packages/server": {
       "name": "@tiklive/server",
       "version": "0.1.0",
       "bin": {
-        "tiklive": "./src/bin.ts",
+        "tiklive": "./dist/bin.mjs",
       },
       "dependencies": {
-        "@effect/platform-bun": "catalog:",
-        "@effect/platform-node": "catalog:",
+        "@effect/platform-bun": "^4.0.2",
+        "@effect/platform-node": "^4.0.2",
         "@tiklive/client": "workspace:*",
         "@tiklive/contracts": "workspace:*",
         "@tiklive/core": "workspace:*",
-        "effect": "catalog:",
       },
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "effect": "^4.0.2",
       },
     },
   },
@@ -76,7 +83,7 @@
     "@effect/platform-node": "4.0.2",
     "@effect/vitest": "4.0.2",
     "@types/bun": "1.4.2",
-    "@types/node": "26.6.5",
+    "@types/node": "26.6.4",
     "effect": "4.0.2",
     "typescript": "7.0.2",
     "vite-plus": "1.1.0",
@@ -266,7 +273,7 @@
 
     "@types/estree": ["@types/estree@1.0.9", "", {}, "sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg=="],
 
-    "@types/node": ["@types/node@26.6.5", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg=="],
+    "@types/node": ["@types/node@26.6.4", "", { "dependencies": { "undici-types": "~8.9.0" } }, "sha512-ldVPDCzj7fsaGZrLB0NuHuTvJcsNasysBAqMolr/cgxrLd1xbqxIr3XJiPnHHJUCxj5sNF1vnRj9aWnrVh5Jcg=="],
 
     "@types/ws": ["@types/ws@8.18.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w=="],
 
