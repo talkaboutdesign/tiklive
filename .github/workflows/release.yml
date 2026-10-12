@@ -3,7 +3,7 @@ name: Release
 # On every push to main, changesets/action either opens/updates a
 # "Release: version packages" PR (when there are pending changesets), or —
 # once that PR is merged — publishes the new versions to npm and creates a
-# GitHub Release with standalone binaries.
+# GitHub Release.
 
 on:
   push:
@@ -62,25 +62,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  binaries:
-    name: GitHub Release with binaries
+  github-release:
+    name: GitHub Release
     needs: release
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
-
-      - name: Read Bun version from package.json
-        id: bun-version
-        run: echo "version=$(jq -r '.packageManager | split("@")[1]' package.json)" >> "$GITHUB_OUTPUT"
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ steps.bun-version.outputs.version }}
-
-      - run: bun install --frozen-lockfile
-      - run: bun scripts/build-binaries.ts --all
 
       - name: Create GitHub Release
         env:
@@ -90,4 +79,4 @@ jobs:
           # Release notes: this version's section of the server changelog.
           awk -v v="## $version" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
           git tag "v$version" && git push origin "v$version"
-          gh release create "v$version" $(ls dist/bin/tiklive-* | grep -v "\.map$") --title "v$version" --notes-file notes.md
+          gh release create "v$version" --title "v$version" --notes-file notes.md

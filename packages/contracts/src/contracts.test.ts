@@ -8,7 +8,8 @@ describe("contracts", () => {
   it("lists every event type", () => {
     expect(LIVE_EVENT_TYPES).toContain("chat");
     expect(LIVE_EVENT_TYPES).toContain("streamEnd");
-    expect(LIVE_EVENT_TYPES).toHaveLength(13);
+    expect(LIVE_EVENT_TYPES).toContain("chatDelete");
+    expect(LIVE_EVENT_TYPES).toHaveLength(14);
   });
 
   it("decodes valid events and rejects wrong field types", () => {
@@ -35,6 +36,7 @@ describe("contracts", () => {
   it("matches on event type", () => {
     const describeEvent = LiveEvent.match({
       chat: (e) => e.comment,
+      chatDelete: (e) => `${e.msgIds.length} deleted`,
       follow: (e) => `${e.user.nickname} followed`,
       gift: () => "gift",
       like: () => "like",

@@ -2,7 +2,8 @@
 
 A typed client for tiklive servers. It connects to a server over WebSocket, subscribes to a streamer, and calls your
 handlers for each event. It has **no runtime dependencies** and no Effect code. Its types come from
-[`@tiklive/contracts`](../contracts/README.md) and are erased at build time.
+[`@tiklive/contracts`](https://github.com/talkaboutdesign/tiklive/blob/main/packages/contracts/README.md) and are erased at build time. Installing it from npm still pulls in
+`@tiklive/contracts` and its `effect` peer for those types, but neither ends up in your bundle.
 
 It runs in browsers, and in Bun or Node wherever there's a global `WebSocket`.
 
@@ -55,5 +56,5 @@ live.on("*", (e) => console.log(e.type));
 
 A handler that throws is logged with `console.error`, and the other handlers still run.
 
-The full protocol is in [docs/PROTOCOL.md](../../docs/PROTOCOL.md). Build the bundle with `bun run build` in this
+The full protocol is in [docs/PROTOCOL.md](https://github.com/talkaboutdesign/tiklive/blob/main/docs/PROTOCOL.md). Build the bundle with `bun run build` in this
 package or from the root. It writes `dist/tiklive.js`, which the server serves.
