@@ -1,0 +1,45 @@
+# Dependencies & build output
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+.vitest/
+
+# Environment & secrets (server tokens, API keys)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+secrets/
+credentials*.json
+
+# TikTok session data: cookies, captured traffic, browser profiles
+.tiklive/
+cookies*.json
+*cookies*.txt
+*.har
+browser-profile/
+profile/
+user-data-dir/
+captures/
+playwright/.auth/
+playwright-report/
+test-results/
+
+# Logs & runtime
+*.log
+logs/
+*.pid
+
+# OS & editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
