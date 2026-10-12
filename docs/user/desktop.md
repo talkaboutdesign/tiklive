@@ -32,7 +32,7 @@ turned off.
 Open **Settings** in the sidebar and pick an **Update channel** under **About**:
 
 - **Stable** (the default) gets tested releases.
-- **Nightly** gets a new build every time a change is merged. Nightlies get new features first and can have bugs.
+- **Nightly** gets a new build a few times a day when there are new changes. Nightlies get new features first and can have bugs.
 
 The app checks the new channel as soon as you switch. Switching from Nightly back to Stable offers the latest
 stable release even when it's older than your nightly. A nightly install stays on nightlies until a newer nightly

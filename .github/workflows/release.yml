@@ -2,7 +2,9 @@ name: Release
 
 # Two channels, both from main, with no approvals:
 #
-# - Nightly: every push to main with pending changesets. CI runs first. The
+# - Nightly: at most every six hours, on a schedule, when main has new commits
+#   since the last nightly and pending changesets (merging a PR doesn't build
+#   one by itself, like T3 Code). CI runs first. The
 #   changesets are versioned as a snapshot (0.6.0-nightly.20261012173210)
 #   without committing anything, `tiklive` is published under the npm
 #   `nightly` dist-tag, the desktop app is built, and the commit gets a GitHub
@@ -18,8 +20,9 @@ name: Release
 # example to retry a failed one.
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    # Hourly, off the busy top of the hour. The gate job decides whether a nightly is due.
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       channel:
@@ -38,17 +41,56 @@ permissions:
   id-token: write # npm trusted publishing (OIDC) + provenance
 
 jobs:
+  # Scheduled runs only: a nightly is due when the last one is at least six hours old
+  # and main has moved since. Manual runs skip this and always build.
+  gate:
+    name: Nightly due?
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    outputs:
+      due: ${{ steps.check.outputs.due }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # history and tags
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MIN_GAP_SECONDS: 21600
+        run: |
+          set -euo pipefail
+          last=$(gh release list --limit 50 --json tagName,publishedAt,isPrerelease \
+            --jq '[.[] | select(.isPrerelease and (.tagName | test("^v.*-nightly\\.")))] | sort_by(.publishedAt) | last | .tagName // ""')
+          if [[ -z "$last" ]]; then
+            echo "No nightly yet."
+            echo "due=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          published=$(gh release view "$last" --json publishedAt --jq .publishedAt)
+          age=$(( $(date +%s) - $(date -d "$published" +%s) ))
+          if (( age < MIN_GAP_SECONDS )); then
+            echo "$last is $(( age / 60 )) minutes old. Waiting for the six-hour gap."
+            echo "due=false" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor HEAD "$last"; then
+            echo "Nothing merged since $last."
+            echo "due=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New commits since $last."
+            echo "due=true" >> "$GITHUB_OUTPUT"
+          fi
+
   ci:
     name: CI
-    if: inputs.channel != 'stable'
+    needs: gate
+    if: ${{ !cancelled() && !failure() && inputs.channel != 'stable' && (github.event_name != 'schedule' || needs.gate.outputs.due == 'true') }}
     uses: ./.github/workflows/ci.yml
 
   nightly:
     name: Nightly
     needs: ci
-    # Only the repository owner can push to main, and the `release` environment
-    # (which holds the secrets and the npm trusted publisher) allows only main.
-    if: inputs.channel != 'stable' && github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main'
+    # Scheduled runs act as whoever last changed the cron line, which is the owner. The
+    # `release` environment (which holds the secrets and the npm trusted publisher) allows only main.
+    if: ${{ !cancelled() && needs.ci.result == 'success' && inputs.channel != 'stable' && github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main' }}
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 20
