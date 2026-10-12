@@ -1,0 +1,48 @@
+<!doctype html>
+<!--
+  Goal bar for the current stream.
+    http://localhost:8080/overlays/goal.html?username=YOURNAME&metric=likes&target=10000
+  metric: likes | diamonds | follows | shares | viewers   label: custom text
+-->
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>tiklive goal</title>
+  <style>
+    html, body { margin: 0; background: transparent; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    .goal { position: fixed; inset: 16px 16px auto 16px; padding: 12px 16px; border-radius: 16px; background: rgba(16,16,22,.72); color: #fff; }
+    .row { display: flex; justify-content: space-between; font-weight: 700; font-size: 20px; margin-bottom: 8px; }
+    .track { height: 18px; border-radius: 9px; background: rgba(255,255,255,.15); overflow: hidden; }
+    .fill { height: 100%; width: 0; border-radius: 9px; background: linear-gradient(90deg, #ff4f8b, #ffd166); transition: width .6s ease; }
+    .done .fill { background: linear-gradient(90deg, #44d17a, #b5ff7a); }
+  </style>
+</head>
+<body>
+  <div class="goal" id="goal">
+    <div class="row"><span id="label"></span><span id="count"></span></div>
+    <div class="track"><div class="fill" id="fill"></div></div>
+  </div>
+  <script type="module">
+    import { TikLive } from '/tiklive.js';
+
+    const params = new URLSearchParams(location.search);
+    const metric = params.get('metric') ?? 'likes';
+    const target = Number(params.get('target') ?? 1000);
+    const labels = { likes: 'Like goal', diamonds: 'Coin goal', follows: 'Follower goal', shares: 'Share goal', viewers: 'Viewer goal' };
+    document.getElementById('label').textContent = params.get('label') ?? labels[metric] ?? 'Goal';
+
+    function render(value) {
+      const pct = Math.min(100, (value / target) * 100);
+      document.getElementById('count').textContent = `${value.toLocaleString()} / ${target.toLocaleString()}`;
+      document.getElementById('fill').style.width = `${pct}%`;
+      document.getElementById('goal').classList.toggle('done', pct >= 100);
+    }
+    render(0);
+
+    // Stats are tracked server-side (so the bar survives overlay reloads) and
+    // pushed with status updates; no individual events are needed.
+    const live = new TikLive({ events: [] });
+    live.on('status', (s) => render(s.stats[metric] ?? 0));
+  </script>
+</body>
+</html>
