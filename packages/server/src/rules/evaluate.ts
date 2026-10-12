@@ -52,7 +52,7 @@ export interface Firing {
   readonly vars: TemplateValues;
 }
 
-type Vars = Partial<Record<TemplateVariable, string>>;
+export type Vars = Partial<Record<TemplateVariable, string>>;
 
 const MAX_TEXT = 300;
 const MAX_PER_GIFT = 10;
@@ -105,6 +105,8 @@ export const templateVars = (event: LiveEvent, extra: Vars = {}): TemplateValues
     likes: "",
     months: "",
     followers: "",
+    // Filled in by the caller (SessionManager), which knows the viewer's points.
+    points: "",
   };
   if (event.type === "gift") {
     vars.giftName = event.giftName;
@@ -272,6 +274,7 @@ const likeFirings = (
   event: Extract<LiveEvent, { type: "like" }>,
   state: EngineState,
   now: number,
+  extra: Vars,
 ): Array<Firing> => {
   const key = `${rule.id}:${every}`;
   const reached = Math.floor(state.likeTotal / every);
@@ -280,7 +283,7 @@ const likeFirings = (
   // Advance even when cooling down, so missed milestones don't pile up later.
   state.likeMilestones.set(key, reached);
   if (coolingDown(rule, event.user, state, now)) return [];
-  const rendered = renderRule(rule, event, { likes: String(reached * every) });
+  const rendered = renderRule(rule, event, { ...extra, likes: String(reached * every) });
   if (rendered.steps.length === 0) return [];
   recordFired(rule, event.user, state, now);
   const count = Math.min(reached - prev, MAX_MILESTONES);
@@ -293,6 +296,8 @@ export const evaluate = (
   state: EngineState,
   event: LiveEvent,
   now: number,
+  /** Values the event doesn't carry, such as the viewer's points. */
+  extra: Vars = {},
 ): ReadonlyArray<Firing> => {
   if (event.type === "streamEnd") {
     state.likeTotal = 0;
@@ -308,7 +313,7 @@ export const evaluate = (
     const trigger = rule.trigger;
 
     if (trigger.type === "likes") {
-      if (event.type === "like") firings.push(...likeFirings(rule, trigger.every, event, state, now));
+      if (event.type === "like") firings.push(...likeFirings(rule, trigger.every, event, state, now, extra));
       continue;
     }
 
@@ -316,7 +321,7 @@ export const evaluate = (
     const user = userOf(event);
     if (joinedAlready(rule, trigger, user, state)) continue;
     if (coolingDown(rule, user, state, now)) continue;
-    const rendered = renderRule(rule, event);
+    const rendered = renderRule(rule, event, extra);
     if (rendered.steps.length === 0) continue;
 
     // perGift: one firing per gift in the combo (at most 10), with the cooldown checked once.

@@ -61,9 +61,17 @@ export const make = (options: SessionManagerOptions = {}) =>
       // Points first, so a rule that runs on this event already sees the viewer's new total.
       const actions = (event: LiveEvent): Effect.Effect<ReadonlyArray<FiredAction>> =>
         Effect.gen(function* () {
-          if (Option.isSome(points)) yield* points.value.record(username, event);
+          if (Option.isNone(points))
+            return Option.isSome(engine) ? yield* engine.value.fire(username, event) : [];
+          yield* points.value.record(username, event);
           if (Option.isNone(engine)) return [];
-          return yield* engine.value.fire(username, event);
+          const userId = "user" in event ? event.user.userId : undefined;
+          const viewer = userId ? yield* points.value.get(username, userId) : Option.none();
+          return yield* engine.value.fire(
+            username,
+            event,
+            Option.isSome(viewer) ? { points: String(viewer.value.points) } : {},
+          );
         });
       return { ...options.session, actions };
     };

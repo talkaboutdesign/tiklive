@@ -299,7 +299,8 @@ The schemas are in [`packages/contracts/src/rules.ts`](../packages/contracts/src
   sets the least follower count a viewer may have; followers and friends of the streamer always pass it,
   and so does a viewer whose count is unknown.
 - **Steps**: `sound`, `media`, `speak` (text to speech), `obsScene` and `webhook`. Text can use placeholders
-  such as `{nickname}`, `{comment}` and `{followers}` (the viewer's follower count).
+  such as `{nickname}`, `{comment}`, `{followers}` (the viewer's follower count) and `{points}` (the viewer's
+  points, including this event's).
 - **`webhook` step**: `{kind: "webhook", url, method?, body?}`. `url` is an `http://` or `https://` URL that
   parses, at most 2048 characters. Placeholders are allowed in its path and query, and the values are
   percent-encoded. `method` is `POST` (the default), `PUT` or `GET`. `body` is at most 4000 characters, is

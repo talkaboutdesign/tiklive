@@ -21,6 +21,7 @@ import {
   sampleEvent,
   type TemplateValues,
   userOf,
+  type Vars,
 } from "./evaluate.ts";
 import { RulesStore } from "./RulesStore.ts";
 import {
@@ -36,7 +37,12 @@ export class RuleEngine extends Context.Service<
   RuleEngine,
   {
     /** Actions fired by this event for this streamer, in rule order. Never fails. */
-    readonly fire: (username: string, event: LiveEvent) => Effect.Effect<ReadonlyArray<FiredAction>>;
+    /** `extra` fills placeholders the event doesn't carry, such as `points`. */
+    readonly fire: (
+      username: string,
+      event: LiveEvent,
+      extra?: Vars,
+    ) => Effect.Effect<ReadonlyArray<FiredAction>>;
     /**
      * Fires one rule with a made-up event that matches its trigger, ignoring `enabled`
      * and cooldowns, for the editor's Test button. None if no rule has this id.
@@ -132,12 +138,16 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
         }
       });
 
-    const fire = (username: string, event: LiveEvent): Effect.Effect<ReadonlyArray<FiredAction>> =>
+    const fire = (
+      username: string,
+      event: LiveEvent,
+      extra: Vars = {},
+    ): Effect.Effect<ReadonlyArray<FiredAction>> =>
       Effect.gen(function* () {
         const { rules } = yield* store.get;
         const now = yield* Clock.currentTimeMillis;
         const firings = yield* Effect.try({
-          try: () => evaluate(rules, stateFor(username), event, now),
+          try: () => evaluate(rules, stateFor(username), event, now, extra),
           catch: (cause) => cause,
         }).pipe(
           Effect.catch((cause) =>
@@ -162,7 +172,11 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
         if (!rule) return Option.none();
         const now = yield* Clock.currentTimeMillis;
         const event = sampleEvent(rule.trigger, now);
-        const extra = rule.trigger.type === "likes" ? { likes: String(rule.trigger.every) } : {};
+        // The sample viewer has a sample points total, so "{points}" reads naturally in a test.
+        const extra = {
+          points: "100",
+          ...(rule.trigger.type === "likes" ? { likes: String(rule.trigger.every) } : {}),
+        };
         const user = userOf(event);
         const rendered = renderRule(rule, event, extra);
         const action: FiredAction = {

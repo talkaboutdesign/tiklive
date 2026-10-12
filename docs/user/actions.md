@@ -39,16 +39,17 @@ Presets are one-click starting points. Each one fills in a complete action.
   it straight away, then opens it in the editor so you can change it. Once you have actions, a **Start from a
   preset** line sits under the list.
 
-| Preset                               | Trigger                                             | Step                                                      |
-| ------------------------------------ | --------------------------------------------------- | --------------------------------------------------------- |
-| Read chat aloud — friends only       | Any chat message, from friends                      | Say "{nickname} says {comment}", 10 s per-viewer cooldown |
-| Read chat aloud — followers, no spam | Any chat message, from followers with 50+ followers | Say "{nickname} says {comment}", 15 s per-viewer cooldown |
-| Welcome friends                      | Join, from friends, once per stream                 | Say "Welcome back {nickname}!"                            |
-| Thank gifters                        | Gift, at least 1 coin                               | Say "Thank you {nickname} for {count} {giftName}!"        |
-| Celebrate big gifts                  | Gift, at least 100 coins                            | Say "Wow, {nickname} sent {giftName}!"                    |
-| New follower                         | Follow                                              | Say "Thanks for the follow, {nickname}!"                  |
-| !hello chat command                  | Chat command `!hello`                               | Say "Hello {nickname}!", 30 s per-viewer cooldown         |
-| Every 1,000 likes                    | Likes, every 1000                                   | Say "We just hit {likes} likes!"                          |
+| Preset                               | Trigger                                             | Step                                                                  |
+| ------------------------------------ | --------------------------------------------------- | --------------------------------------------------------------------- |
+| Read chat aloud — friends only       | Any chat message, from friends                      | Say "{nickname} says {comment}", 10 s per-viewer cooldown             |
+| Read chat aloud — followers, no spam | Any chat message, from followers with 50+ followers | Say "{nickname} says {comment}", 15 s per-viewer cooldown             |
+| Welcome friends                      | Join, from friends, once per stream                 | Say "Welcome back {nickname}!"                                        |
+| Thank gifters                        | Gift, at least 1 coin                               | Say "Thank you {nickname} for {count} {giftName}!"                    |
+| Celebrate big gifts                  | Gift, at least 100 coins                            | Say "Wow, {nickname} sent {giftName}!"                                |
+| New follower                         | Follow                                              | Say "Thanks for the follow, {nickname}!"                              |
+| Answer !points                       | Chat command `!points`                              | Say "{nickname}, you have {points} points!", 30 s per-viewer cooldown |
+| !hello chat command                  | Chat command `!hello`                               | Say "Hello {nickname}!", 30 s per-viewer cooldown                     |
+| Every 1,000 likes                    | Likes, every 1000                                   | Say "We just hit {likes} likes!"                                      |
 
 ### Triggers
 
@@ -143,6 +144,10 @@ These are filled in when the action fires. Anything else you type is left as it 
 | `{likes}`     | The like count, such as 1000                                                 | Likes         |
 | `{months}`    | The subscriber's month count                                                 | Subscribe     |
 | `{followers}` | The viewer's follower count, such as 1200. Empty when TikTok doesn't send it | Every trigger |
+| `{points}`    | The viewer's [points](./points.md), including what this event just earned    | Every trigger |
+
+For example, a chat rule for the command `!points` that says "{nickname}, you have {points} points!" answers
+viewers who ask. tiklive can't post in TikTok's chat, so the answer is spoken or shown on stream.
 
 ### Webhook steps
 

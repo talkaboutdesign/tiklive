@@ -253,6 +253,50 @@ describe("SessionManager viewer points", () => {
     );
   });
 
+  it.live("fills {points} with the viewer's total, including this event", () => {
+    const points = PointsStore.layerMemory;
+    const rule: Rule = {
+      id: "points",
+      name: "Points",
+      enabled: true,
+      trigger: { type: "chat", match: "command", text: "!points" },
+      steps: [{ kind: "speak", text: "{nickname} has {points} points" }],
+    };
+    const layer = SessionManager.layer({ idleTimeout: "10 seconds" }).pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          fakeTikTokWebLayer({ live: true }),
+          fakeWebSocketLayer().layer,
+          RuleEngine.layer.pipe(
+            Layer.provide(
+              Layer.mergeAll(RulesStore.layerMemory({ revision: 0, rules: [rule] }), FetchHttpClient.layer),
+            ),
+          ),
+          points,
+        ),
+      ),
+    );
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        const session = yield* manager.acquire("someone");
+        yield* waitUntil(session.status, (s) => s.state === "live", "live");
+        const subscription = yield* session.subscribe;
+
+        // Same viewer (id 1): a follow (50), then the command itself earns 1 chat point before the rule runs.
+        yield* session.inject(follow("1"));
+        yield* session.inject(chat("!points"));
+
+        let fired: FiredAction | undefined;
+        while (!fired) {
+          const message = yield* PubSub.take(subscription);
+          if (message._tag === "Action") fired = message.action;
+        }
+        expect(fired.steps).toEqual([{ kind: "speak", text: "Viewer has 51 points" }]);
+      }).pipe(Effect.provide(Layer.mergeAll(layer, points))),
+    );
+  });
+
   it.live("keeps points without a RuleEngine", () => {
     const points = PointsStore.layerMemory;
     const layer = SessionManager.layer({ idleTimeout: "10 seconds" }).pipe(
