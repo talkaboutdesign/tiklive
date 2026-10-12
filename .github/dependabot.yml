@@ -1,0 +1,8 @@
+# Opens update PRs for the SHA-pinned actions in .github/workflows/. The `# vX` comment
+# next to each pin is updated along with it. npm dependencies are not covered here.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -36,9 +36,10 @@ concurrency:
   group: release-${{ inputs.channel == 'stable' && 'stable' || 'nightly' }}
   cancel-in-progress: false
 
+# Read-only by default. Each job asks for what its steps need below, so only the
+# jobs that push or publish get write access, and only they get id-token.
 permissions:
-  contents: write # version commits, tags and GitHub Releases
-  id-token: write # npm trusted publishing (OIDC) + provenance
+  contents: read
 
 jobs:
   # Scheduled runs only: a nightly is due when the last one is at least six hours old
@@ -46,11 +47,13 @@ jobs:
   gate:
     name: Nightly due?
     if: github.event_name == 'schedule'
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       due: ${{ steps.check.outputs.due }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0 # history and tags
       - id: check
@@ -83,6 +86,8 @@ jobs:
     name: CI
     needs: gate
     if: ${{ !cancelled() && !failure() && inputs.channel != 'stable' && (github.event_name != 'schedule' || needs.gate.outputs.due == 'true') }}
+    permissions:
+      contents: read # ci.yml is read-only, and a called workflow can't get more than its caller grants
     uses: ./.github/workflows/ci.yml
 
   nightly:
@@ -91,6 +96,10 @@ jobs:
     # Scheduled runs act as whoever last changed the cron line, which is the owner. The
     # `release` environment (which holds the secrets and the npm trusted publisher) allows only main.
     if: ${{ !cancelled() && needs.ci.result == 'success' && inputs.channel != 'stable' && github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read # checkout, build and npm publish. Nothing is pushed.
+      id-token: write # npm trusted publishing (OIDC) + provenance
+      pull-requests: read # changelog-github looks up the PRs in the release range
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -98,23 +107,24 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       sha: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Read Bun version from package.json
         id: bun-version
         run: echo "version=$(jq -r '.packageManager | split("@")[1]' package.json)" >> "$GITHUB_OUTPUT"
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ steps.bun-version.outputs.version }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      # Trusted publishing needs npm >= 11.5.1.
-      - run: npm install -g npm@latest
+      # Trusted publishing needs npm >= 11.5.1. Pinned, not @latest, to the newest 11.x
+      # that is at least three days old (11.21.0, published 2026-09-30).
+      - run: npm install -g npm@11.21.0
 
       - run: bun install --frozen-lockfile
 
@@ -145,7 +155,7 @@ jobs:
         run: awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
 
       - if: steps.version.outputs.version
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-notes
           path: notes.md
@@ -153,6 +163,10 @@ jobs:
   stable:
     name: Stable
     if: inputs.channel == 'stable' && github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write # pushes the version commit to main, then the tag
+      id-token: write # npm trusted publishing (OIDC) + provenance
+      pull-requests: read # changelog-github looks up the PRs in the release range
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -160,7 +174,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       sha: ${{ steps.version.outputs.sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: main
           fetch-depth: 0 # history and tags
@@ -169,17 +183,18 @@ jobs:
         id: bun-version
         run: echo "version=$(jq -r '.packageManager | split("@")[1]' package.json)" >> "$GITHUB_OUTPUT"
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ steps.bun-version.outputs.version }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
-      # Trusted publishing needs npm >= 11.5.1.
-      - run: npm install -g npm@latest
+      # Trusted publishing needs npm >= 11.5.1. Pinned, not @latest, to the newest 11.x
+      # that is at least three days old (11.21.0, published 2026-09-30).
+      - run: npm install -g npm@11.21.0
 
       # The nightly's CI run already tested this commit. The version commit
       # only changes versions and changelogs, so it's committed and merged into
@@ -235,7 +250,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-notes
           path: notes.md
@@ -246,6 +261,8 @@ jobs:
     name: Desktop
     needs: [nightly, stable]
     if: ${{ !failure() && !cancelled() && (needs.nightly.outputs.version != '' || needs.stable.outputs.version != '') }}
+    permissions:
+      contents: read # release-desktop.yml only builds and uploads artifacts
     uses: ./.github/workflows/release-desktop.yml
     with:
       version: ${{ needs.nightly.outputs.version || needs.stable.outputs.version }}
@@ -261,23 +278,25 @@ jobs:
     name: GitHub Release
     needs: [nightly, stable, desktop]
     if: ${{ !failure() && !cancelled() && needs.desktop.result == 'success' }}
+    permissions:
+      contents: write # pushes the vX.Y.Z tag and creates the GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       VERSION: ${{ needs.nightly.outputs.version || needs.stable.outputs.version }}
       NIGHTLY: ${{ needs.nightly.outputs.version != '' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.nightly.outputs.version && needs.nightly.outputs.sha || needs.stable.outputs.sha }}
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: desktop-*
           merge-multiple: true
           path: release-assets
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: release-notes
 
