@@ -160,7 +160,9 @@ export const make = (
           return Effect.suspend(() => {
             room = event.room ?? room;
             // A new room means a new stream; reconnects to the same room keep running totals.
-            if (event.roomId !== roomId) {
+            const newStream = event.roomId !== roomId;
+            const previousRoom = roomId;
+            if (newStream) {
               roomId = event.roomId;
               liveSince = Date.now();
               streamStartedAt = event.room?.streamStartedAt;
@@ -169,7 +171,13 @@ export const make = (
               stats.peakViewers = stats.viewers;
             }
             liveSince ??= Date.now();
-            return setState("live");
+            // TikTok doesn't always send streamEnd. Tell the rules the old stream is over, so per-stream
+            // state (like milestones, once-per-stream joins) starts fresh. Not published to clients.
+            const resetRules =
+              newStream && previousRoom !== undefined
+                ? runActions({ type: "streamEnd", reason: "ended", timestamp: Date.now() })
+                : Effect.void;
+            return Effect.andThen(resetRules, setState("live"));
           });
         case "Event":
           return handleEvent(event.event);

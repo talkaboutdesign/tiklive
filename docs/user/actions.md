@@ -28,16 +28,27 @@ Click **New action**. Each action has a name, a trigger (**When…**), one or mo
 optional cooldowns. If you leave the name empty, tiklive names it from the trigger and steps, for example
 "When someone sends Rose (100+ coins) → Sound · Speak".
 
-Or start from a template. When there are no actions yet, the page shows the templates as cards; once you have
-actions, a **Start from a template** line sits under the list. Templates are saved straight away, then open in
-the editor so you can change them:
+### Start from a preset
 
-| Template                     | Trigger                  | Step                                                 |
-| ---------------------------- | ------------------------ | ---------------------------------------------------- |
-| Thank new followers out loud | Follow                   | Say "Thanks for the follow, {nickname}!"             |
-| Celebrate big gifts          | Gift, at least 100 coins | Say "{nickname} sent {count} {giftName}! Thank you!" |
-| !hello chat command          | Chat command `!hello`    | Say "Hello {nickname}!", 30 s per-viewer cooldown    |
-| Every 1,000 likes            | Likes, every 1000        | Say "We just hit {likes} likes!"                     |
+Presets are one-click starting points. Each one fills in a complete action.
+
+- **On a new action.** Click **New action**, then pick a preset under **Start from a preset**. It fills in the
+  name, trigger, steps and cooldowns. Change anything you like, then **Save**. Picking another preset replaces
+  what you've entered, after asking first.
+- **From the empty list.** When there are no actions yet, the page shows the presets as cards. Clicking one saves
+  it straight away, then opens it in the editor so you can change it. Once you have actions, a **Start from a
+  preset** line sits under the list.
+
+| Preset                               | Trigger                                             | Step                                                      |
+| ------------------------------------ | --------------------------------------------------- | --------------------------------------------------------- |
+| Read chat aloud — friends only       | Any chat message, from friends                      | Say "{nickname} says {comment}", 10 s per-viewer cooldown |
+| Read chat aloud — followers, no spam | Any chat message, from followers with 50+ followers | Say "{nickname} says {comment}", 15 s per-viewer cooldown |
+| Welcome friends                      | Join, from friends, once per stream                 | Say "Welcome back {nickname}!"                            |
+| Thank gifters                        | Gift, at least 1 coin                               | Say "Thank you {nickname} for {count} {giftName}!"        |
+| Celebrate big gifts                  | Gift, at least 100 coins                            | Say "Wow, {nickname} sent {giftName}!"                    |
+| New follower                         | Follow                                              | Say "Thanks for the follow, {nickname}!"                  |
+| !hello chat command                  | Chat command `!hello`                               | Say "Hello {nickname}!", 30 s per-viewer cooldown         |
+| Every 1,000 likes                    | Likes, every 1000                                   | Say "We just hit {likes} likes!"                          |
 
 ### Triggers
 
@@ -47,9 +58,34 @@ the editor so you can change them:
 - **Follow**, **Share** and **Subscribe.** Fire once for each event. No options.
 - **Chat.** Matches chat messages. **Command** matches the first word, ignoring case, so `!dance` matches
   "!dance now". **Contains text** matches anywhere in the message. **Any message** fires on every message.
-  **From** limits it to everyone, followers, subscribers or moderators.
+  **From** limits it to who may trigger it (see [Who may trigger](#who-may-trigger)).
+- **Join.** Fires when a viewer joins the stream. **From** and **Minimum followers** work as on chat. By default
+  each viewer triggers it once per stream. Turn off **Once per viewer per stream** to run it every time someone
+  joins. See [Once per stream](#once-per-stream) for when the list resets.
 - **Likes.** Fires each time the stream's like count passes another multiple of the number you enter, so
   "every 1000" fires at 1,000, 2,000 and so on.
+
+### Who may trigger
+
+Chat and join triggers have a **From** setting and a **Minimum followers** setting.
+
+- **Everyone.** The default.
+- **Followers.** Viewers who follow you. Friends are included.
+- **Friends.** Viewers who follow you and whom you follow back (a mutual follow). Use this for a welcome or a
+  "friends only" chat line.
+- **Subscribers** and **Moderators.** As on TikTok.
+- **Minimum followers** skips viewers with fewer followers than the number you enter. It's for stopping throwaway
+  accounts from spamming your overlay. Followers and friends of yours always pass, whatever their count. So does a
+  viewer whose follower count TikTok doesn't send.
+
+### Once per stream
+
+A join trigger with **Once per viewer per stream** on (the default) fires at most once for each viewer while the
+stream runs. tiklive remembers who has fired in memory. The list clears when TikTok reports that the stream has
+ended, so the same viewer fires again the next time you go live. A brief connection drop doesn't clear it. Restarting
+tiklive does, because the list isn't saved to disk.
+
+Each join action keeps its own list, so two welcome actions can both greet the same viewer.
 
 ### Steps
 
@@ -94,16 +130,17 @@ Once a step has a sound, the step shows its name with **Change**, which opens th
 
 These are filled in when the action fires. Anything else you type is left as it is.
 
-| Placeholder  | Filled with                                 | Offered for   |
-| ------------ | ------------------------------------------- | ------------- |
-| `{nickname}` | The viewer's display name                   | Every trigger |
-| `{username}` | The viewer's TikTok username                | Every trigger |
-| `{giftName}` | The gift's name                             | Gift          |
-| `{count}`    | How many of the gift were sent in the combo | Gift          |
-| `{coins}`    | The combo's total coins                     | Gift          |
-| `{comment}`  | The chat message                            | Chat          |
-| `{likes}`    | The like count, such as 1000                | Likes         |
-| `{months}`   | The subscriber's month count                | Subscribe     |
+| Placeholder   | Filled with                                                                  | Offered for   |
+| ------------- | ---------------------------------------------------------------------------- | ------------- |
+| `{nickname}`  | The viewer's display name                                                    | Every trigger |
+| `{username}`  | The viewer's TikTok username                                                 | Every trigger |
+| `{giftName}`  | The gift's name                                                              | Gift          |
+| `{count}`     | How many of the gift were sent in the combo                                  | Gift          |
+| `{coins}`     | The combo's total coins                                                      | Gift          |
+| `{comment}`   | The chat message                                                             | Chat          |
+| `{likes}`     | The like count, such as 1000                                                 | Likes         |
+| `{months}`    | The subscriber's month count                                                 | Subscribe     |
+| `{followers}` | The viewer's follower count, such as 1200. Empty when TikTok doesn't send it | Every trigger |
 
 ### Cooldowns
 

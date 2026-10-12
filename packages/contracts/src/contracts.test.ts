@@ -147,6 +147,11 @@ describe("actions", () => {
       { type: "chat", match: "command", text: "!dance", from: "subscribers" },
       { type: "chat", match: "contains", text: "wave", from: "moderators" },
       { type: "chat", match: "any", from: "everyone" },
+      { type: "chat", match: "any", from: "friends", minFollowers: 50 },
+      { type: "chat", match: "command", text: "!hi", from: "followers", minFollowers: 0 },
+      { type: "join" },
+      { type: "join", from: "friends", minFollowers: 10, oncePerStream: false },
+      { type: "join", from: "followers", oncePerStream: true },
       { type: "likes", every: 100 },
     ];
     for (const trigger of triggers) {
@@ -170,6 +175,25 @@ describe("actions", () => {
     expect(() => decode(withUrl("data:audio/mpeg;base64,AAAA"))).toThrow();
     expect(() => decode(withUrl("../media/x.png"))).toThrow();
     expect(decode(withUrl("/media/x.png")).steps[0]).toMatchObject({ kind: "sound" });
+  });
+
+  it("rejects audiences, minFollowers values and join options that don't fit", () => {
+    const decodeTrigger = (trigger: unknown) => decodeRule({ ...baseRule, trigger });
+    expect(() => decodeTrigger({ type: "chat", match: "any", from: "vips" })).toThrow();
+    expect(() => decodeTrigger({ type: "join", from: "vips" })).toThrow();
+    expect(() => decodeTrigger({ type: "chat", match: "any", minFollowers: -1 })).toThrow();
+    expect(() => decodeTrigger({ type: "join", minFollowers: 1_000_000_001 })).toThrow();
+    expect(() => decodeTrigger({ type: "join", oncePerStream: "yes" })).toThrow();
+    expect(() => decodeTrigger({ type: "join", minFollowers: 1_000_000_000 })).not.toThrow();
+  });
+
+  it("accepts the followers template variable in speech", () => {
+    const rule = {
+      ...baseRule,
+      trigger: { type: "join" },
+      steps: [{ kind: "speak", text: "{nickname} has {followers} followers" }],
+    };
+    expect(decodeRule(rule).steps).toEqual(rule.steps);
   });
 
   it("rejects rules with more than 10 steps and unknown step kinds", () => {

@@ -154,8 +154,8 @@ export interface FakeTikTokWebOptions {
   readonly live?: boolean | (() => boolean);
   /** Make every room lookup fail with `UserNotFound`. */
   readonly notFound?: boolean;
-  /** Room ID returned by lookups. Default "7000000000000000001". */
-  readonly roomId?: string;
+  /** Room ID returned by lookups. A function is consulted on every lookup. Default "7000000000000000001". */
+  readonly roomId?: string | (() => string);
   readonly userAgent?: string;
   /** Unix ms reported as the room's `streamStartedAt`. Omitted when not given. */
   readonly streamStartedAt?: number;
@@ -186,7 +186,8 @@ const SAMPLE_GIFTS: ReadonlyArray<GiftInfo> = [
 
 /** `TikTokWeb` that never touches the network. `ttwid` is always "fake-ttwid". */
 export const fakeTikTokWebLayer = (options: FakeTikTokWebOptions = {}): Layer.Layer<TikTokWeb> => {
-  const roomId = options.roomId ?? "7000000000000000001";
+  const roomIdOf = () =>
+    (typeof options.roomId === "function" ? options.roomId() : options.roomId) ?? "7000000000000000001";
   const userAgent = options.userAgent ?? "fake-user-agent";
   const gifts = options.gifts ?? SAMPLE_GIFTS;
   return Layer.succeed(TikTokWeb)(
@@ -199,7 +200,7 @@ export const fakeTikTokWebLayer = (options: FakeTikTokWebOptions = {}): Layer.La
         return Effect.sync(() => {
           const isLive = typeof options.live === "function" ? options.live() : (options.live ?? true);
           const room: RoomStatus = {
-            roomId,
+            roomId: roomIdOf(),
             isLive,
             title: "Fake room",
             viewerCount: 0,

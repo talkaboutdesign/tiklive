@@ -803,7 +803,7 @@
               <div id="rules-empty" class="group start" hidden>
                 <div>
                   <div class="row-title">No actions yet.</div>
-                  <p class="hint">Start from a template, or make your own with New action.</p>
+                  <p class="hint">Start from a preset, or make your own with New action.</p>
                 </div>
                 <div id="templates" class="template-grid"></div>
               </div>
@@ -875,6 +875,14 @@
                 aria-labelledby="name-title"
               />
               <p class="field-error" data-error="name"></p>
+            </div>
+          </section>
+
+          <section aria-labelledby="preset-title" id="preset-sec" hidden>
+            <h3 class="section-title" id="preset-title">Start from a preset</h3>
+            <div class="group ed-pad">
+              <p class="hint">Fills in the name, trigger, steps and cooldowns. Change anything, then Save.</p>
+              <div id="presets" class="chips"></div>
             </div>
           </section>
 
@@ -993,11 +1001,12 @@
         ["share", "Share"],
         ["subscribe", "Subscribe"],
         ["chat", "Chat"],
+        ["join", "Join"],
         ["likes", "Likes"],
       ];
       // Variables offered in "Say something", per trigger (see TEMPLATE_VARIABLES in contracts).
       const VARS_BY_TRIGGER = {
-        always: ["nickname", "username"],
+        always: ["nickname", "username", "followers"],
         gift: ["giftName", "count", "coins"],
         chat: ["comment"],
         likes: ["likes"],
@@ -1012,17 +1021,41 @@
         comment: "Hello!",
         likes: "1000",
         months: "1",
+        followers: "1200",
       };
-      const TEMPLATES = [
+      // One-click starting points. Saved as is from the empty list, or filled into the editor for a new action.
+      const PRESETS = [
         {
-          name: "Thank new followers out loud",
-          trigger: { type: "follow" },
-          steps: [{ kind: "speak", text: "Thanks for the follow, {nickname}!" }],
+          name: "Read chat aloud — friends only",
+          trigger: { type: "chat", match: "any", from: "friends" },
+          steps: [{ kind: "speak", text: "{nickname} says {comment}" }],
+          userCooldown: 10,
+        },
+        {
+          name: "Read chat aloud — followers, no spam",
+          trigger: { type: "chat", match: "any", from: "followers", minFollowers: 50 },
+          steps: [{ kind: "speak", text: "{nickname} says {comment}" }],
+          userCooldown: 15,
+        },
+        {
+          name: "Welcome friends",
+          trigger: { type: "join", from: "friends", oncePerStream: true },
+          steps: [{ kind: "speak", text: "Welcome back {nickname}!" }],
+        },
+        {
+          name: "Thank gifters",
+          trigger: { type: "gift", minCoins: 1 },
+          steps: [{ kind: "speak", text: "Thank you {nickname} for {count} {giftName}!" }],
         },
         {
           name: "Celebrate big gifts",
           trigger: { type: "gift", minCoins: 100 },
-          steps: [{ kind: "speak", text: "{nickname} sent {count} {giftName}! Thank you!" }],
+          steps: [{ kind: "speak", text: "Wow, {nickname} sent {giftName}!" }],
+        },
+        {
+          name: "New follower",
+          trigger: { type: "follow" },
+          steps: [{ kind: "speak", text: "Thanks for the follow, {nickname}!" }],
         },
         {
           name: "!hello chat command",
@@ -1036,7 +1069,12 @@
           steps: [{ kind: "speak", text: "We just hit {likes} likes!" }],
         },
       ];
-      const FROM_LABEL = { followers: "followers", subscribers: "subscribers", moderators: "moderators" };
+      const FROM_LABEL = {
+        followers: "followers",
+        friends: "friends",
+        subscribers: "subscribers",
+        moderators: "moderators",
+      };
       const STEP_TITLES = {
         sound: "Play sound",
         media: "Show image or video",
@@ -1074,6 +1112,14 @@
 
       // ---- summaries ----
 
+      // The "who" and "how many" parts of a trigger: " (friends only, 50+ followers)".
+      function audienceNote(t) {
+        const parts = [];
+        if (FROM_LABEL[t.from]) parts.push(`${FROM_LABEL[t.from]} only`);
+        if (t.minFollowers) parts.push(`${t.minFollowers.toLocaleString()}+ followers`);
+        return parts.length ? ` (${parts.join(", ")})` : "";
+      }
+
       function triggerText(t) {
         switch (t.type) {
           case "gift": {
@@ -1088,11 +1134,13 @@
           case "subscribe":
             return "When someone subscribes";
           case "chat": {
-            const from = FROM_LABEL[t.from] ? ` (${FROM_LABEL[t.from]} only)` : "";
-            if (t.match === "command") return `When someone types ${t.text ?? ""}${from}`;
-            if (t.match === "contains") return `When chat contains “${t.text ?? ""}”${from}`;
-            return `When anyone chats${from}`;
+            const who = audienceNote(t);
+            if (t.match === "command") return `When someone types ${t.text ?? ""}${who}`;
+            if (t.match === "contains") return `When chat contains “${t.text ?? ""}”${who}`;
+            return `When anyone chats${who}`;
           }
+          case "join":
+            return `When someone joins${audienceNote(t)}${t.oncePerStream === false ? ", every time" : ""}`;
           case "likes":
             return `Every ${Number(t.every).toLocaleString()} likes`;
           default:
@@ -1188,9 +1236,9 @@
         }
       }
 
-      // Templates are saved straight away, then opened in the editor so they can be tweaked.
-      function useTemplate(template) {
-        const rule = { ...structuredClone(template), id: newId(), enabled: true };
+      // Presets from the empty list are saved straight away, then opened in the editor so they can be tweaked.
+      function createFromPreset(preset) {
+        const rule = { ...structuredClone(preset), id: newId(), enabled: true };
         return run(() => commit((rules) => [...rules, rule]), "Couldn't create the action.").then(() => {
           if (ruleSet.rules.some((r) => r.id === rule.id)) openEditor(rule);
         });
@@ -1327,24 +1375,32 @@
         }
       }
 
-      function templateCard(template) {
+      function presetCard(preset) {
         const button = el(
           "button",
           { type: "button", class: "tcard" },
-          el("span", { class: "tcard-name" }, template.name),
-          el("span", { class: "tcard-sum" }, summarize({ ...template, enabled: true })),
+          el("span", { class: "tcard-name" }, preset.name),
+          el("span", { class: "tcard-sum" }, summarize({ ...preset, enabled: true })),
         );
-        button.onclick = () => useTemplate(template);
+        button.onclick = () => createFromPreset(preset);
         return button;
       }
 
-      function buildTemplates() {
-        $("templates").replaceChildren(...TEMPLATES.map(templateCard));
+      function buildPresets() {
+        $("templates").replaceChildren(...PRESETS.map(presetCard));
         $("more-templates").replaceChildren(
-          el("span", {}, "Start from a template:"),
-          ...TEMPLATES.map((t) => {
-            const button = el("button", { type: "button", class: "link-btn" }, t.name);
-            button.onclick = () => useTemplate(t);
+          el("span", {}, "Start from a preset:"),
+          ...PRESETS.map((p) => {
+            const button = el("button", { type: "button", class: "link-btn" }, p.name);
+            button.onclick = () => createFromPreset(p);
+            return button;
+          }),
+        );
+        // The editor's preset menu (shown for new actions only) fills the form without saving.
+        $("presets").replaceChildren(
+          ...PRESETS.map((p) => {
+            const button = el("button", { type: "button", class: "btn btn-small" }, p.name);
+            button.onclick = () => fillFromPreset(p);
             return button;
           }),
         );
@@ -1452,6 +1508,7 @@
           draft,
           isNew: !rule,
           original: JSON.stringify(draft),
+          fromPreset: null, // the draft as last filled from a preset
           giftScope: draft.trigger.giftId !== undefined ? "one" : "any",
         };
         $("editor-title").textContent = editor.isNew ? "New action" : "Edit action";
@@ -1467,9 +1524,36 @@
       }
 
       function renderEditor() {
+        $("preset-sec").hidden = !editor.isNew;
         renderTiles();
         renderTriggerOpts();
         renderSteps();
+      }
+
+      // Fills the open new action from a preset: name, trigger, steps and cooldowns. Nothing is saved yet.
+      function fillFromPreset(preset) {
+        // Confirm only when the user has typed something since the last preset (or since the editor opened).
+        const base = editor.fromPreset ?? editor.original;
+        if (
+          JSON.stringify(editor.draft) !== base &&
+          !confirm("Replace what you've entered with this preset?")
+        ) {
+          return;
+        }
+        const draft = editor.draft;
+        draft.name = preset.name;
+        draft.trigger = structuredClone(preset.trigger);
+        draft.steps = structuredClone(preset.steps);
+        for (const key of ["cooldown", "userCooldown"]) {
+          if (preset[key] !== undefined) draft[key] = preset[key];
+          else delete draft[key];
+        }
+        editor.giftScope = draft.trigger.giftId !== undefined ? "one" : "any";
+        editor.fromPreset = JSON.stringify(draft);
+        $("f-name").value = draft.name;
+        $("f-cooldown").value = draft.cooldown ?? "";
+        $("f-user-cooldown").value = draft.userCooldown ?? "";
+        renderEditor();
       }
 
       function isDirty() {
@@ -1538,6 +1622,9 @@
             break;
           case "chat":
             fields = chatFields(t);
+            break;
+          case "join":
+            fields = joinFields(t);
             break;
           case "likes":
             fields = likesFields(t);
@@ -1741,6 +1828,84 @@
         return button;
       }
 
+      // Who may trigger the rule. Shared by chat and join.
+      function audienceSelect(t) {
+        const select = el(
+          "select",
+          { class: "select", "aria-label": "From" },
+          el("option", { value: "everyone" }, "Everyone"),
+          el("option", { value: "followers" }, "Followers (friends included)"),
+          el("option", { value: "friends" }, "Friends (you follow each other)"),
+          el("option", { value: "subscribers" }, "Subscribers"),
+          el("option", { value: "moderators" }, "Moderators"),
+        );
+        select.value = t.from ?? "everyone";
+        select.onchange = () => (t.from = select.value);
+        return select;
+      }
+
+      // Least follower count the viewer may have. Shared by chat and join.
+      function minFollowersField(t) {
+        const input = el("input", {
+          type: "number",
+          class: "input",
+          min: "0",
+          max: "1000000000",
+          step: "1",
+          inputmode: "numeric",
+          placeholder: "None",
+          "data-key": "minFollowers",
+        });
+        input.value = t.minFollowers ?? "";
+        input.oninput = () => setNumber(t, "minFollowers", input.value);
+        return el(
+          "div",
+          { class: "fields" },
+          el("label", { class: "field-label" }, "Minimum followers the viewer has (optional)", input),
+          el(
+            "p",
+            { class: "hint" },
+            "Viewers with fewer followers are skipped. Followers and friends always pass, and so does anyone whose count TikTok doesn't send.",
+          ),
+          el("p", { class: "field-error", "data-error": "minFollowers" }),
+        );
+      }
+
+      function joinFields(t) {
+        const perViewer = el("button", {
+          type: "button",
+          role: "switch",
+          class: "switch",
+          "aria-checked": String(t.oncePerStream !== false),
+          "aria-label": "Once per viewer per stream",
+        });
+        perViewer.onclick = () => {
+          // Off is the only non-default: an absent key means on.
+          t.oncePerStream = t.oncePerStream === false;
+          perViewer.setAttribute("aria-checked", String(t.oncePerStream !== false));
+        };
+        return [
+          el("p", { class: "hint" }, "Runs when someone joins the stream."),
+          el("div", { class: "row-2" }, el("label", { class: "field-label" }, "From", audienceSelect(t))),
+          minFollowersField(t),
+          el(
+            "div",
+            { class: "switch-row" },
+            el(
+              "div",
+              { class: "row-text" },
+              el("span", { class: "row-title" }, "Once per viewer per stream"),
+              el(
+                "span",
+                { class: "row-desc" },
+                "Each viewer triggers it once until the stream ends. Turn off to run it every time they join.",
+              ),
+            ),
+            perViewer,
+          ),
+        ];
+      }
+
       function chatFields(t) {
         const match = el(
           "select",
@@ -1766,25 +1931,16 @@
           text.hidden = t.match === "any";
         };
         text.oninput = () => (t.text = text.value);
-        const from = el(
-          "select",
-          { class: "select", "aria-label": "From" },
-          el("option", { value: "everyone" }, "Everyone"),
-          el("option", { value: "followers" }, "Followers"),
-          el("option", { value: "subscribers" }, "Subscribers"),
-          el("option", { value: "moderators" }, "Moderators"),
-        );
-        from.value = t.from ?? "everyone";
-        from.onchange = () => (t.from = from.value);
         return [
           el(
             "div",
             { class: "row-2" },
             el("label", { class: "field-label" }, "Match", match),
-            el("label", { class: "field-label" }, "From", from),
+            el("label", { class: "field-label" }, "From", audienceSelect(t)),
           ),
           el("label", { class: "field-label" }, "Text", text),
           error,
+          minFollowersField(t),
         ];
       }
 
@@ -2994,6 +3150,13 @@
         if (t.type === "likes" && !(Number.isInteger(t.every) && inRange(t.every, 1, 1e9))) {
           add("likes.every", "Enter a whole number from 1 up.");
         }
+        if (
+          (t.type === "chat" || t.type === "join") &&
+          t.minFollowers !== undefined &&
+          !(Number.isInteger(t.minFollowers) && inRange(t.minFollowers, 0, 1e9))
+        ) {
+          add("minFollowers", "Enter a whole number from 0 up.");
+        }
         if (draft.steps.length === 0) add("steps", "Add at least one step.");
         draft.steps.forEach((s, i) => validateStep(s, i, add));
         if (
@@ -3028,6 +3191,15 @@
             const out = { type: "chat", match: t.match };
             if (t.match !== "any") out.text = (t.text ?? "").trim();
             if (t.from && t.from !== "everyone") out.from = t.from;
+            if (t.minFollowers) out.minFollowers = t.minFollowers;
+            return out;
+          }
+          case "join": {
+            const out = { type: "join" };
+            if (t.from && t.from !== "everyone") out.from = t.from;
+            if (t.minFollowers) out.minFollowers = t.minFollowers;
+            // true is the default, so only "off" is written.
+            if (t.oncePerStream === false) out.oncePerStream = false;
             return out;
           }
           case "likes":
@@ -3132,7 +3304,7 @@
         if (button) addStep(button.dataset.add);
       };
 
-      buildTemplates();
+      buildPresets();
       buildLibrary();
       onUsernameChange((name) => {
         username = name;

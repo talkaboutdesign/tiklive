@@ -455,6 +455,9 @@ describe("sampleEvent", () => {
     { type: "chat", match: "any" },
     { type: "chat", match: "command", text: "!dance", from: "subscribers" },
     { type: "chat", match: "contains", text: "gg", from: "moderators" },
+    { type: "chat", match: "any", from: "friends", minFollowers: 100 },
+    { type: "join" },
+    { type: "join", from: "friends", minFollowers: 50, oncePerStream: false },
     { type: "likes", every: 50 },
   ];
 
@@ -498,5 +501,167 @@ describe("sampleEvent", () => {
       likeCount: 50,
       totalLikeCount: 50,
     });
+  });
+
+  it("makes a join event for join triggers, and a friend for friends-only ones", () => {
+    expect(sampleEvent({ type: "join" }, NOW)).toMatchObject({
+      type: "join",
+      user: { uniqueId: "test_user" },
+    });
+    expect(sampleEvent({ type: "join", from: "friends" }, NOW)).toMatchObject({
+      type: "join",
+      user: { followStatus: "friend" },
+    });
+  });
+});
+
+const follows = (followStatus: LiveUser["followStatus"], extra: Partial<LiveUser> = {}): LiveUser => ({
+  ...USER,
+  ...(followStatus ? { followStatus } : {}),
+  ...extra,
+});
+
+describe("evaluate: follower and friend audiences", () => {
+  const from = (audience: "followers" | "friends", user: LiveUser) =>
+    evaluate([rule("c", { type: "chat", match: "any", from: audience })], emptyState(), chat("hi", user), NOW)
+      .length;
+
+  it("followers accepts isFollower, followStatus follower and friend", () => {
+    expect(from("followers", follows("none"))).toBe(0);
+    expect(from("followers", follows("follower"))).toBe(1);
+    expect(from("followers", follows("friend"))).toBe(1);
+    expect(from("followers", { ...USER, isFollower: true })).toBe(1);
+  });
+
+  it("friends accepts only followStatus friend", () => {
+    expect(from("friends", follows("follower"))).toBe(0);
+    expect(from("friends", { ...USER, isFollower: true })).toBe(0);
+    expect(from("friends", follows("friend"))).toBe(1);
+  });
+
+  it("applies the friends audience to join triggers too", () => {
+    const rules = [rule("j", { type: "join", from: "friends" })];
+    const join = (user: LiveUser): LiveEvent => ({ type: "join", timestamp: NOW, user });
+    expect(evaluate(rules, emptyState(), join(follows("follower")), NOW)).toEqual([]);
+    expect(evaluate(rules, emptyState(), join(follows("friend")), NOW)).toHaveLength(1);
+  });
+});
+
+describe("evaluate: minFollowers", () => {
+  const fires = (user: LiveUser) =>
+    evaluate(
+      [rule("c", { type: "chat", match: "any", minFollowers: 50 })],
+      emptyState(),
+      chat("hi", user),
+      NOW,
+    ).length;
+
+  it("requires at least minFollowers followers on the viewer", () => {
+    expect(fires({ ...USER, followerCount: 49 })).toBe(0);
+    expect(fires({ ...USER, followerCount: 50 })).toBe(1);
+    expect(fires({ ...USER, followerCount: 5000 })).toBe(1);
+  });
+
+  it("lets followers and friends of the streamer through, whatever their count", () => {
+    expect(fires(follows("follower", { followerCount: 3 }))).toBe(1);
+    expect(fires(follows("friend", { followerCount: 0 }))).toBe(1);
+    expect(fires({ ...USER, isFollower: true, followerCount: 0 })).toBe(1);
+  });
+
+  it("lets a viewer through when TikTok didn't send their follower count", () => {
+    expect(fires(USER)).toBe(1);
+  });
+
+  it("applies to join triggers", () => {
+    const rules = [rule("j", { type: "join", minFollowers: 10 })];
+    const join = (user: LiveUser): LiveEvent => ({ type: "join", timestamp: NOW, user });
+    expect(evaluate(rules, emptyState(), join({ ...USER, followerCount: 9 }), NOW)).toEqual([]);
+    expect(evaluate(rules, emptyState(), join({ ...USER, followerCount: 10 }), NOW)).toHaveLength(1);
+    expect(evaluate(rules, emptyState(), join(USER), NOW)).toHaveLength(1);
+  });
+
+  it("with minFollowers 0 or omitted, every viewer passes", () => {
+    const zero = [rule("c", { type: "chat", match: "any", minFollowers: 0 })];
+    expect(evaluate(zero, emptyState(), chat("hi", { ...USER, followerCount: 0 }), NOW)).toHaveLength(1);
+  });
+});
+
+describe("evaluate: join triggers", () => {
+  const join = (user: LiveUser = USER): LiveEvent => ({ type: "join", timestamp: NOW, user });
+  const welcome = (trigger: Partial<Extract<RuleTrigger, { type: "join" }>> = {}) =>
+    rule("j", { type: "join", ...trigger }, { steps: [say("Welcome {nickname}")] });
+
+  it("fires once per viewer per stream by default", () => {
+    const state = emptyState();
+    const rules = [welcome()];
+    expect(texts(evaluate(rules, state, join(), NOW))).toEqual([["Welcome Viewer"]]);
+    expect(evaluate(rules, state, join(), NOW + 1000)).toEqual([]);
+    expect(texts(evaluate(rules, state, join({ ...USER, userId: "2" }), NOW + 2000))).toEqual([
+      ["Welcome Viewer"],
+    ]);
+  });
+
+  it("fires again for the same viewer after streamEnd", () => {
+    const state = emptyState();
+    const rules = [welcome({ oncePerStream: true })];
+    expect(evaluate(rules, state, join(), NOW)).toHaveLength(1);
+    const ended: LiveEvent = { type: "streamEnd", timestamp: NOW, reason: "ended" };
+    expect(evaluate(rules, state, ended, NOW)).toEqual([]);
+    expect(evaluate(rules, state, join(), NOW)).toHaveLength(1);
+  });
+
+  it("fires every time with oncePerStream false", () => {
+    const state = emptyState();
+    const rules = [welcome({ oncePerStream: false })];
+    expect(evaluate(rules, state, join(), NOW)).toHaveLength(1);
+    expect(evaluate(rules, state, join(), NOW + 1000)).toHaveLength(1);
+  });
+
+  it("tracks each join rule separately, so two rules both greet the same viewer", () => {
+    const state = emptyState();
+    const rules = [welcome(), { ...welcome(), id: "j2" }];
+    expect(evaluate(rules, state, join(), NOW).map((f) => f.rule.id)).toEqual(["j", "j2"]);
+    expect(evaluate(rules, state, join(), NOW)).toEqual([]);
+  });
+
+  it("does not use up the once-per-stream slot when the viewer doesn't match the audience", () => {
+    const state = emptyState();
+    const rules = [welcome({ from: "friends" })];
+    expect(evaluate(rules, state, join(follows("follower")), NOW)).toEqual([]);
+    expect(evaluate(rules, state, join(follows("friend")), NOW)).toHaveLength(1);
+  });
+
+  it("does not fire on chat, follow or other events", () => {
+    expect(evaluate([welcome()], emptyState(), chat("hi"), NOW)).toEqual([]);
+    expect(evaluate([welcome()], emptyState(), plain("follow"), NOW)).toEqual([]);
+  });
+
+  it("respects the rule's cooldowns", () => {
+    const state = emptyState();
+    const limited = [{ ...welcome({ oncePerStream: false }), cooldown: 10 }];
+    expect(evaluate(limited, state, join(), NOW)).toHaveLength(1);
+    expect(evaluate(limited, state, join({ ...USER, userId: "2" }), NOW + 1000)).toEqual([]);
+  });
+});
+
+describe("evaluate: {followers} template variable", () => {
+  it("fills in the viewer's follower count as a plain number", () => {
+    const firings = evaluate(
+      [rule("c", { type: "chat", match: "any" }, { steps: [say("{nickname} has {followers} followers")] })],
+      emptyState(),
+      chat("hi", { ...USER, followerCount: 12_345 }),
+      NOW,
+    );
+    expect(texts(firings)).toEqual([["Viewer has 12345 followers"]]);
+  });
+
+  it("renders as empty when the count is unknown", () => {
+    const firings = evaluate(
+      [rule("c", { type: "chat", match: "any" }, { steps: [say("{followers}|")] })],
+      emptyState(),
+      chat("hi"),
+      NOW,
+    );
+    expect(texts(firings)).toEqual([["|"]]);
   });
 });

@@ -6,6 +6,7 @@
 import {
   type ChatAudience,
   type ChatTrigger,
+  type JoinTrigger,
   type LiveEvent,
   type LiveUser,
   type Rule,
@@ -25,6 +26,8 @@ export interface EngineState {
   likeTotal: number;
   /** `${ruleId}:${every}` → milestones already fired. */
   readonly likeMilestones: Map<string, number>;
+  /** `${ruleId}\u0000${userId}` for each join rule with oncePerStream that fired for this viewer. Cleared on streamEnd. */
+  readonly joinsThisStream: Set<string>;
 }
 
 export const emptyState = (): EngineState => ({
@@ -32,6 +35,7 @@ export const emptyState = (): EngineState => ({
   lastFiredByUser: new Map(),
   likeTotal: 0,
   likeMilestones: new Map(),
+  joinsThisStream: new Set(),
 });
 
 export interface Firing {
@@ -89,6 +93,7 @@ const templateVars = (event: LiveEvent, extra: Vars): Vars => {
     comment: "",
     likes: "",
     months: "",
+    followers: "",
   };
   if (event.type === "gift") {
     vars.giftName = event.giftName;
@@ -99,6 +104,7 @@ const templateVars = (event: LiveEvent, extra: Vars): Vars => {
   } else if (event.type === "subscribe") {
     vars.months = String(event.subMonth);
   }
+  if (user && user.followerCount !== undefined) vars.followers = String(user.followerCount);
   return { ...vars, ...extra };
 };
 
@@ -127,11 +133,27 @@ export const renderSteps = (rule: Rule, event: LiveEvent, extra: Vars = {}): Rea
   });
 };
 
+/** Follows the streamer. Friends (mutual follows) count too. */
+const followsStreamer = (user: LiveUser): boolean =>
+  user.isFollower === true || user.followStatus === "follower" || user.followStatus === "friend";
+
 const AUDIENCE: Record<ChatAudience, (user: LiveUser) => boolean> = {
   everyone: () => true,
-  followers: (user) => user.isFollower === true,
+  followers: followsStreamer,
+  friends: (user) => user.followStatus === "friend",
   subscribers: (user) => user.isSubscriber === true,
   moderators: (user) => user.isModerator === true,
+};
+
+/** The `from` and `minFollowers` checks shared by chat and join triggers. */
+const allowedTo = (
+  trigger: { readonly from?: ChatAudience; readonly minFollowers?: number },
+  user: LiveUser,
+): boolean => {
+  if (!AUDIENCE[trigger.from ?? "everyone"](user)) return false;
+  const minimum = trigger.minFollowers ?? 0;
+  if (minimum <= 0 || followsStreamer(user) || user.followerCount === undefined) return true;
+  return user.followerCount >= minimum;
 };
 
 const commentMatches = (trigger: ChatTrigger, comment: string): boolean => {
@@ -160,16 +182,27 @@ const matches = (trigger: RuleTrigger, event: LiveEvent): boolean => {
       return event.type === trigger.type;
     case "chat":
       return (
-        event.type === "chat" &&
-        AUDIENCE[trigger.from ?? "everyone"](event.user) &&
-        commentMatches(trigger, event.comment)
+        event.type === "chat" && allowedTo(trigger, event.user) && commentMatches(trigger, event.comment)
       );
+    case "join":
+      return event.type === "join" && allowedTo(trigger, event.user);
     case "likes":
       return false;
   }
 };
 
 const userKey = (ruleId: string, userId: string) => `${ruleId}\u0000${userId}`;
+
+/** Join rules with oncePerStream (the default) skip viewers who already triggered them this stream. */
+const joinedAlready = (
+  rule: Rule,
+  trigger: RuleTrigger,
+  user: LiveUser | undefined,
+  state: EngineState,
+): boolean =>
+  trigger.type === "join" && trigger.oncePerStream !== false && user !== undefined
+    ? state.joinsThisStream.has(userKey(rule.id, user.userId))
+    : false;
 
 /** True when the rule or this viewer is still cooling down. Boundary: exactly at the limit is free. */
 const coolingDown = (rule: Rule, user: LiveUser | undefined, state: EngineState, now: number): boolean => {
@@ -226,6 +259,7 @@ export const evaluate = (
   if (event.type === "streamEnd") {
     state.likeTotal = 0;
     state.likeMilestones.clear();
+    state.joinsThisStream.clear();
     return [];
   }
   if (event.type === "like") state.likeTotal += event.likeCount;
@@ -242,6 +276,7 @@ export const evaluate = (
 
     if (!matches(trigger, event)) continue;
     const user = userOf(event);
+    if (joinedAlready(rule, trigger, user, state)) continue;
     if (coolingDown(rule, user, state, now)) continue;
     const steps = renderSteps(rule, event);
     if (steps.length === 0) continue;
@@ -252,9 +287,28 @@ export const evaluate = (
         ? Math.min(Math.max(event.repeatCount, 1), MAX_PER_GIFT)
         : 1;
     recordFired(rule, user, state, now);
+    if (trigger.type === "join" && trigger.oncePerStream !== false && user) {
+      state.joinsThisStream.add(userKey(rule.id, user.userId));
+    }
     for (let i = 0; i < copies; i++) firings.push(firing(rule, user, steps));
   }
   return firings;
+};
+
+/** A test viewer who passes the trigger's audience check. */
+const sampleViewer = (trigger: ChatTrigger | JoinTrigger): LiveUser => {
+  switch (trigger.from) {
+    case "followers":
+      return { ...TEST_USER, isFollower: true, followStatus: "follower" };
+    case "friends":
+      return { ...TEST_USER, isFollower: true, followStatus: "friend" };
+    case "subscribers":
+      return { ...TEST_USER, isSubscriber: true };
+    case "moderators":
+      return { ...TEST_USER, isModerator: true };
+    default:
+      return TEST_USER;
+  }
 };
 
 /**
@@ -284,24 +338,16 @@ export const sampleEvent = (trigger: RuleTrigger, now: number): LiveEvent => {
       return { type: "share", ...base, user: TEST_USER };
     case "subscribe":
       return { type: "subscribe", ...base, user: TEST_USER, subMonth: 1 };
-    case "chat": {
-      const from = trigger.from ?? "everyone";
-      const user: LiveUser =
-        from === "followers"
-          ? { ...TEST_USER, isFollower: true }
-          : from === "subscribers"
-            ? { ...TEST_USER, isSubscriber: true }
-            : from === "moderators"
-              ? { ...TEST_USER, isModerator: true }
-              : TEST_USER;
+    case "chat":
       return {
         type: "chat",
         ...base,
-        user,
+        user: sampleViewer(trigger),
         comment: trigger.text?.trim() ? trigger.text : "Hello!",
         emotes: [],
       };
-    }
+    case "join":
+      return { type: "join", ...base, user: sampleViewer(trigger) };
     case "likes":
       return {
         type: "like",
