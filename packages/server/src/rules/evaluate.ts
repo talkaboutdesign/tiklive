@@ -90,6 +90,68 @@ const fill = (text: string, vars: Vars, encode: (value: string) => string = (val
     return value === undefined ? placeholder : encode(value);
   });
 
+const JSON_NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/;
+const escapeInString = (value: string): string => JSON.stringify(value).slice(1, -1);
+const asJsonValue = (value: string): string => (JSON_NUMBER.test(value) ? value : JSON.stringify(value));
+
+/** How a webhook body is sent: as `application/json`, or as `text/plain`. See `bodyMode`. */
+export type BodyMode = "json" | "text";
+
+/** A JSON string literal, or a bare `{name}`. A `:` after either makes it a key. */
+const BODY_TOKEN = /("(?:[^"\\]|\\.)*"|\{\w+\})(\s*:)?/g;
+
+/** The parsed value, or `undefined` when the text isn't JSON. (JSON.parse never returns `undefined`.) */
+const parseJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
+
+const hasKnownPlaceholder = (template: string): boolean =>
+  Array.from(template.matchAll(/\{(\w+)\}/g)).some((match) => isTemplateVariable(match[1] ?? ""));
+
+/**
+ * How a webhook body is sent. It's decided from the template, before any viewer value is in it, so
+ * what a viewer types can't change the request's type. With no known placeholders, it's JSON when it
+ * parses, so `123` is JSON, as it always was. With placeholders, it's JSON only when the body is an
+ * object or array once each bare placeholder counts as `null` (a whole JSON value). Placeholders inside
+ * a string are already valid there, so string literals are kept as typed. So `{"viewer":"{nickname}"}` is JSON, and
+ * `{nickname} sent a gift`, `[Alert] {comment}` and a lone `{comment}` are text.
+ */
+export const bodyMode = (template: string): BodyMode => {
+  if (!hasKnownPlaceholder(template)) return parseJson(template) === undefined ? "text" : "json";
+  const probe = template.replace(BODY_TOKEN, (token: string, part: string, colon: string | undefined) =>
+    part.startsWith('"') || !isTemplateVariable(part.slice(1, -1)) ? token : `null${colon ?? ""}`,
+  );
+  const value = parseJson(probe);
+  return typeof value === "object" && value !== null ? "json" : "text";
+};
+
+/**
+ * The body mode of each rendered webhook step, so `webhookRequest` sends it by its template's mode.
+ * `renderRule` registers each step it renders, and `RuleEngine` passes those same step objects on.
+ */
+export const webhookBodyMode = new WeakMap<RuleStep, BodyMode>();
+
+/**
+ * Fills a JSON body (see `bodyMode`). Values are escaped for where they land, so a viewer's text can't
+ * close a string or add keys. Inside a string it's JSON-escaped. A bare placeholder becomes a number or
+ * a quoted string. A placeholder in a key (followed by `:`) is never filled.
+ */
+const fillJson = (template: string, vars: Vars): string =>
+  template.replace(BODY_TOKEN, (token: string, part: string, colon: string | undefined) => {
+    if (colon !== undefined) return token;
+    // An escape pair is skipped, so a `{` after a backslash stays as typed rather than merging with it.
+    if (part.startsWith('"')) {
+      return part.replace(/\\[\s\S]|\{\w+\}/g, (piece: string) =>
+        piece.startsWith("\\") ? piece : fill(piece, vars, escapeInString),
+      );
+    }
+    return fill(part, vars, asJsonValue);
+  });
+
 export const renderTemplate = (text: string, vars: Vars): string => truncate(fill(text, vars));
 
 /** Every template variable the event provides. Ones that don't apply are "". */
@@ -129,13 +191,20 @@ const renderStep = (step: RuleStep, vars: Vars): RuleStep | undefined => {
     }
     case "media":
       return step.text === undefined ? step : { ...step, text: renderTemplate(step.text, vars) };
-    case "webhook":
+    case "webhook": {
       // Values go into the URL percent-encoded, so they can't add a path segment, query or fragment.
-      return {
+      const url = fill(step.url, vars, encodeURIComponent);
+      if (step.body === undefined) return { ...step, url };
+      // Decided by the template. The filled body holds viewers' text, so it isn't looked at.
+      const mode = bodyMode(step.body);
+      const rendered: RuleStep = {
         ...step,
-        url: fill(step.url, vars, encodeURIComponent),
-        ...(step.body === undefined ? {} : { body: fill(step.body, vars) }),
+        url,
+        body: mode === "json" ? fillJson(step.body, vars) : fill(step.body, vars),
       };
+      webhookBodyMode.set(rendered, mode);
+      return rendered;
+    }
     default:
       return step;
   }

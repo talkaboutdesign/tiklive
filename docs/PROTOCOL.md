@@ -317,9 +317,14 @@ The schemas are in [`packages/contracts/src/rules.ts`](../packages/contracts/src
   points, including this event's).
 - **`webhook` step**: `{kind: "webhook", url, method?, body?}`. `url` is an `http://` or `https://` URL that
   parses, at most 2048 characters. Placeholders are allowed in its path and query, and the values are
-  percent-encoded. `method` is `POST` (the default), `PUT` or `GET`. `body` is at most 4000 characters, is
-  sent as-is for `POST` and `PUT` (as `application/json` if it parses as JSON, else `text/plain`), and is
-  ignored for `GET`. Without a `body`, `POST` and `PUT` send a JSON description of the action:
+  percent-encoded. `method` is `POST` (the default), `PUT` or `GET`. `body` is at most 4000 characters and is
+  ignored for `GET`. For `POST` and `PUT`, a body is sent as `application/json` if it's a JSON object or array
+  with placeholders inside quotes or in place of whole values, or if it has no placeholders and
+  parses as JSON. Partial values such as `[1{comment}]` are text. Placeholder values in a JSON body are
+  escaped, so a viewer can't change its fields, and placeholders in key names aren't filled. Any other body is
+  sent as `text/plain`, exactly as typed, with values inserted as-is. The choice is made from the template,
+  never from the filled text. Without a `body`, `POST`
+  and `PUT` send a JSON description of the action:
   `{rule: {id, name}, event, user: {userId, uniqueId, nickname} | null, vars, timestamp}`, where `event` is
   the event type (`like` for likes milestones) and `vars` holds every template variable. The server sends
   these requests, not the browser player, and the player skips the step.
