@@ -208,7 +208,10 @@ and players (`/overlays/actions.html`) only play what they're sent.
 - `PointsStore` (`points/PointsStore.ts`) keeps viewer points per streamer, in `<dataDir>/points/<streamer>.json`
   or memory. `SessionManager` records each event there before the rules run on it, so a rule sees the
   viewer's new total. Event writes are batched (at most about every 5 seconds, and once more on stop). Settings,
-  adjustments and resets are written before they take effect.
+  adjustments and resets are written before they take effect. Each streamer has its own board lock, so
+  a slow load or dashboard save does not block event recording for other streamers. Disk writes remain
+  serialized and version-checked. Leaderboard queries select the requested rank prefix with a bounded
+  heap instead of sorting every viewer for a small page.
 - `MediaStore` keeps uploads in `<dataDir>/media/` with an `index.json`. `/media/:file` only serves names in
   the index, so a request can't reach other paths.
 - `SoundSearch` (`rules/SoundSearch.ts`) finds sounds on MyInstants. Browsers can't call the site (no CORS), so the

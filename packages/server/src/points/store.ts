@@ -119,6 +119,60 @@ const byRank = (a: Viewer, b: Viewer) =>
   a.firstSeen - b.firstSeen ||
   (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0);
 
+/** Select only the requested prefix, keeping the worst retained viewer at the heap root. */
+const rankedPage = (board: Board, page: { limit: number; offset: number; query: string }) => {
+  const query = page.query.trim().toLowerCase();
+  const count =
+    page.offset >= board.viewers.size ? 0 : Math.min(board.viewers.size, page.offset + page.limit);
+  const matches = (viewer: Viewer) =>
+    query === "" ||
+    viewer.nickname.toLowerCase().includes(query) ||
+    viewer.uniqueId.toLowerCase().includes(query);
+  // A deep page needs most of the board; native sort is cheaper than building a large heap first.
+  if (count > 0 && count >= board.viewers.size / 2) {
+    const matching = [...board.viewers.values()].filter(matches).sort(byRank);
+    return {
+      total: matching.length,
+      viewers: matching.slice(page.offset, page.offset + page.limit).map(publicView),
+    };
+  }
+  const heap: Viewer[] = [];
+  let total = 0;
+  for (const viewer of board.viewers.values()) {
+    if (!matches(viewer)) continue;
+    total++;
+    if (count <= 0) continue;
+    if (heap.length < count) {
+      heap.push(viewer);
+      let index = heap.length - 1;
+      while (index > 0) {
+        const parent = (index - 1) >>> 1;
+        if (byRank(heap[index]!, heap[parent]!) <= 0) break;
+        [heap[index], heap[parent]] = [heap[parent]!, heap[index]!];
+        index = parent;
+      }
+    } else if (byRank(viewer, heap[0]!) < 0) {
+      heap[0] = viewer;
+      let index = 0;
+      while (index * 2 + 1 < heap.length) {
+        let worst = index * 2 + 1;
+        const right = worst + 1;
+        if (right < heap.length && byRank(heap[right]!, heap[worst]!) > 0) worst = right;
+        if (byRank(heap[index]!, heap[worst]!) >= 0) break;
+        [heap[index], heap[worst]] = [heap[worst]!, heap[index]!];
+        index = worst;
+      }
+    }
+  }
+  return {
+    total,
+    viewers: heap
+      .sort(byRank)
+      .slice(page.offset, page.offset + page.limit)
+      .map(publicView),
+  };
+};
+
 const freshBoard = (): Board => ({
   settings: { ...DEFAULT_POINTS_SETTINGS },
   viewers: new Map(),
@@ -150,16 +204,25 @@ export interface Persistence {
 }
 
 /**
- * The store logic shared by both backends. Every change runs under `lock`, so the boards only change
- * one at a time. Changes from the dashboard are saved before they take effect. Points from events only
+ * The store logic shared by both backends. Each streamer has its own `lock`, so changes to one board do not block events
+ * for another streamer. Changes from the dashboard are saved before they take effect. Points from events only
  * bump the board's version, and `flushDirty` saves the boards that changed: on a timer when `batched`,
  * and once more when the scope closes. Those flushes save under `writeLock` after releasing `lock`,
  * so events can run during the write. An older snapshot never overwrites a newer save.
  */
 export const makeStore = (persistence: Persistence, batched: boolean) =>
   Effect.gen(function* () {
-    // Held for every change and read. Lock order is always `lock`, then `writeLock`.
-    const lock = yield* Semaphore.make(1);
+    // Each board serializes its reads, loads and changes. Lock order is board lock, then writeLock.
+    const locks = new Map<string, Semaphore.Semaphore>();
+    const withBoard = <A, E, R>(username: string, effect: Effect.Effect<A, E, R>) =>
+      Effect.suspend(() => {
+        let lock = locks.get(username);
+        if (!lock) {
+          lock = Semaphore.makeUnsafe(1);
+          locks.set(username, lock);
+        }
+        return lock.withPermit(effect);
+      });
     // Held only around a save.
     const writeLock = yield* Semaphore.make(1);
     const boards = new Map<string, Board>();
@@ -200,15 +263,18 @@ export const makeStore = (persistence: Persistence, batched: boolean) =>
     // left unsaved, so the next flush retries it.
     const flushDirty = Effect.gen(function* () {
       // This first savedVersion read is only a snapshot filter; recheck it under writeLock below.
-      const pending = yield* lock.withPermit(
-        Effect.sync(() =>
-          [...boards].flatMap(([username, board]) =>
-            board.version > savedVersion(username)
-              ? [{ username, version: board.version, stored: toStored(board) }]
-              : [],
-          ),
+      const snapshots = yield* Effect.forEach([...boards.keys()], (username) =>
+        withBoard(
+          username,
+          Effect.sync(() => {
+            const board = boards.get(username)!;
+            return board.version > savedVersion(username)
+              ? { username, version: board.version, stored: toStored(board) }
+              : undefined;
+          }),
         ),
       );
+      const pending = snapshots.filter((snapshot) => snapshot !== undefined);
       yield* Effect.forEach(
         pending,
         ({ username, version, stored }) =>
@@ -236,7 +302,8 @@ export const makeStore = (persistence: Persistence, batched: boolean) =>
 
     return {
       record: (username, event) =>
-        lock.withPermit(
+        withBoard(
+          username,
           Effect.gen(function* () {
             const user = userOf(event);
             if (!user || !hasRealId(user)) return;
@@ -273,7 +340,8 @@ export const makeStore = (persistence: Persistence, batched: boolean) =>
         ),
 
       get: (username, userId) =>
-        lock.withPermit(
+        withBoard(
+          username,
           Effect.map(boardFor(username), (board) => {
             const viewer = board.viewers.get(userId);
             return viewer ? Option.some(publicView(viewer)) : Option.none();
@@ -281,31 +349,23 @@ export const makeStore = (persistence: Persistence, batched: boolean) =>
         ),
 
       leaderboard: (username, page) =>
-        lock.withPermit(
+        withBoard(
+          username,
           Effect.gen(function* () {
             const board = yield* boardFor(username);
-            const query = page.query.trim().toLowerCase();
-            const matching = [...board.viewers.values()]
-              .filter(
-                (viewer) =>
-                  query === "" ||
-                  viewer.nickname.toLowerCase().includes(query) ||
-                  viewer.uniqueId.toLowerCase().includes(query),
-              )
-              .sort(byRank);
-            return {
-              settings: { ...board.settings },
-              viewers: matching.slice(page.offset, page.offset + page.limit).map(publicView),
-              total: matching.length,
-            };
+            return { settings: { ...board.settings }, ...rankedPage(board, page) };
           }),
         ),
 
       settings: (username) =>
-        lock.withPermit(Effect.map(boardFor(username), (board) => ({ ...board.settings }))),
+        withBoard(
+          username,
+          Effect.map(boardFor(username), (board) => ({ ...board.settings })),
+        ),
 
       updateSettings: (username, settings) =>
-        lock.withPermit(
+        withBoard(
+          username,
           Effect.gen(function* () {
             const board = yield* boardFor(username);
             const next = cloneBoard(board);
@@ -316,7 +376,8 @@ export const makeStore = (persistence: Persistence, batched: boolean) =>
         ),
 
       adjust: (username, userId, change) =>
-        lock.withPermit(
+        withBoard(
+          username,
           Effect.gen(function* () {
             const board = yield* boardFor(username);
             if (!board.viewers.has(userId)) return Option.none<ViewerPoints>();
@@ -329,7 +390,8 @@ export const makeStore = (persistence: Persistence, batched: boolean) =>
         ),
 
       reset: (username) =>
-        lock.withPermit(
+        withBoard(
+          username,
           Effect.gen(function* () {
             const board = yield* boardFor(username);
             const next = cloneBoard(board);

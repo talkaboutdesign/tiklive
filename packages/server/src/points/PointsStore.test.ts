@@ -744,3 +744,48 @@ describe("PointsStore: a dashboard change and a flush", () => {
     }).pipe(Effect.provideService(Scheduler.Scheduler, scheduler));
   });
 });
+
+describe("PointsStore contention and ranking", () => {
+  it.effect("records and reads another streamer while a dashboard save is blocked", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const store = yield* makeStore(
+          {
+            load: () => Effect.succeed(undefined),
+            save: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+          },
+          false,
+        );
+        yield* store.record(USER, follow("1"));
+        const change = yield* store.adjust(USER, "1", { set: 99 }).pipe(Effect.forkChild);
+        yield* Deferred.await(entered);
+        // Both must finish before the first streamer's disk save is released.
+        yield* store.record(OTHER, follow("2"));
+        expect(Option.getOrThrow(yield* store.get(OTHER, "2")).points).toBe(50);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(change);
+        expect(yield* pointsOf(store, "1")).toBe(99);
+      }),
+    ),
+  );
+
+  it.effect("returns correctly ranked pages and totals with ties, search and large offsets", () =>
+    Effect.gen(function* () {
+      const store = yield* PointsStore;
+      // Vary insertion order and points; lexical user IDs break equal-time ties.
+      const ids = ["9", "2", "5", "1", "8", "3", "7", "4", "6", "12"];
+      for (const id of ids) yield* store.record(USER, gift(id, (Number(id) % 3) + 1));
+      const expected = ["2", "5", "8", "1", "4", "7", "12", "3", "6", "9"];
+      for (const offset of [0, 2, 7, 10, 1000]) {
+        const page = yield* store.leaderboard(USER, { limit: 3, offset, query: "" });
+        expect(page.total).toBe(10);
+        expect(page.viewers.map((v) => v.userId)).toEqual(expected.slice(offset, offset + 3));
+      }
+      const filtered = yield* store.leaderboard(USER, { limit: 2, offset: 0, query: "  NAME 5 " });
+      expect(filtered.total).toBe(1);
+      expect(filtered.viewers.map((v) => v.userId)).toEqual(["5"]);
+    }).pipe(Effect.provide(layerMemory)),
+  );
+});
