@@ -6,24 +6,20 @@
  * are written at once. The in-memory store is for servers started without a data directory.
  */
 import {
-  DEFAULT_POINTS_SETTINGS,
-  PointsSettings,
+  type PointsSettings,
   Username,
-  ViewerPoints,
+  type ViewerPoints,
   type LiveEvent,
-  type LiveUser,
   type PointsLeaderboard,
 } from "@tiklive/contracts";
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
+import type * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { makeStore, StoredBoard, type Persistence } from "./store.ts";
 
 /** Writing a streamer's points to disk failed. The totals in memory are unchanged. */
 export class PointsWriteError extends Schema.TaggedError<PointsWriteError>()("PointsWriteError", {
@@ -66,140 +62,6 @@ export class PointsStore extends Context.Service<
     readonly reset: (username: string) => Effect.Effect<void, PointsWriteError>;
   }
 >()("@tiklive/server/PointsStore") {}
-
-/** Per-viewer state. `likeCarry` is the likes not yet worth a point; `lastChatAt` starts chat cooldowns. */
-interface Viewer {
-  userId: string;
-  uniqueId: string;
-  nickname: string;
-  profilePictureUrl: string;
-  points: number;
-  coins: number;
-  messages: number;
-  firstSeen: number;
-  lastSeen: number;
-  likeCarry: number;
-  lastChatAt: number | null;
-}
-
-interface Board {
-  settings: PointsSettings;
-  viewers: Map<string, Viewer>;
-  /** Changed since the last write. Only the batched flush looks at this. */
-  dirty: boolean;
-}
-
-const StoredViewer = Schema.Struct({
-  ...ViewerPoints.fields,
-  likeCarry: Schema.Finite,
-  lastChatAt: Schema.NullOr(Schema.Finite),
-});
-const StoredBoard = Schema.Struct({ settings: PointsSettings, viewers: Schema.Array(StoredViewer) });
-type Stored = typeof StoredBoard.Type;
-
-const FLUSH_EVERY = Duration.seconds(5);
-
-/** The user behind the events that can earn points. Other events (questions, emotes, viewer counts, battles) are ignored. */
-const userOf = (event: LiveEvent): LiveUser | undefined => {
-  switch (event.type) {
-    case "chat":
-    case "gift":
-    case "like":
-    case "follow":
-    case "share":
-    case "join":
-    case "subscribe":
-      return event.user;
-    default:
-      return undefined;
-  }
-};
-
-/** TikTok sends "0" or nothing for accounts it can't identify. Those are never scored. */
-const hasRealId = (user: LiveUser) => user.userId !== "" && user.userId !== "0";
-
-/** Points one event is worth to a viewer. Also updates the viewer's counters and cooldown. */
-const earn = (event: LiveEvent, viewer: Viewer, settings: PointsSettings, now: number): number => {
-  switch (event.type) {
-    case "chat": {
-      viewer.messages += 1;
-      const due =
-        viewer.lastChatAt === null || now - viewer.lastChatAt >= settings.messageCooldownSeconds * 1000;
-      if (!due) return 0;
-      viewer.lastChatAt = now;
-      return settings.perMessage;
-    }
-    case "gift": {
-      // A combo fires repeatedly while it runs. Only the final event (streaking: false) counts.
-      if (event.streaking) return 0;
-      viewer.coins += event.totalDiamonds;
-      return event.totalDiamonds * settings.perCoin;
-    }
-    case "like": {
-      viewer.likeCarry += event.likeCount;
-      const whole = Math.floor(viewer.likeCarry / settings.likesPerPoint);
-      viewer.likeCarry -= whole * settings.likesPerPoint;
-      return whole;
-    }
-    case "follow":
-      return settings.perFollow;
-    case "share":
-      return settings.perShare;
-    case "subscribe":
-      return settings.perSubscribe;
-    case "join":
-      return settings.perJoin;
-    default:
-      return 0;
-  }
-};
-
-const publicView = (viewer: Viewer): ViewerPoints => ({
-  userId: viewer.userId,
-  uniqueId: viewer.uniqueId,
-  nickname: viewer.nickname,
-  profilePictureUrl: viewer.profilePictureUrl,
-  points: viewer.points,
-  coins: viewer.coins,
-  messages: viewer.messages,
-  firstSeen: viewer.firstSeen,
-  lastSeen: viewer.lastSeen,
-});
-
-/** Best first: most points, then the earliest arrival, then user id, so ties keep a stable order. */
-const byRank = (a: Viewer, b: Viewer) =>
-  b.points - a.points ||
-  a.firstSeen - b.firstSeen ||
-  (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0);
-
-const freshBoard = (): Board => ({
-  settings: { ...DEFAULT_POINTS_SETTINGS },
-  viewers: new Map(),
-  dirty: false,
-});
-
-const cloneBoard = (board: Board): Board => ({
-  settings: { ...board.settings },
-  viewers: new Map([...board.viewers].map(([id, viewer]) => [id, { ...viewer }])),
-  dirty: false,
-});
-
-const toStored = (board: Board): Stored => ({
-  settings: { ...board.settings },
-  viewers: [...board.viewers.values()].map((viewer) => ({ ...viewer })),
-});
-
-const fromStored = (stored: Stored): Board => ({
-  settings: { ...stored.settings },
-  viewers: new Map(stored.viewers.map((viewer) => [viewer.userId, { ...viewer }])),
-  dirty: false,
-});
-
-/** Where a streamer's totals live. `load` never fails; `save` fails only on I/O. */
-interface Persistence {
-  readonly load: (username: string) => Effect.Effect<Stored | undefined>;
-  readonly save: (username: string, stored: Stored) => Effect.Effect<void, PointsWriteError>;
-}
 
 const memoryPersistence: Persistence = {
   load: () => Effect.succeed(undefined),
@@ -259,7 +121,7 @@ const filePersistence = (dir: string): Persistence => {
     save: (username, stored) => {
       if (!Schema.is(Username)(username)) return Effect.void;
       const file = fileFor(username);
-      return writeFileAtomic(file, `${JSON.stringify(stored, null, 2)}\n`).pipe(
+      return writeFileAtomic(file, `${JSON.stringify(stored)}\n`).pipe(
         Effect.mapError(
           (cause) =>
             new PointsWriteError({ message: `Could not save points to ${file}: ${describe(cause)}` }),
@@ -268,164 +130,6 @@ const filePersistence = (dir: string): Persistence => {
     },
   };
 };
-
-/**
- * The store logic shared by both backends. Every change runs under one lock. Changes from the
- * dashboard are written before they take effect. Points from events only mark the board dirty,
- * and `flushDirty` writes them: on a timer when `batched`, and once more when the scope closes.
- */
-const makeStore = (persistence: Persistence, batched: boolean) =>
-  Effect.gen(function* () {
-    const lock = yield* Semaphore.make(1);
-    const boards = new Map<string, Board>();
-
-    // Only called under the lock.
-    const boardFor = (username: string) =>
-      Effect.gen(function* () {
-        const existing = boards.get(username);
-        if (existing) return existing;
-        const stored = yield* persistence.load(username);
-        const board = stored ? fromStored(stored) : freshBoard();
-        boards.set(username, board);
-        return board;
-      });
-
-    // Writes `next` and only then makes it the current board, so a failed write keeps the old totals.
-    const commit = (username: string, next: Board) =>
-      persistence.save(username, toStored(next)).pipe(
-        Effect.andThen(
-          Effect.sync(() => {
-            next.dirty = false;
-            boards.set(username, next);
-          }),
-        ),
-      );
-
-    // Suspended so the list of dirty boards is read when the flush runs, not when the store is built.
-    const flushDirty = lock.withPermit(
-      Effect.suspend(() =>
-        Effect.forEach(
-          [...boards].filter(([, board]) => board.dirty),
-          ([username, board]) =>
-            persistence.save(username, toStored(board)).pipe(
-              Effect.andThen(Effect.sync(() => (board.dirty = false))),
-              Effect.catch((error) =>
-                Effect.logWarning(`Could not save points for @${username}; will retry`, error),
-              ),
-            ),
-          { discard: true },
-        ),
-      ),
-    );
-
-    if (batched) {
-      yield* Effect.sleep(FLUSH_EVERY).pipe(Effect.andThen(flushDirty), Effect.forever, Effect.forkScoped);
-      yield* Effect.addFinalizer(() => flushDirty);
-    }
-
-    return PointsStore.of({
-      record: (username, event) =>
-        lock.withPermit(
-          Effect.gen(function* () {
-            const user = userOf(event);
-            if (!user || !hasRealId(user)) return;
-            const board = yield* boardFor(username);
-            const now = yield* Clock.currentTimeMillis;
-            let viewer = board.viewers.get(user.userId);
-            // Joins are most of a big stream's events. When they earn nothing, they don't add viewers,
-            // so the board (and its file) only holds people who engaged.
-            if (!viewer && event.type === "join" && board.settings.perJoin === 0) return;
-            if (!viewer) {
-              viewer = {
-                userId: user.userId,
-                uniqueId: user.uniqueId,
-                nickname: user.nickname,
-                profilePictureUrl: user.profilePictureUrl,
-                points: 0,
-                coins: 0,
-                messages: 0,
-                firstSeen: now,
-                lastSeen: now,
-                likeCarry: 0,
-                lastChatAt: null,
-              };
-              board.viewers.set(user.userId, viewer);
-            }
-            // The newest name and picture win, so the leaderboard follows renames.
-            viewer.uniqueId = user.uniqueId;
-            viewer.nickname = user.nickname || user.uniqueId;
-            viewer.profilePictureUrl = user.profilePictureUrl;
-            viewer.lastSeen = now;
-            viewer.points += earn(event, viewer, board.settings, now);
-            board.dirty = true;
-          }),
-        ),
-
-      get: (username, userId) =>
-        lock.withPermit(
-          Effect.map(boardFor(username), (board) => {
-            const viewer = board.viewers.get(userId);
-            return viewer ? Option.some(publicView(viewer)) : Option.none();
-          }),
-        ),
-
-      leaderboard: (username, page) =>
-        lock.withPermit(
-          Effect.gen(function* () {
-            const board = yield* boardFor(username);
-            const query = page.query.trim().toLowerCase();
-            const matching = [...board.viewers.values()]
-              .filter(
-                (viewer) =>
-                  query === "" ||
-                  viewer.nickname.toLowerCase().includes(query) ||
-                  viewer.uniqueId.toLowerCase().includes(query),
-              )
-              .sort(byRank);
-            return {
-              settings: { ...board.settings },
-              viewers: matching.slice(page.offset, page.offset + page.limit).map(publicView),
-              total: matching.length,
-            };
-          }),
-        ),
-
-      settings: (username) =>
-        lock.withPermit(Effect.map(boardFor(username), (board) => ({ ...board.settings }))),
-
-      updateSettings: (username, settings) =>
-        lock.withPermit(
-          Effect.gen(function* () {
-            const next = cloneBoard(yield* boardFor(username));
-            next.settings = { ...settings };
-            yield* commit(username, next);
-            return { ...settings };
-          }),
-        ),
-
-      adjust: (username, userId, change) =>
-        lock.withPermit(
-          Effect.gen(function* () {
-            const board = yield* boardFor(username);
-            if (!board.viewers.has(userId)) return Option.none<ViewerPoints>();
-            const next = cloneBoard(board);
-            const viewer = next.viewers.get(userId)!;
-            viewer.points = Math.max(0, "delta" in change ? viewer.points + change.delta : change.set);
-            yield* commit(username, next);
-            return Option.some(publicView(viewer));
-          }),
-        ),
-
-      reset: (username) =>
-        lock.withPermit(
-          Effect.gen(function* () {
-            const next = cloneBoard(yield* boardFor(username));
-            next.viewers.clear();
-            yield* commit(username, next);
-          }),
-        ),
-    });
-  });
 
 /** Points kept in memory only. Start empty, and are lost when the server stops. */
 export const layerMemory: Layer.Layer<PointsStore> = Layer.effect(

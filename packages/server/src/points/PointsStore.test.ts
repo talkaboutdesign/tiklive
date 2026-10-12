@@ -9,15 +9,20 @@ import {
   type LiveUser,
   type PointsSettings,
 } from "@tiklive/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
+import * as Scheduler from "effect/Scheduler";
 import * as TestClock from "effect/testing/TestClock";
 import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { layerFile, layerMemory, PointsStore, PointsWriteError } from "./PointsStore.ts";
+import { makeStore, type Persistence } from "./store.ts";
 
 const USER = "streamer";
+const OTHER = "other";
 
 const user = (userId: string, nickname = `Name ${userId}`, uniqueId = `handle${userId}`): LiveUser => ({
   userId,
@@ -303,6 +308,8 @@ const withTempDir = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
     );
   });
 
+type OnDisk = { settings: PointsSettings; viewers: Array<{ userId: string; points: number }> };
+
 const onDisk = (dir: string) =>
   Effect.promise(async () => {
     try {
@@ -330,6 +337,31 @@ const onDiskSoon = (dir: string) =>
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
+    }
+    return undefined;
+  });
+
+/** The raw text of the streamer's file, once `ready` accepts it. Waits in real time, like `onDiskSoon`. */
+const textOnDiskSoon = (dir: string, ready: (text: string) => boolean) =>
+  Effect.promise(async () => {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const text = await readFile(join(dir, "points", `${USER}.json`), "utf8").catch(() => undefined);
+      if (text !== undefined && ready(text)) return text;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return undefined;
+  });
+
+/** The parsed streamer's file, once `ready` accepts it. Waits in real time, like `onDiskSoon`. */
+const parsedOnDiskSoon = (dir: string, ready: (saved: OnDisk) => boolean) =>
+  Effect.promise(async () => {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const saved = await readFile(join(dir, "points", `${USER}.json`), "utf8").then(
+        (text) => JSON.parse(text) as OnDisk,
+        () => undefined,
+      );
+      if (saved && ready(saved)) return saved;
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
     return undefined;
   });
@@ -455,4 +487,260 @@ describe("PointsStore in a file", () => {
       ),
     ),
   );
+
+  it.effect("saves compact JSON, and still loads a pretty-printed file from before", () =>
+    Effect.scoped(
+      withTempDir((dir) =>
+        Effect.gen(function* () {
+          // A file written by an older version: indented, one viewer with 7 points.
+          const older = {
+            userId: "1",
+            uniqueId: "handle1",
+            nickname: "Name 1",
+            profilePictureUrl: "https://img.example/1.jpg",
+            points: 7,
+            coins: 0,
+            messages: 0,
+            firstSeen: 1,
+            lastSeen: 1,
+            likeCarry: 0,
+            lastChatAt: null,
+          };
+          yield* Effect.promise(() => mkdir(join(dir, "points"), { recursive: true }));
+          yield* Effect.promise(() =>
+            writeFile(
+              join(dir, "points", `${USER}.json`),
+              JSON.stringify({ settings: DEFAULT_POINTS_SETTINGS, viewers: [older] }, null, 2),
+            ),
+          );
+          yield* Effect.gen(function* () {
+            const store = yield* PointsStore;
+            expect(yield* pointsOf(store, "1")).toBe(7);
+            yield* store.record(USER, follow("1"));
+            yield* TestClock.adjust("5 seconds");
+          }).pipe(Effect.provide(layerFile(dir)));
+
+          // The rewrite is the only file with no indentation in it.
+          const text = yield* textOnDiskSoon(dir, (saved) => !saved.includes("\n  "));
+          expect(text?.endsWith("\n")).toBe(true);
+          expect(text?.trimEnd().includes("\n")).toBe(false);
+          expect(JSON.parse(text ?? "null")).toMatchObject({ viewers: [{ userId: "1", points: 57 }] });
+        }),
+      ),
+    ),
+  );
+
+  it.effect("retries a write that failed on the next flush", () =>
+    Effect.scoped(
+      withTempDir((dir) =>
+        Effect.gen(function* () {
+          // A regular file where the points folder should be: writes fail until it's removed.
+          yield* Effect.promise(() => writeFile(join(dir, "points"), "x"));
+          yield* Effect.gen(function* () {
+            const store = yield* PointsStore;
+            yield* store.record(USER, follow("1"));
+            // The flush fails in the background. The reset waits for that write to finish, so the
+            // failure has happened before the folder is fixed. The reset fails too, and changes nothing.
+            yield* TestClock.adjust("5 seconds");
+            yield* Effect.flip(store.reset(USER));
+            yield* Effect.promise(() => rm(join(dir, "points")));
+
+            yield* TestClock.adjust("5 seconds");
+            expect(yield* onDiskSoon(dir)).toMatchObject({ viewers: [{ userId: "1", points: 50 }] });
+          }).pipe(Effect.provide(layerFile(dir)));
+        }),
+      ),
+    ),
+  );
+
+  it.effect("keeps the newest totals on disk across dashboard changes and timed flushes", () =>
+    Effect.scoped(
+      withTempDir((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            const store = yield* PointsStore;
+            yield* store.record(USER, follow("1"));
+            yield* TestClock.adjust("5 seconds");
+            expect(yield* parsedOnDiskSoon(dir, (saved) => saved.viewers.length === 1)).toBeDefined();
+
+            yield* store.adjust(USER, "1", { set: 99 });
+            expect(yield* onDisk(dir)).toMatchObject({ viewers: [{ userId: "1", points: 99 }] });
+
+            yield* store.record(USER, follow("2"));
+            yield* TestClock.adjust("5 seconds");
+            const second = yield* parsedOnDiskSoon(dir, (saved) => saved.viewers.length === 2);
+            expect(second?.viewers.map((v) => [v.userId, v.points])).toEqual([
+              ["1", 99],
+              ["2", 50],
+            ]);
+
+            yield* store.reset(USER);
+            expect(yield* onDisk(dir)).toMatchObject({ viewers: [] });
+
+            yield* store.record(USER, follow("3"));
+            yield* TestClock.adjust("5 seconds");
+            const third = yield* parsedOnDiskSoon(dir, (saved) => saved.viewers.length === 1);
+            expect(third?.viewers.map((v) => [v.userId, v.points])).toEqual([["3", 50]]);
+          }).pipe(Effect.provide(layerFile(dir)));
+        }),
+      ),
+    ),
+  );
+});
+
+// ---- a flush and a dashboard change waiting for the write lock ----
+
+/**
+ * Run newly woken work before the current fiber continues. In particular, releasing a semaphore
+ * schedules its waiters; yielding at that point exposes a save whose version is recorded too late.
+ * This uses only the Scheduler API, without inspecting the store or the runtime's private state.
+ */
+const handoffScheduler = (): Scheduler.Scheduler & { readonly settle: Effect.Effect<void> } => {
+  const dispatcher = new Scheduler.MixedScheduler("sync").makeDispatcher();
+  let handoff = false;
+  const controlled: Scheduler.SchedulerDispatcher = {
+    scheduleTask: (task, priority) => {
+      handoff = true;
+      dispatcher.scheduleTask(() => {
+        handoff = false;
+        task();
+      }, priority);
+    },
+    flush: () => dispatcher.flush(),
+  };
+  return {
+    executionMode: "async",
+    shouldYield: () => handoff,
+    makeDispatcher: () => controlled,
+    // Drain all runnable work to suspension, rather than guessing how many yields it needs.
+    settle: Effect.sync(() => dispatcher.flush()),
+  };
+};
+
+/**
+ * A disk that keeps every write in order. The first write of `hold.username` waits on `hold.release`,
+ * and the dashboard save has its own gate, so the flush can queue behind it before it finishes.
+ */
+const fakeDisk = (hold: {
+  username: string;
+  entered: Deferred.Deferred<void>;
+  release: Deferred.Deferred<void>;
+  changeEntered: Deferred.Deferred<void>;
+  changeRelease: Deferred.Deferred<void>;
+}) => {
+  const writes: Array<{ username: string; points: Array<[string, number]> }> = [];
+  let held = true;
+  return {
+    writes,
+    persistence: {
+      load: () => Effect.succeed(undefined),
+      save: (username, stored) =>
+        Effect.gen(function* () {
+          if (held && username === hold.username) {
+            held = false;
+            yield* Deferred.succeed(hold.entered, undefined);
+            yield* Deferred.await(hold.release);
+          }
+          if (username === USER && stored.viewers[0]?.points === 99) {
+            yield* Deferred.succeed(hold.changeEntered, undefined);
+            yield* Deferred.await(hold.changeRelease);
+          }
+          writes.push({ username, points: stored.viewers.map((viewer) => [viewer.userId, viewer.points]) });
+        }),
+    } satisfies Persistence,
+  };
+};
+
+describe("PointsStore: a dashboard change and a flush", () => {
+  it.effect("never overwrites a dashboard save with an older flush snapshot at write-lock handoff", () => {
+    const scheduler = handoffScheduler();
+    return Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const changeEntered = yield* Deferred.make<void>();
+      const changeRelease = yield* Deferred.make<void>();
+      const disk = fakeDisk({ username: OTHER, entered, release, changeEntered, changeRelease });
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          // The flush snapshots both boards (USER at version 1, 50 points), then holds OTHER's save.
+          const store = yield* makeStore(disk.persistence, true);
+          yield* store.record(OTHER, follow("9"));
+          yield* store.record(USER, follow("1"));
+          yield* TestClock.adjust("5 seconds");
+          yield* Deferred.await(entered);
+
+          // Queue version 2 (99 points) behind OTHER. The scheduler hands the write lock to it
+          // before the flush can start saving its old USER snapshot.
+          const change = yield* Effect.forkChild(store.adjust(USER, "1", { set: 99 }));
+          yield* scheduler.settle;
+          yield* Deferred.succeed(release, undefined);
+          yield* Deferred.await(changeEntered);
+          // Keep the dashboard save blocked until the flush has queued behind its write lock.
+          yield* scheduler.settle;
+          yield* Deferred.succeed(changeRelease, undefined);
+          yield* Fiber.join(change);
+          yield* scheduler.settle;
+
+          // Releasing the dashboard's write lock wakes the old flush BEFORE commit continues.
+          // It must already know version 2 is saved, or it overwrites 99 points with 50.
+          expect(disk.writes.filter((write) => write.username === USER)).toEqual([
+            { username: USER, points: [["1", 99]] },
+          ]);
+          expect(Option.getOrThrow(yield* store.get(USER, "1")).points).toBe(99);
+        }),
+      );
+      // Scope close runs another flush. Already saved boards must not be written again.
+      expect(disk.writes).toEqual([
+        { username: OTHER, points: [["9", 50]] },
+        { username: USER, points: [["1", 99]] },
+      ]);
+    }).pipe(Effect.provideService(Scheduler.Scheduler, scheduler));
+  });
+
+  it.effect("records during a blocked flush and saves the newer version when the scope closes", () => {
+    const scheduler = handoffScheduler();
+    return Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const close = yield* Deferred.make<void>();
+      const ready = yield* Deferred.make<PointsStore["Service"]>();
+      const writes: Array<number | undefined> = [];
+      let first = true;
+      const persistence: Persistence = {
+        load: () => Effect.succeed(undefined),
+        save: (_, stored) =>
+          Effect.gen(function* () {
+            if (first) {
+              first = false;
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+            }
+            writes.push(stored.viewers[0]?.points);
+          }),
+      };
+      const owner = yield* Effect.forkChild(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const store = yield* makeStore(persistence, true);
+            yield* Deferred.succeed(ready, store);
+            yield* Deferred.await(close);
+          }),
+        ),
+      );
+      const store = yield* Deferred.await(ready);
+      yield* store.record(USER, follow("1"));
+      yield* TestClock.adjust("5 seconds");
+      yield* Deferred.await(entered);
+
+      // This must complete while save is still blocked. Its newer version remains dirty.
+      yield* store.record(USER, follow("1"));
+      yield* Deferred.succeed(close, undefined);
+      yield* scheduler.settle;
+      // The finalizer is now waiting for the timer's write, with its own newer snapshot.
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(owner);
+      expect(writes).toEqual([50, 100]);
+    }).pipe(Effect.provideService(Scheduler.Scheduler, scheduler));
+  });
 });
