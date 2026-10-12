@@ -13,10 +13,11 @@ overlays and apps over WebSocket, and exposes a small REST API. The CLI is `pack
 
 ```sh
 npx @tiklive/server --help          # or: bunx @tiklive/server
-npx @tiklive/server --port 8080     # then connect overlays to ws://localhost:8080/ws
+npx @tiklive/server --port 8080     # dashboard at http://localhost:8080, WebSocket at ws://localhost:8080/ws
 ```
 
 The `tiklive` bin starts with Node. To run it on Bun, install the package and run `bun node_modules/.bin/tiklive`.
+The package includes the dashboard and example overlays and serves them unless you pass `--static <dir>`.
 From a checkout of this repo, `bun run dev` builds the client and serves `examples/overlays` on :8080.
 
 Full CLI flags and the REST and WebSocket API: [the root README](https://github.com/talkaboutdesign/tiklive/blob/main/README.md#server) and

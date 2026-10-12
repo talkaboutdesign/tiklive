@@ -20,6 +20,9 @@ TikTok directly.
 npx @tiklive/server          # or: bunx @tiklive/server
 ```
 
+Then open http://localhost:8080 for the dashboard and the example overlays (chat, goal, alerts). Type
+`demo` as the username to see fake events.
+
 **Use the library** in your own app:
 
 ```sh
