@@ -63,6 +63,10 @@
         color: #fff;
         font-weight: 600;
       }
+      button:disabled {
+        opacity: 0.7;
+        cursor: default;
+      }
       main {
         display: grid;
         grid-template-columns: 1fr 360px;
@@ -220,6 +224,7 @@
   <body>
     <header>
       <h1>tik<span>live</span></h1>
+      <button id="update" class="primary" hidden></button>
       <form id="connect">
         <input id="username" placeholder="TikTok username (or demo)" autocomplete="off" />
         <button class="primary">Connect</button>
@@ -509,6 +514,64 @@
           "",
           `?username=${encodeURIComponent(username)}${token ? `&token=${encodeURIComponent(token)}` : ""}`,
         );
+      }
+
+      // Desktop app only. window.tikliveDesktop is undefined in a normal browser, so this block never runs there.
+      if (window.tikliveDesktop) {
+        const updates = window.tikliveDesktop.updates;
+        const updateButton = $("update");
+        let updateState;
+
+        // Mirrors actionFor() in apps/desktop/src/updates/updateMachine.ts.
+        const updateAction = (s) => {
+          if (s.status === "downloaded") return "install";
+          if (s.status === "available" || (s.status === "error" && s.errorContext === "download"))
+            return "download";
+          return "none";
+        };
+
+        const updateLabel = (s) => {
+          if (s.status === "downloading") return `Downloading… ${Math.round(s.downloadPercent ?? 0)}%`;
+          if (s.status === "downloaded") return "Restart to update";
+          if (s.status === "available") return `Update to v${s.availableVersion}`;
+          return "Retry update";
+        };
+
+        function renderUpdate(s) {
+          updateState = s;
+          const busy = s.status === "downloading";
+          const hasError = s.status === "error" || s.errorContext === "install";
+          updateButton.hidden = updateAction(s) === "none" && !busy;
+          updateButton.disabled = busy;
+          updateButton.textContent = updateLabel(s);
+          updateButton.title = hasError ? (s.message ?? "") : "";
+        }
+
+        updateButton.onclick = async () => {
+          const action = updateState ? updateAction(updateState) : "none";
+          if (action === "download") {
+            await updates.download();
+          } else if (action === "install") {
+            const version = updateState.availableVersion ?? "";
+            if (confirm(`Restart tiklive to install v${version}? Live connections will drop briefly.`)) {
+              await updates.install();
+            }
+          }
+        };
+
+        // Subscribe before reading the current state so no change is missed. A pushed state
+        // always beats the getState() snapshot, which may have been taken before it.
+        let pushed = false;
+        updates.onState((s) => {
+          pushed = true;
+          renderUpdate(s);
+        });
+        updates
+          .getState()
+          .then((s) => {
+            if (!pushed) renderUpdate(s);
+          })
+          .catch(() => {});
       }
 
       $("connect").onsubmit = (e) => {

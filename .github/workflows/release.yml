@@ -3,8 +3,9 @@ name: Release
 # Runs only when started by hand (Actions → Release → Run workflow on main).
 # With pending changesets, changesets/action opens or updates a
 # "Release: version packages" PR. After that PR is merged, run the workflow
-# again to stage the new versions on npm (a maintainer approves them with 2FA)
-# and create a GitHub Release.
+# again to stage the new versions on npm (a maintainer approves them with 2FA),
+# build the desktop app (release-desktop.yml) and create a GitHub Release with
+# its installers and updater files attached.
 
 on:
   workflow_dispatch:
@@ -61,14 +62,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  desktop:
+    name: Desktop
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    uses: ./.github/workflows/release-desktop.yml
+    secrets: inherit
+
+  # Created only once every installer is built, like t3code: the desktop
+  # app's updater reads the latest release, so it must never see one without
+  # its latest*.yml files.
   github-release:
     name: GitHub Release
-    needs: release
+    needs: [release, desktop]
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-*
+          merge-multiple: true
+          path: release-assets
 
       - name: Create GitHub Release
         env:
@@ -78,4 +95,4 @@ jobs:
           # Release notes: this version's section of the server changelog.
           awk -v v="## $version" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
           git tag "v$version" && git push origin "v$version"
-          gh release create "v$version" --title "v$version" --notes-file notes.md
+          gh release create "v$version" --title "v$version" --notes-file notes.md release-assets/*

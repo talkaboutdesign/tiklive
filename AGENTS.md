@@ -22,13 +22,15 @@ packages/server      SessionManager, Session, HTTP/WS routes (http.ts), Server.l
                      platform/ (Bun and Node HTTP layers), bin.ts (the `tiklive` CLI)
 packages/client      TikLive browser/Node client, built to dist/tiklive.js (served as /tiklive.js).
                      No Effect, no runtime deps.
+apps/desktop         Electron app: runs the server in-process on 127.0.0.1:8080, shows the dashboard,
+                     auto-updates via electron-updater (src/updates/). Main + preload bundle to dist-electron/
 examples/overlays    Dashboard and OBS overlays (plain HTML, no build step)
 docs/                PROTOCOL.md, ARCHITECTURE.md
 patches/             Patch to @effect/vitest (see Gotchas)
 .repos/              Gitignored reference repos. Read-only, never committed.
 ```
 
-Dependency direction: `contracts` ← `core` ← `server`. `contracts` ← `client` (types only). Don't make
+Dependency direction: `contracts` ← `core` ← `server` ← `desktop`. `contracts` ← `client` (types only). Don't make
 `core` import from `server`, and don't make `client` import Effect.
 
 ## Commands
@@ -40,6 +42,7 @@ Bun 1.4.3 (pinned in `package.json` `packageManager`). Use `bun`, not `npm`, `pn
 | `bun install`                  | Install (uses `bun.lock`, and refuses versions published less than 3 days ago)              |
 | `bun run dev`                  | Build the client, then run the server with `--watch` and serve `examples/overlays` on :8080 |
 | `bun run start`                | Same, without watching                                                                      |
+| `bun run desktop:dev`          | Build the client, bundle the desktop app and launch Electron                                |
 | `bun run build`                | Build packages that have a `build` script (currently the client)                            |
 | `bun run test`                 | Tests on the Bun runtime (`bun --bun vp test run`)                                          |
 | `bun run test:node`            | Tests on Node (`vp test run`)                                                               |

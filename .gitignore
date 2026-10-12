@@ -13,6 +13,7 @@ coverage/
 *.key
 *.crt
 *.p12
+*.p8
 *.pfx
 secrets/
 credentials*.json
@@ -46,6 +47,10 @@ Thumbs.db
 
 # Reference repos (synced locally, never committed)
 .repos/
+
+# Desktop app build output
+apps/desktop/dist-electron/
+apps/desktop/release/
 
 # Copied from the repo root when packing
 packages/*/LICENSE
