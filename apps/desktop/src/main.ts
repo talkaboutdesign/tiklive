@@ -22,6 +22,7 @@ import {
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { IPC } from "./ipc.ts";
+import { makeQuitHandler } from "./shutdown.ts";
 import * as DesktopSettings from "./settings.ts";
 import { defaultChannel, isUpdateChannel } from "./updates/channel.ts";
 import * as DesktopUpdates from "./updates/DesktopUpdates.ts";
@@ -337,15 +338,23 @@ if (!app.requestSingleInstanceLock()) {
   app.on("activate", () => {
     if (!mainWindow && app.isReady()) createWindow();
   });
-  app.on("before-quit", () => {
+  const awaitShutdown = makeQuitHandler({
+    dispose: async () => {
+      // Wait for both runtimes even if one fails, including the points store's final disk flush.
+      const results = await Promise.allSettled([updatesRuntime.dispose(), serverRuntime.dispose()]);
+      for (const result of results) {
+        if (result.status === "rejected") console.error("tiklive: shutdown failed", result.reason);
+      }
+    },
+    quit: () => app.quit(),
+    onError: (error) => console.error("tiklive: shutdown failed", error),
+  });
+  app.on("before-quit", (event) => {
+    void awaitShutdown(event);
     // The hidden player must not hold the app open.
     quitting = true;
     if (playerWindow && !playerWindow.isDestroyed()) playerWindow.destroy();
     playerWindow = undefined;
-  });
-  app.on("will-quit", () => {
-    void updatesRuntime.dispose();
-    void serverRuntime.dispose();
   });
 
   void app.whenReady().then(start);

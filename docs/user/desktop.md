@@ -86,7 +86,8 @@ sound from the room.
   speech too, turn on **OBS plays sounds and speech too** in the Actions player's settings on **Overlays**, and turn off app
   sound in the sidebar.
 - **Closing the window:** on Windows and Linux, closing the window quits the app. On macOS the app keeps running
-  after you close the window, so sound keeps playing until you choose **Quit**.
+  after you close the window, so sound keeps playing until you choose **Quit**. Quitting waits for server
+  cleanup and saves pending viewer points before the app exits.
 - **Links:** other pages on the tiklive server open in a new tiklive window. Other web links open in your browser.
 
 ## Build it yourself
