@@ -95,13 +95,25 @@ const escapeInString = (value: string): string => JSON.stringify(value).slice(1,
 const asJsonValue = (value: string): string => (JSON_NUMBER.test(value) ? value : JSON.stringify(value));
 
 /**
- * Fills a webhook body. A body that starts with `{`, `[` or `"` is JSON: its values are escaped for
- * where they land, so a viewer's text can't close a string or add keys. Inside a string it's
- * JSON-escaped. A bare placeholder becomes a number or a quoted string. A placeholder in a key
- * (followed by `:`) is never filled. Any other body is text and is filled as typed.
+ * Whether a body template is JSON. It is when it starts with `[` or `"`, or with `{` that doesn't open
+ * a known placeholder. A body that starts with a placeholder, such as `{nickname} sent a gift`, is text.
+ */
+const isJsonTemplate = (template: string): boolean => {
+  const text = template.trim();
+  if (/^["[]/.test(text)) return true;
+  if (!text.startsWith("{")) return false;
+  const lead = /^\{(\w+)\}/.exec(text)?.[1];
+  return lead === undefined || !isTemplateVariable(lead);
+};
+
+/**
+ * Fills a webhook body. A JSON body (see `isJsonTemplate`) gets its values escaped for where they land,
+ * so a viewer's text can't close a string or add keys. Inside a string it's JSON-escaped. A bare
+ * placeholder becomes a number or a quoted string. A placeholder in a key (followed by `:`) is never
+ * filled. Any other body is text and is filled as typed.
  */
 const fillBody = (template: string, vars: Vars): string => {
-  if (!/^\s*[{["]/.test(template)) return fill(template, vars);
+  if (!isJsonTemplate(template)) return fill(template, vars);
   return template.replace(
     /("(?:[^"\\]|\\.)*"|\{\w+\})(\s*:)?/g,
     (token: string, part: string, colon: string | undefined) => {

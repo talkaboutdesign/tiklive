@@ -840,18 +840,21 @@ describe("evaluate: webhook steps", () => {
     );
 
   it("fills a text body as typed, because it isn't JSON", () => {
-    expect(chatBody('Said by {nickname}: "{comment}"', chat('a "b" \\ c'))).toBe(
-      'Said by Viewer: "a "b" \\ c"',
-    );
+    expect(chatBody('{nickname} said "{comment}"', chat('a "b" \\ c'))).toBe('Viewer said "a "b" \\ c"');
   });
 
   it("keeps a text body raw when it starts with a letter, even if the value has quotes", () => {
     expect(chatBody("viewer={nickname}", chat('"x"'))).toBe("viewer=Viewer");
   });
 
-  it("fills a body that is just a placeholder as a JSON string", () => {
-    const comment = 'a "quoted" \\ line';
-    expect(JSON.parse(chatBody("{comment}", chat(comment)) ?? "")).toBe(comment);
+  it("keeps a body that starts with a placeholder as text, so its value is not quoted", () => {
+    expect(chatBody("{nickname} sent a gift", chat("hi"))).toBe("Viewer sent a gift");
+    expect(chatBody("{comment}", chat('a "quoted" \\ line'))).toBe('a "quoted" \\ line');
+  });
+
+  it("keeps a hostile nickname inside its string in a JSON body, so it can't add keys", () => {
+    const body = chatBody('{"viewer":"{nickname}"}', chat("hi", { ...USER, nickname: 'x", "evil": "1' }));
+    expect(JSON.parse(body ?? "")).toEqual({ viewer: 'x", "evil": "1' });
   });
 
   it("never fills a placeholder in a key, so a viewer's name can't override a fixed key", () => {

@@ -292,14 +292,14 @@ describe("RuleEngine webhook steps", () => {
       yield* settle;
       expect(sent.map((request) => [request.contentType, request.body])).toEqual([
         ["application/json", '{"text":"Viewer sent 1x Rose"}'],
-        ["text/plain", "Gift from Viewer"],
+        ["text/plain", "Viewer sent a gift"],
       ]);
     }).pipe(
       Effect.provide(
         engineWith(
           [
             hookRule({ body: '{"text":"{nickname} sent {count}x {giftName}"}' }),
-            giftRule({ id: "text", steps: [{ kind: "webhook", url: HOOK, body: "Gift from {nickname}" }] }),
+            giftRule({ id: "text", steps: [{ kind: "webhook", url: HOOK, body: "{nickname} sent a gift" }] }),
           ],
           fakeHttp(sent),
         ),
@@ -334,7 +334,8 @@ describe("RuleEngine webhook steps", () => {
         ["text/plain", "123"],
         // A stray backslash makes the body invalid, so it's kept as typed and sent as text.
         ["text/plain", '{"said": "\\{comment}"}'],
-        ["application/json", JSON.stringify('x","action":"evil"')],
+        // A lone placeholder is text, so the viewer's comment is sent as typed.
+        ["text/plain", 'x","action":"evil"'],
       ]);
     }).pipe(
       Effect.provide(
