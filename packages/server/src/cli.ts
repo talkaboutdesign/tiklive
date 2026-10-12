@@ -4,6 +4,8 @@
  * the server options to run.
  */
 import { normalizeUsername } from "@tiklive/contracts";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import pkg from "../package.json" with { type: "json" };
 import type { ServerOptions } from "./server.ts";
@@ -28,6 +30,7 @@ export const parseCli = (argv: ReadonlyArray<string>, config: CliConfig = {}): S
       token: { type: "string" },
       watch: { type: "string", short: "w", multiple: true },
       static: { type: "string" },
+      "data-dir": { type: "string" },
       "allow-origin": { type: "string", multiple: true },
       "allow-host": { type: "string", multiple: true },
       "log-requests": { type: "boolean" },
@@ -51,6 +54,7 @@ Usage: tiklive [options]
       --token <secret>     Require this token for the API and WebSocket (env TIKLIVE_TOKEN)
   -w, --watch <user>       Stay connected to a streamer; repeatable (env TIKLIVE_WATCH, comma-separated)
       --static <dir>       Serve a directory of overlays/pages
+      --data-dir <dir>     Where action rules and uploads are kept (env TIKLIVE_DATA_DIR, default ~/.tiklive)
       --allow-origin <url> Allow browser pages from this origin to use the API; repeatable
       --allow-host <name>  Accept this Host header (default: localhost names only); repeatable
       --log-requests       Log every HTTP request
@@ -87,6 +91,7 @@ Clients connect to ws://HOST:PORT/ws. Use the username "demo" for fake events.${
     ...(config.clientBundle ? { clientBundle: config.clientBundle } : {}),
     ...(config.assets ? { assets: config.assets } : {}),
     ...(values["log-requests"] ? { logRequests: true } : {}),
+    dataDir: values["data-dir"] ?? process.env.TIKLIVE_DATA_DIR ?? join(homedir(), ".tiklive"),
     sessions: { watch },
     serverVersion: pkg.version,
   };

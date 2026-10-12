@@ -32,6 +32,25 @@ turned off.
 The app serves the same dashboard and overlays as the command-line server, at http://127.0.0.1:8080/. Use the
 URLs in [overlays.md](./overlays.md).
 
+## Sounds and speech
+
+The app plays action sounds and text-to-speech itself, through your computer's speakers or default audio output.
+You don't click anything to enable it, and you don't set anything up in OBS. To hear it on your stream, capture the
+computer's audio: with TikTok LIVE Studio or OBS's desktop-audio capture, or by streaming from a phone with the
+sound from the room.
+
+- **Header controls:** the speaker button turns sounds and speech on or off, and the slider sets the volume. While an
+  action is playing or waiting, a chip shows its name and how many are queued. **Skip** stops the action that's
+  playing and moves to the next one. **Clear** drops everything waiting and stops what's playing, for when chat
+  spams speech.
+- **Sound player offline:** the header shows this when the app's sound player isn't connected. Restart the app if
+  it stays.
+- **OBS:** use the OBS player link from the Actions page. It shows only pictures, GIFs, videos and scene switches,
+  so sounds and speech don't play twice.
+- **Closing the window:** on Windows and Linux, closing the window quits the app. On macOS the app keeps running
+  after you close the window, so sound keeps playing until you choose **Quit**.
+- **Links:** other pages on the tiklive server open in a new tiklive window. Other web links open in your browser.
+
 ## Build it yourself
 
 From a checkout, `bun run desktop:dev` builds the client and starts the app. Packaging, signing and the release

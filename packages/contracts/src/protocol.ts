@@ -4,6 +4,7 @@
  */
 import * as Schema from "effect/Schema";
 import { LiveEvent, LiveEventType } from "./events.ts";
+import { FiredAction } from "./rules.ts";
 
 /** Bumped on breaking changes to any message below. Sent in the `hello` message. */
 export const PROTOCOL_VERSION = 1;
@@ -92,6 +93,8 @@ export const SubscribeMessage = Schema.Struct({
   events: Schema.optionalKey(Schema.Array(LiveEventType)),
   /** Replay recent events (excluding likes and viewer counts) on subscribe. */
   replay: Schema.optionalKey(Schema.Boolean),
+  /** Also receive `action` messages: the actions fired by the server's rules. Default false. */
+  actions: Schema.optionalKey(Schema.Boolean),
 });
 export type SubscribeMessage = typeof SubscribeMessage.Type;
 
@@ -133,6 +136,14 @@ export const StatusMessage = Schema.Struct({
 });
 export type StatusMessage = typeof StatusMessage.Type;
 
+/** A rule fired. Sent only to subscriptions with `actions: true`. Never replayed. */
+export const ActionMessage = Schema.Struct({
+  type: Schema.tag("action"),
+  username: Schema.String,
+  action: FiredAction,
+});
+export type ActionMessage = typeof ActionMessage.Type;
+
 export const ErrorCode = Schema.Literals([
   "invalid_message",
   "invalid_username",
@@ -148,7 +159,11 @@ export const ErrorMessage = Schema.Struct({
 });
 export type ErrorMessage = typeof ErrorMessage.Type;
 
-export const ServerMessage = Schema.Union([HelloMessage, EventMessage, StatusMessage, ErrorMessage]).pipe(
-  Schema.toTaggedUnion("type"),
-);
+export const ServerMessage = Schema.Union([
+  HelloMessage,
+  EventMessage,
+  StatusMessage,
+  ActionMessage,
+  ErrorMessage,
+]).pipe(Schema.toTaggedUnion("type"));
 export type ServerMessage = typeof ServerMessage.Type;

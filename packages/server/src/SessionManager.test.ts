@@ -3,16 +3,48 @@
  * stopped after the idle timeout once nothing needs them.
  */
 import { describe, expect, it } from "@effect/vitest";
+import type { FiredAction, LiveEvent, Rule } from "@tiklive/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
 import { fakeTikTokWebLayer, fakeWebSocketLayer } from "@tiklive/core/testing";
+import * as RuleEngine from "./rules/RuleEngine.ts";
+import * as RulesStore from "./rules/RulesStore.ts";
 import * as SessionManager from "./SessionManager.ts";
 
 const managerLayer = (options: SessionManager.SessionManagerOptions = {}) =>
   SessionManager.layer(options).pipe(
     Layer.provide(Layer.mergeAll(fakeTikTokWebLayer({ live: true }), fakeWebSocketLayer().layer)),
   );
+
+/** Like `managerLayer`, but with a RuleEngine (over the given rules) in the sessions' context. */
+const managerWithRulesLayer = (rules: ReadonlyArray<Rule>) =>
+  SessionManager.layer({ idleTimeout: "10 seconds" }).pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        fakeTikTokWebLayer({ live: true }),
+        fakeWebSocketLayer().layer,
+        RuleEngine.layer.pipe(Layer.provide(RulesStore.layerMemory({ revision: 0, rules }))),
+      ),
+    ),
+  );
+
+const DANCE: Rule = {
+  id: "dance",
+  name: "Dance",
+  enabled: true,
+  trigger: { type: "chat", match: "command", text: "!dance" },
+  steps: [{ kind: "speak", text: "{nickname} dances" }],
+};
+
+const chat = (comment: string): LiveEvent => ({
+  type: "chat",
+  timestamp: 1_700_000_000_000,
+  user: { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" },
+  comment,
+  emotes: [],
+});
 
 /** Polls `read` until `predicate` holds, failing after `timeoutMs`. */
 const waitUntil = <A>(
@@ -106,6 +138,47 @@ describe("SessionManager", () => {
         const [info] = yield* manager.list;
         expect(info).toMatchObject({ username: "demo", watching: true, state: "live" });
       }).pipe(Effect.provide(managerLayer({ idleTimeout: "50 millis", watch: ["demo"] }))),
+    ),
+  );
+
+  it.live("fires rule actions for session events when a RuleEngine is provided", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        const session = yield* manager.acquire("someone");
+        yield* waitUntil(session.status, (s) => s.state === "live", "live");
+        const subscription = yield* session.subscribe;
+
+        yield* session.inject(chat("!dance now"));
+
+        let fired: FiredAction | undefined;
+        while (!fired) {
+          const message = yield* PubSub.take(subscription);
+          if (message._tag === "Action") fired = message.action;
+        }
+        expect(fired).toMatchObject({ ruleId: "dance", steps: [{ kind: "speak", text: "Viewer dances" }] });
+      }).pipe(Effect.provide(managerWithRulesLayer([DANCE]))),
+    ),
+  );
+
+  it.live("fires no rule actions without a RuleEngine", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        const session = yield* manager.acquire("someone");
+        yield* waitUntil(session.status, (s) => s.state === "live", "live");
+        const subscription = yield* session.subscribe;
+
+        yield* session.inject(chat("!dance now"));
+        yield* session.inject(chat("and again"));
+
+        // Read through the second event: any action from the first would have arrived before it.
+        const received: Array<{ readonly _tag: string }> = [];
+        while (received.filter((m) => m._tag === "Event").length < 2) {
+          received.push(yield* PubSub.take(subscription));
+        }
+        expect(received.some((m) => m._tag === "Action")).toBe(false);
+      }).pipe(Effect.provide(managerLayer({ idleTimeout: "10 seconds" }))),
     ),
   );
 

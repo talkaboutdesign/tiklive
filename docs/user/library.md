@@ -96,6 +96,7 @@ Options. Every option is optional:
 | `token`     | `?token=`                   | Access token, if the server uses one                                   |
 | `events`    | all                         | Only these event types. `[]` for status only                           |
 | `replay`    | `false`                     | Ask for recent events on connect (the last 50, which suits a chat box) |
+| `actions`   | `false`                     | Also receive the actions fired by the server's rules, as `"action"`    |
 | `WebSocket` | global `WebSocket`          | Constructor to use (tests, older runtimes)                             |
 | `reconnect` | `true`                      | Reconnect with backoff (500 ms doubling, capped at 10 s)               |
 
@@ -106,6 +107,8 @@ Handlers:
   `streamEnd`) get `(event, meta)`. `meta` has `replay` and `username`.
 - `"*"` gets every event.
 - `"status"`, `"hello"`, `"error"`, `"open"` and `"close"` get their own payloads.
+- `"action"` gets `(action, meta)` when the `actions` option is on: a `FiredAction` with the rule's steps
+  filled in. `meta` has `username`. Actions don't reach `"*"`.
 - A handler that throws is logged with `console.error`, and the other handlers still run.
 
 `live.gifts()` returns the gift catalog (`GiftInfo[]`: `giftId`, `name`, `diamondCount`, `imageUrl`,

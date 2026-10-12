@@ -21,8 +21,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TikTokRequestError, TikTokWeb } from "@tiklive/core";
 import { fakeTikTokWebLayer, fakeWebSocketLayer } from "@tiklive/core/testing";
+import type { SoundSearchResponse } from "@tiklive/contracts";
 import * as Server from "./server.ts";
 import type { ServerOptions } from "./server.ts";
+import { SoundSearch, SoundSearchError } from "./rules/SoundSearch.ts";
 
 const USER = { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" };
 
@@ -32,8 +34,12 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 const fakeTikTok = () => Layer.mergeAll(fakeTikTokWebLayer({ live: true }), fakeWebSocketLayer().layer);
 
 /** The server with an ephemeral port, plus the Node HTTP server it runs on. */
-const serverLayer = (httpServer: HttpNodeServer, options: ServerOptions = {}) =>
-  Server.layer({ tiktok: fakeTikTok(), serverVersion: "test", ...options }).pipe(
+const serverLayer = (
+  httpServer: HttpNodeServer,
+  options: ServerOptions = {},
+  sounds?: Layer.Layer<SoundSearch>,
+) =>
+  Server.layer({ tiktok: fakeTikTok(), serverVersion: "test", ...options }, sounds).pipe(
     Layer.provideMerge(
       NodeHttpServer.layer(() => httpServer, {
         port: 0,
@@ -50,11 +56,15 @@ interface Base {
 }
 
 /** Runs `body` against a freshly started server; the server stops when the body finishes. */
-const serve = (options: ServerOptions, body: (base: Base) => Promise<void>) => {
+const serve = (
+  options: ServerOptions,
+  body: (base: Base) => Promise<void>,
+  sounds?: Layer.Layer<SoundSearch>,
+) => {
   const httpServer = createServer();
   return Effect.scoped(
     Effect.gen(function* () {
-      const ctx = yield* Layer.build(serverLayer(httpServer, options));
+      const ctx = yield* Layer.build(serverLayer(httpServer, options, sounds));
       // Finalizers run last-in-first-out, so this runs before the server is asked to close. Keep-alive
       // connections left open by fetch would otherwise make shutdown wait (Bun's node:http doesn't
       // close idle sockets on server.close()).
@@ -771,5 +781,608 @@ describe("static files and client bundle", () => {
       const chat = await fetch(`${base.http}/overlays/chat.html`);
       expect(chat.status).toBe(404);
     });
+  });
+});
+
+// ---- Actions: rules, test button, media ----
+
+const danceRule = {
+  id: "dance",
+  name: "Dance",
+  enabled: true,
+  trigger: { type: "chat", match: "command", text: "!dance" },
+  steps: [{ kind: "speak", text: "{nickname} dances" }],
+};
+
+const saveRules = (base: Base, body: unknown) =>
+  fetch(`${base.http}/api/rules`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+const chatCommand = (base: Base, msgId: string, comment = "!dance now") =>
+  post(base, "/api/sessions/demo/simulate", { type: "chat", user: USER, comment, emotes: [], msgId });
+
+const actionMessages = (client: Client) => client.messages.filter((m) => m.type === "action");
+
+describe("GET and PUT /api/rules", () => {
+  it.live("starts with an empty rule set", () =>
+    serve({}, async (base) => {
+      const res = await fetch(`${base.http}/api/rules`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ revision: 0, rules: [] });
+    }),
+  );
+
+  it.live("saves rules and bumps the revision", () =>
+    serve({}, async (base) => {
+      const saved = await saveRules(base, { revision: 0, rules: [danceRule] });
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toEqual({ revision: 1, rules: [danceRule] });
+
+      const got = await fetch(`${base.http}/api/rules`);
+      expect(await got.json()).toEqual({ revision: 1, rules: [danceRule] });
+    }),
+  );
+
+  it.live("returns 409 with the current revision when the save is based on an old one", () =>
+    serve({}, async (base) => {
+      await saveRules(base, { revision: 0, rules: [danceRule] });
+      const stale = await saveRules(base, { revision: 0, rules: [] });
+      expect(stale.status).toBe(409);
+      expect(await stale.json()).toEqual({
+        error: "Rules changed since revision 0 (now 1). Reload and try again.",
+        revision: 1,
+      });
+    }),
+  );
+
+  it.live("rejects a javascript: media URL with a short message naming the problem", () =>
+    serve({}, async (base) => {
+      const bad = {
+        ...danceRule,
+        steps: [{ kind: "sound", url: "javascript:alert(1)" }],
+      };
+      const res = await saveRules(base, { revision: 0, rules: [bad] });
+      expect(res.status).toBe(400);
+      const { error } = (await res.json()) as Msg;
+      expect(error.length).toBeLessThanOrEqual(300);
+      expect(error).toContain('at ["rules"][0]["steps"][0]["url"]');
+    }),
+  );
+
+  it.live("rejects rules with more than 10 steps", () =>
+    serve({}, async (base) => {
+      const steps = Array.from({ length: 11 }, () => ({ kind: "speak", text: "hi" }));
+      const res = await saveRules(base, { revision: 0, rules: [{ ...danceRule, steps }] });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toHaveProperty("error");
+    }),
+  );
+
+  it.live("rejects duplicate rule ids", () =>
+    serve({}, async (base) => {
+      const res = await saveRules(base, { revision: 0, rules: [danceRule, { ...danceRule, name: "Again" }] });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Duplicate rule id: dance" });
+    }),
+  );
+
+  it.live("rejects bodies that are not JSON, not JSON content, or too large", () =>
+    serve({}, async (base) => {
+      const wrongType = await fetch(`${base.http}/api/rules`, {
+        method: "PUT",
+        headers: { "content-type": "text/plain" },
+        body: JSON.stringify({ revision: 0, rules: [] }),
+      });
+      expect(wrongType.status).toBe(415);
+
+      const notJson = await fetch(`${base.http}/api/rules`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: "{nope",
+      });
+      expect(notJson.status).toBe(400);
+      expect(await notJson.json()).toEqual({ error: "Body must be JSON" });
+
+      const huge = await saveRules(base, { revision: 0, rules: [], pad: "x".repeat(1024 * 1024) });
+      expect(huge.status).toBe(413);
+    }),
+  );
+
+  it.live("answers 405 for other methods", () =>
+    serve({}, async (base) => {
+      const res = await fetch(`${base.http}/api/rules`, { method: "DELETE" });
+      expect(res.status).toBe(405);
+    }),
+  );
+
+  it.live("answers 500 when the rules cannot be saved", () => {
+    // A regular file where the data directory should be: the rules can't be written.
+    const root = mkdtempSync(join(tmpdir(), "tiklive-rules-"));
+    tmpDirs.push(root);
+    const notADir = join(root, "not-a-dir");
+    writeFileSync(notADir, "x");
+    return serve({ dataDir: notADir }, async (base) => {
+      const res = await saveRules(base, { revision: 0, rules: [danceRule] });
+      expect(res.status).toBe(500);
+      expect((await res.json()) as Msg).toHaveProperty("error");
+    });
+  });
+});
+
+describe("POST /api/rules/:id/test", () => {
+  const testRule = (base: Base, id: string, body: unknown) => post(base, `/api/rules/${id}/test`, body);
+
+  it.live("fires the rule to subscribers that asked for actions", () =>
+    serve({}, async (base) => {
+      await saveRules(base, { revision: 0, rules: [danceRule] });
+      await post(base, "/api/sessions/demo");
+      const open: Array<Client> = [];
+      try {
+        const client = await connect(`${base.ws}/ws`, open);
+        client.send({ action: "subscribe", username: "demo", actions: true });
+        await client.waitFor((m) => m.type === "status" && m.username === "demo", "status");
+
+        const res = await testRule(base, "dance", { username: "demo" });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ ok: true, action: { ruleId: "dance", test: true } });
+
+        const action = await client.waitFor((m) => m.type === "action", "action");
+        expect(action).toMatchObject({ username: "demo", action: { ruleId: "dance", test: true } });
+      } finally {
+        closeAll(open);
+      }
+    }),
+  );
+
+  it.live("returns 404 for an unknown rule id", () =>
+    serve({}, async (base) => {
+      await post(base, "/api/sessions/demo");
+      const res = await testRule(base, "nope", { username: "demo" });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "No action with id nope" });
+    }),
+  );
+
+  it.live("returns 404 when no session is running for the streamer", () =>
+    serve({}, async (base) => {
+      await saveRules(base, { revision: 0, rules: [danceRule] });
+      const res = await testRule(base, "dance", { username: "demo" });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: "No session for @demo. Open the dashboard or the actions player first.",
+      });
+    }),
+  );
+
+  it.live("validates the body", () =>
+    serve({}, async (base) => {
+      const missing = await testRule(base, "dance", {});
+      expect(missing.status).toBe(400);
+      const badName = await testRule(base, "dance", { username: "bad name!" });
+      expect(badName.status).toBe(400);
+      expect(await badName.json()).toEqual({ error: "Invalid username" });
+      const plain = await fetch(`${base.http}/api/rules/dance/test`, {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: "demo",
+      });
+      expect(plain.status).toBe(415);
+    }),
+  );
+});
+
+describe("actions on the WebSocket", () => {
+  it.live("sends a matching action only to subscribers that asked for actions", () =>
+    serve({}, async (base) => {
+      await saveRules(base, { revision: 0, rules: [danceRule] });
+      await post(base, "/api/sessions/demo");
+      const open: Array<Client> = [];
+      try {
+        const withActions = await connect(`${base.ws}/ws`, open);
+        withActions.send({ action: "subscribe", username: "demo", actions: true });
+        const plain = await connect(`${base.ws}/ws`, open);
+        plain.send({ action: "subscribe", username: "demo" });
+        await withActions.waitFor((m) => m.type === "status" && m.username === "demo", "status");
+        await plain.waitFor((m) => m.type === "status" && m.username === "demo", "status");
+
+        await chatCommand(base, "chat-action-1");
+        const action = await withActions.waitFor((m) => m.type === "action", "action");
+        expect(action).toMatchObject({
+          username: "demo",
+          action: { ruleId: "dance", user: { uniqueId: "viewer" }, steps: [{ text: "Viewer dances" }] },
+        });
+        // The chat itself still reaches the plain subscriber, but no action does.
+        await plain.waitFor((m) => m.type === "event" && m.event.msgId === "chat-action-1", "chat");
+        expect(actionMessages(plain)).toHaveLength(0);
+      } finally {
+        closeAll(open);
+      }
+    }),
+  );
+
+  it.live("is not blocked by the events filter", () =>
+    serve({}, async (base) => {
+      await saveRules(base, { revision: 0, rules: [danceRule] });
+      await post(base, "/api/sessions/demo");
+      const open: Array<Client> = [];
+      try {
+        const client = await connect(`${base.ws}/ws`, open);
+        client.send({ action: "subscribe", username: "demo", events: ["gift"], actions: true });
+        await client.waitFor((m) => m.type === "status" && m.username === "demo", "status");
+
+        await chatCommand(base, "chat-filtered");
+        await client.waitFor((m) => m.type === "action", "action");
+        expect(eventMessages(client).some((m) => m.event.msgId === "chat-filtered")).toBe(false);
+      } finally {
+        closeAll(open);
+      }
+    }),
+  );
+
+  it.live("accepts actions=1 on the shortcut URL", () =>
+    serve({}, async (base) => {
+      await saveRules(base, { revision: 0, rules: [danceRule] });
+      await post(base, "/api/sessions/demo");
+      const open: Array<Client> = [];
+      try {
+        const client = await connect(`${base.ws}/ws?username=demo&actions=1`, open);
+        await client.waitFor((m) => m.type === "status" && m.username === "demo", "status");
+        await chatCommand(base, "chat-shortcut");
+        const action = await client.waitFor((m) => m.type === "action", "action");
+        expect(action).toMatchObject({ username: "demo", action: { ruleId: "dance" } });
+      } finally {
+        closeAll(open);
+      }
+    }),
+  );
+
+  it.live("never replays actions", () =>
+    serve({}, async (base) => {
+      await saveRules(base, { revision: 0, rules: [danceRule] });
+      await post(base, "/api/sessions/demo");
+      await chatCommand(base, "chat-before");
+      const open: Array<Client> = [];
+      try {
+        const client = await connect(`${base.ws}/ws?username=demo&actions=1&replay=1`, open);
+        // The replayed chat arrives after the status; actions are never part of the history.
+        await client.waitFor((m) => m.type === "event" && m.event.msgId === "chat-before", "replayed chat");
+        expect(actionMessages(client)).toHaveLength(0);
+      } finally {
+        closeAll(open);
+      }
+    }),
+  );
+});
+
+describe("media library", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+  const newDataDir = () => {
+    const dir = mkdtempSync(join(tmpdir(), "tiklive-media-"));
+    tmpDirs.push(dir);
+    return dir;
+  };
+  const upload = (
+    base: Base,
+    bytes: Uint8Array<ArrayBuffer>,
+    contentType: string,
+    name = "my pic.png",
+    auth: Record<string, string> = {},
+  ) =>
+    fetch(`${base.http}/api/media`, {
+      method: "POST",
+      headers: { "content-type": contentType, "x-file-name": encodeURIComponent(name), ...auth },
+      body: bytes,
+    });
+
+  it.live("uploads, lists, serves, and deletes a file", () =>
+    serve({ dataDir: newDataDir() }, async (base) => {
+      const created = await upload(base, PNG, "image/png");
+      expect(created.status).toBe(201);
+      const item = (await created.json()) as Msg;
+      expect(item).toMatchObject({ name: "my pic.png", kind: "image", contentType: "image/png" });
+      expect(item.url).toMatch(/^\/media\/[A-Za-z0-9._-]+\.png$/);
+
+      const list = (await (await fetch(`${base.http}/api/media`)).json()) as { media: Array<Msg> };
+      expect(list.media.map((m) => m.id)).toEqual([item.id]);
+
+      const served = await fetch(`${base.http}${item.url}`);
+      expect(served.status).toBe(200);
+      expect(served.headers.get("content-type")).toBe("image/png");
+      expect(served.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+      expect(new Uint8Array(await served.arrayBuffer())).toEqual(PNG);
+
+      const removed = await fetch(`${base.http}/api/media/${item.id}`, { method: "DELETE" });
+      expect(removed.status).toBe(200);
+      expect(await removed.json()).toEqual({ ok: true });
+      expect((await fetch(`${base.http}${item.url}`)).status).toBe(404);
+      expect((await fetch(`${base.http}/api/media/${item.id}`, { method: "DELETE" })).status).toBe(404);
+    }),
+  );
+
+  it.live("rejects unsupported types with 415", () =>
+    serve({ dataDir: newDataDir() }, async (base) => {
+      const svg = await upload(base, new TextEncoder().encode("<svg/>"), "image/svg+xml", "x.svg");
+      expect(svg.status).toBe(415);
+      expect(await svg.json()).toHaveProperty("error");
+      expect((await upload(base, PNG, "text/plain")).status).toBe(415);
+    }),
+  );
+
+  it.live("rejects uploads whose content-length is over 25 MB with 413", () =>
+    serve({ dataDir: newDataDir() }, async (base) => {
+      const res = await raw(base.port, "/api/media", {
+        method: "POST",
+        headers: {
+          "content-type": "image/png",
+          "content-length": String(25 * 1024 * 1024 + 1),
+        },
+      });
+      expect(res.status).toBe(413);
+      expect(JSON.parse(res.body)).toEqual({ error: "File is over 25 MB." });
+    }),
+  );
+
+  it.live("rejects an oversized upload without a content-length with 413", () =>
+    serve({ dataDir: newDataDir() }, async (base) => {
+      // Chunked, so the size isn't known up front: the server has to count the bytes as they arrive.
+      const status = await new Promise<number>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            host: "127.0.0.1",
+            port: base.port,
+            path: "/api/media",
+            method: "POST",
+            headers: { "content-type": "image/png", "transfer-encoding": "chunked" },
+          },
+          (res) => {
+            res.resume();
+            resolve(res.statusCode ?? 0);
+          },
+        );
+        req.on("error", reject);
+        const chunk = Buffer.alloc(1024 * 1024);
+        for (let i = 0; i < 26; i++) req.write(chunk);
+        req.end();
+      });
+      expect(status).toBe(413);
+    }),
+  );
+
+  it.live("answers 503 when the server has no data directory", () =>
+    serve({}, async (base) => {
+      const res = await upload(base, PNG, "image/png");
+      expect(res.status).toBe(503);
+      expect(((await res.json()) as Msg).error).toContain("--data-dir");
+      expect(await (await fetch(`${base.http}/api/media`)).json()).toEqual({ media: [] });
+    }),
+  );
+
+  it.live("serves uploads from /media even when staticDir has a media folder", () => {
+    const dataDir = newDataDir();
+    const site = join(dataDir, "site");
+    mkdirSync(join(site, "media"), { recursive: true });
+    return serve({ dataDir, staticDir: site }, async (base) => {
+      const item = (await (await upload(base, PNG, "image/png")).json()) as Msg;
+      const file = String(item.url).slice("/media/".length);
+      writeFileSync(join(site, "media", file), "STATIC");
+      const res = await fetch(`${base.http}${item.url}`);
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(PNG);
+    });
+  });
+
+  it.live("does not serve unknown names or paths outside the media directory", () => {
+    const dataDir = newDataDir();
+    writeFileSync(join(dataDir, "secret.txt"), "TOP SECRET");
+    return serve({ dataDir }, async (base) => {
+      expect((await fetch(`${base.http}/media/nope.png`)).status).toBe(404);
+      for (const path of ["/media/..%2Fsecret.txt", "/media/..%2F..%2Fsecret.txt", "/media/../secret.txt"]) {
+        const res = await raw(base.port, path);
+        expect(res.status).toBe(404);
+        expect(res.body).not.toContain("TOP SECRET");
+      }
+    });
+  });
+
+  it.live("requires the token for the API but not for /media files", () => {
+    const dataDir = newDataDir();
+    return serve({ dataDir, token: "s3cret" }, async (base) => {
+      expect((await upload(base, PNG, "image/png")).status).toBe(401);
+      const item = (await (
+        await upload(base, PNG, "image/png", "a.png", { authorization: "Bearer s3cret" })
+      ).json()) as Msg;
+      expect(item).toHaveProperty("id");
+      expect((await fetch(`${base.http}/api/media`)).status).toBe(401);
+      // OBS loads these as plain <img> and <video> sources, without headers.
+      expect((await fetch(`${base.http}${item.url}`)).status).toBe(200);
+    });
+  });
+});
+
+describe("sound search", () => {
+  const SOUND = "https://www.myinstants.com/media/sounds/dj-airhorn.mp3";
+  const MP3 = new Uint8Array([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0x21]);
+  const PAGE_URL = "https://www.myinstants.com/en/instant/dj-airhorn/";
+  const newDataDir = () => {
+    const dir = mkdtempSync(join(tmpdir(), "tiklive-sounds-"));
+    tmpDirs.push(dir);
+    return dir;
+  };
+
+  /** A SoundSearch that records its calls. `answers` replaces the default success for each method. */
+  const fakeSounds = (
+    answers: {
+      readonly search?: (query: string, page: number) => Effect.Effect<SoundSearchResponse, SoundSearchError>;
+      readonly download?: (url: string) => Effect.Effect<Uint8Array, SoundSearchError>;
+    } = {},
+  ) => {
+    const calls = { search: [] as Array<[string, number]>, download: [] as Array<string> };
+    const layer = Layer.succeed(SoundSearch)(
+      SoundSearch.of({
+        search: (query, page) => {
+          calls.search.push([query, page]);
+          return answers.search?.(query, page) ?? Effect.succeed({ results: [], page, hasMore: false });
+        },
+        download: (url) => {
+          calls.download.push(url);
+          return answers.download?.(url) ?? Effect.succeed(MP3);
+        },
+      }),
+    );
+    return { layer, calls };
+  };
+
+  const importSound = (base: Base, body: unknown) =>
+    fetch(`${base.http}/api/media/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it.live("returns one page of results from the search", () => {
+    const sounds = fakeSounds({
+      search: (_query, page) =>
+        Effect.succeed({
+          results: [{ title: "DJ Airhorn", url: SOUND, pageUrl: PAGE_URL }],
+          page,
+          hasMore: true,
+        }),
+    });
+    return serve(
+      {},
+      async (base) => {
+        const res = await fetch(`${base.http}/api/sounds/search?q=%20airhorn%20&page=3`);
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({
+          results: [{ title: "DJ Airhorn", url: SOUND, pageUrl: PAGE_URL }],
+          page: 3,
+          hasMore: true,
+        });
+        expect(sounds.calls.search).toEqual([["airhorn", 3]]);
+      },
+      sounds.layer,
+    );
+  });
+
+  it.live("rejects an empty or over-long query with 400 without searching", () => {
+    const sounds = fakeSounds();
+    return serve(
+      {},
+      async (base) => {
+        for (const path of [
+          "/api/sounds/search",
+          "/api/sounds/search?q=%20%20",
+          `/api/sounds/search?q=${"a".repeat(101)}`,
+        ]) {
+          const res = await fetch(`${base.http}${path}`);
+          expect(res.status).toBe(400);
+          expect(await res.json()).toEqual({ error: "Type 1 to 100 characters" });
+        }
+        expect(sounds.calls.search).toHaveLength(0);
+      },
+      sounds.layer,
+    );
+  });
+
+  it.live("returns 502 when MyInstants fails", () => {
+    const sounds = fakeSounds({
+      search: () => Effect.fail(new SoundSearchError({ message: "MyInstants returned HTTP 503" })),
+    });
+    return serve(
+      {},
+      async (base) => {
+        const res = await fetch(`${base.http}/api/sounds/search?q=airhorn`);
+        expect(res.status).toBe(502);
+        expect(await res.json()).toEqual({ error: "MyInstants returned HTTP 503" });
+        expect((await fetch(`${base.http}/api/sounds/search?q=airhorn`, { method: "POST" })).status).toBe(
+          405,
+        );
+      },
+      sounds.layer,
+    );
+  });
+
+  it.live("imports a sound into the media library, named after the file by default", () => {
+    const sounds = fakeSounds();
+    return serve(
+      { dataDir: newDataDir() },
+      async (base) => {
+        const created = await importSound(base, { url: SOUND });
+        expect(created.status).toBe(201);
+        const item = (await created.json()) as Msg;
+        expect(item).toMatchObject({
+          name: "dj-airhorn",
+          kind: "audio",
+          contentType: "audio/mpeg",
+          size: MP3.length,
+        });
+        expect(item.url).toMatch(/^\/media\/[A-Za-z0-9._-]+\.mp3$/);
+        expect(sounds.calls.download).toEqual([SOUND]);
+
+        const list = (await (await fetch(`${base.http}/api/media`)).json()) as { media: Array<Msg> };
+        expect(list.media.map((m) => m.id)).toEqual([item.id]);
+        const served = await fetch(`${base.http}${item.url}`);
+        expect(served.headers.get("content-type")).toBe("audio/mpeg");
+        expect(new Uint8Array(await served.arrayBuffer())).toEqual(MP3);
+
+        const named = await importSound(base, { url: SOUND, name: "Air horn" });
+        expect((await named.json()) as Msg).toMatchObject({ name: "Air horn" });
+      },
+      sounds.layer,
+    );
+  });
+
+  it.live("refuses URLs that are not MyInstants sound links, without downloading", () => {
+    const sounds = fakeSounds();
+    return serve(
+      { dataDir: newDataDir() },
+      async (base) => {
+        for (const url of [
+          "https://example.com/media/sounds/a.mp3",
+          "http://www.myinstants.com/media/sounds/a.mp3",
+          "https://www.myinstants.com/media/sounds/../a.mp3",
+        ]) {
+          const res = await importSound(base, { url });
+          expect(res.status).toBe(400);
+          expect(await res.json()).toEqual({ error: "Only MyInstants sound links can be imported" });
+        }
+        expect(sounds.calls.download).toHaveLength(0);
+      },
+      sounds.layer,
+    );
+  });
+
+  it.live("returns 502 when the download fails and 400 for a malformed body", () => {
+    const sounds = fakeSounds({
+      download: () => Effect.fail(new SoundSearchError({ message: "That link isn't an audio file" })),
+    });
+    return serve(
+      { dataDir: newDataDir() },
+      async (base) => {
+        const failed = await importSound(base, { url: SOUND });
+        expect(failed.status).toBe(502);
+        expect(await failed.json()).toEqual({ error: "That link isn't an audio file" });
+
+        expect((await importSound(base, { name: "no url" })).status).toBe(400);
+        const notJson = await fetch(`${base.http}/api/media/import`, { method: "POST", body: "{}" });
+        expect(notJson.status).toBe(415);
+      },
+      sounds.layer,
+    );
+  });
+
+  it.live("returns 503 when there is no data directory for the library", () => {
+    const sounds = fakeSounds();
+    return serve(
+      {},
+      async (base) => {
+        const res = await importSound(base, { url: SOUND });
+        expect(res.status).toBe(503);
+        expect((await res.json()) as Msg).toHaveProperty("error");
+      },
+      sounds.layer,
+    );
   });
 });

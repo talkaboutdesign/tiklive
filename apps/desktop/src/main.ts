@@ -34,6 +34,7 @@ const serverRuntime = ManagedRuntime.make(
     host: HOST,
     port: PORT,
     staticDir,
+    dataDir: app.getPath("userData"),
     ...(existsSync(clientBundle) ? { clientBundle } : {}),
   }),
 );
@@ -56,6 +57,16 @@ let mainWindow: BrowserWindow | undefined;
 
 const isServerUrl = (url: string) => url.startsWith(serverUrl);
 
+// The Actions player in app mode: plays sounds and speech, with no visible UI. See
+// examples/overlays/overlays/actions.html. `visuals=0&obs=0` leaves pictures and scene switches to OBS.
+const playerUrl = `${serverUrl}overlays/actions.html?app=1&visuals=0&obs=0`;
+const PLAYER_RESTART_DELAY_MS = 2_000;
+const PLAYER_RESTART_LIMIT = 5;
+const PLAYER_RESTART_WINDOW_MS = 10 * 60_000;
+let playerWindow: BrowserWindow | undefined;
+let quitting = false;
+const playerRestarts: Array<number> = [];
+
 const createWindow = () => {
   const window = new BrowserWindow({
     width: 1280,
@@ -73,22 +84,75 @@ const createWindow = () => {
   });
   window.once("ready-to-show", () => window.show());
 
-  // Pages outside the local server open in the default browser, not in the app.
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
-    return { action: "deny" };
-  });
-  window.webContents.on("will-navigate", (event, url) => {
-    if (isServerUrl(url)) return;
-    event.preventDefault();
-    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
-  });
-
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = undefined;
+    // The hidden player keeps the app running, so on Windows and Linux closing this window quits.
+    // On macOS the app keeps running until Quit, like other Mac apps.
+    if (process.platform !== "darwin" && !quitting) app.quit();
   });
   void window.loadURL(serverUrl);
   mainWindow = window;
+};
+
+// Child windows for local pages (opened with window.open or a link). They get no preload, so the
+// page can't reach the desktop bridge. Their settings are set here, not inherited from the parent.
+const createChildWindow = (options: Electron.BrowserWindowConstructorOptions) =>
+  new BrowserWindow({
+    ...options,
+    width: 1280,
+    height: 800,
+    autoHideMenuBar: true,
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+  }).webContents;
+
+const openExternally = (url: string) => {
+  if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+};
+
+// Hidden window that plays the Actions player's sounds and speech. Electron allows audio without a
+// click (see the autoplay switch below). It is never shown, and it isn't the main window.
+const createPlayerWindow = () => {
+  const window = new BrowserWindow({
+    width: 480,
+    height: 320,
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  playerWindow = window;
+
+  const stopped = (reason: string) => {
+    if (quitting || playerWindow !== window) return;
+    console.error(`tiklive: the sound player stopped (${reason})`);
+    playerWindow = undefined;
+    if (!window.isDestroyed()) window.destroy();
+    restartPlayer();
+  };
+  window.webContents.on("render-process-gone", (_event, details) => stopped(details.reason));
+  window.webContents.on("did-fail-load", (_event, errorCode, errorDescription, _url, isMainFrame) => {
+    if (isMainFrame) stopped(`${errorDescription} (${errorCode})`);
+  });
+  // Load failures are reported by did-fail-load above, so the rejected promise is ignored.
+  void window.loadURL(playerUrl).catch(() => undefined);
+};
+
+const restartPlayer = () => {
+  const now = Date.now();
+  while (playerRestarts.length && now - (playerRestarts[0] ?? 0) > PLAYER_RESTART_WINDOW_MS) {
+    playerRestarts.shift();
+  }
+  if (playerRestarts.length >= PLAYER_RESTART_LIMIT) {
+    console.error("tiklive: the sound player stopped too often, so it won't restart until the app restarts");
+    return;
+  }
+  playerRestarts.push(now);
+  setTimeout(() => {
+    if (!quitting && !playerWindow) createPlayerWindow();
+  }, PLAYER_RESTART_DELAY_MS);
 };
 
 const checkForUpdatesFromMenu = async () => {
@@ -176,11 +240,32 @@ const start = async () => {
   buildMenu();
   registerIpc();
   createWindow();
+  createPlayerWindow();
 };
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  // Lets the player's sounds and speech start without a click. Must be set before the app is ready.
+  app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
+  // Every window, including child windows, follows the same rules: pages on the local server open in
+  // the app, other web pages open in the default browser.
+  app.on("web-contents-created", (_event, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (isServerUrl(url)) return { action: "allow", createWindow: createChildWindow };
+      openExternally(url);
+      return { action: "deny" };
+    });
+    const guardNavigation = (event: Electron.Event, url: string) => {
+      if (isServerUrl(url)) return;
+      event.preventDefault();
+      openExternally(url);
+    };
+    contents.on("will-navigate", guardNavigation);
+    contents.on("will-redirect", guardNavigation);
+  });
+
   app.on("second-instance", () => {
     if (!mainWindow) return createWindow();
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -193,6 +278,12 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on("activate", () => {
     if (!mainWindow && app.isReady()) createWindow();
+  });
+  app.on("before-quit", () => {
+    // The hidden player must not hold the app open.
+    quitting = true;
+    if (playerWindow && !playerWindow.isDestroyed()) playerWindow.destroy();
+    playerWindow = undefined;
   });
   app.on("will-quit", () => {
     void updatesRuntime.dispose();

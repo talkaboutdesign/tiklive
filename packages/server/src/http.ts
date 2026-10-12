@@ -7,11 +7,14 @@ import pkg from "../package.json" with { type: "json" };
 import { TikTokWeb } from "@tiklive/core";
 import {
   ClientMessage,
+  ImportMediaRequest,
   LIVE_EVENT_TYPES,
   LiveEvent,
   LiveEventType,
+  MAX_MEDIA_BYTES,
   normalizeUsername,
   PROTOCOL_VERSION,
+  SaveRulesRequest,
   Username,
   type ErrorCode,
   type LiveEventType as LiveEventTypeT,
@@ -28,9 +31,14 @@ import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { MediaStore } from "./rules/MediaStore.ts";
+import { RuleEngine } from "./rules/RuleEngine.ts";
+import { RulesStore } from "./rules/RulesStore.ts";
+import { cleanQuery, isAllowedSoundUrl, SoundSearch } from "./rules/SoundSearch.ts";
 import { SessionManager } from "./SessionManager.ts";
 
 export interface HttpOptions {
@@ -93,16 +101,117 @@ const MIME: Record<string, string> = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
   ".mp3": "audio/mpeg",
   ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".m4a": "audio/mp4",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
   ".woff2": "font/woff2",
 };
+
+/** Uploaded media is immutable (names are random ids), so browsers and OBS may cache it for a year. */
+const MEDIA_HEADERS = {
+  ...SECURITY_HEADERS,
+  "cache-control": "public, max-age=31536000, immutable",
+};
+
+/** Largest JSON body accepted by `PUT /api/rules`. */
+const MAX_RULES_BODY = 1024 * 1024;
+/** Largest JSON body accepted by `POST /api/rules/:id/test`. */
+const MAX_TEST_BODY = 16 * 1024;
+/** Largest JSON body accepted by `POST /api/media/import`. */
+const MAX_IMPORT_BODY = 16 * 1024;
+
+const MEDIA_STATUS = { unsupported: 415, tooLarge: 413, disabled: 503, io: 500 } as const;
 
 const json = (body: unknown, status = 200) =>
   HttpServerResponse.jsonUnsafe(body, { status, headers: SECURITY_HEADERS });
 const jsonError = (status: number, message: string) => json({ error: message }, status);
+
+/**
+ * Reads the whole request body, or gives up once it passes `max` bytes, so an oversized upload is
+ * never buffered. Node and Bun have different body limits, so this doesn't rely on either.
+ */
+const readBytes = (
+  request: HttpServerRequest.HttpServerRequest,
+  max: number,
+): Effect.Effect<Uint8Array | "tooLarge" | "unreadable"> =>
+  Effect.gen(function* () {
+    const declared = request.headers["content-length"];
+    if (declared !== undefined && Number(declared) > max) return "tooLarge" as const;
+    const chunks: Array<Uint8Array> = [];
+    let total = 0;
+    let tooLarge = false;
+    // Past `max` the rest is read and discarded, up to twice `max`. Stopping at once would destroy the
+    // socket before the 413 can be written. Past twice `max` the connection is dropped.
+    const stopAt = max * 2;
+    const read = yield* Effect.result(
+      Stream.runForEachWhile(request.stream, (chunk) =>
+        Effect.sync(() => {
+          total += chunk.length;
+          if (total > max) tooLarge = true;
+          else chunks.push(chunk);
+          return total <= stopAt;
+        }),
+      ),
+    );
+    if (tooLarge) return "tooLarge" as const;
+    if (read._tag === "Failure") return "unreadable" as const;
+    const bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return bytes;
+  });
+
+const isJsonRequest = (request: HttpServerRequest.HttpServerRequest) =>
+  request.headers["content-type"]?.toLowerCase().startsWith("application/json") === true;
+
+type JsonBody =
+  | { readonly ok: true; readonly value: unknown }
+  | { readonly ok: false; readonly response: HttpServerResponse.HttpServerResponse };
+
+/** The request's JSON body, or the error response to send: 415, 413, 400. */
+const readJson = (request: HttpServerRequest.HttpServerRequest, max: number): Effect.Effect<JsonBody> =>
+  Effect.gen(function* () {
+    const fail = (status: number, message: string): JsonBody => ({
+      ok: false,
+      response: jsonError(status, message),
+    });
+    if (!isJsonRequest(request)) return fail(415, "Content-Type must be application/json");
+    const bytes = yield* readBytes(request, max);
+    if (bytes === "tooLarge") return fail(413, "Body too large");
+    if (bytes === "unreadable") return fail(400, "Could not read the body");
+    try {
+      return { ok: true, value: JSON.parse(new TextDecoder().decode(bytes)) as unknown };
+    } catch {
+      return fail(400, "Body must be JSON");
+    }
+  });
+
+/** The first problem in a schema error, as one short line. */
+const firstProblem = (message: string) => {
+  const [first = "", second = ""] = message.split("\n");
+  const at = second.trim();
+  const line = at.startsWith("at ") ? `${first.trim()} ${at}` : first.trim();
+  return line.slice(0, 300) || "Invalid rules";
+};
+
+/** Decodes a header value that is percent-encoded. Falls back to `fallback` when it isn't valid. */
+const decodeHeader = (raw: string | undefined, fallback: string) => {
+  if (raw === undefined) return fallback;
+  try {
+    return decodeURIComponent(raw) || fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 export const routes = (options: HttpOptions = {}) => {
   const maxSubscriptions = options.maxSubscriptionsPerSocket ?? 20;
@@ -243,6 +352,192 @@ export const routes = (options: HttpOptions = {}) => {
     ),
   );
 
+  // ---- Actions: rules and media library ----
+
+  const rulesRoute = HttpRouter.add(
+    "*",
+    "/api/rules",
+    guarded((request) =>
+      Effect.gen(function* () {
+        const store = yield* RulesStore;
+        switch (request.method) {
+          case "GET":
+            return json(yield* store.get);
+          case "PUT": {
+            const parsed = yield* readJson(request, MAX_RULES_BODY);
+            if (!parsed.ok) return parsed.response;
+            const decoded = Schema.decodeUnknownExit(SaveRulesRequest)(parsed.value);
+            if (decoded._tag === "Failure") {
+              const problem = Exit.findErrorOption(decoded);
+              return jsonError(
+                400,
+                Option.isSome(problem) ? firstProblem(problem.value.message) : "Invalid rules",
+              );
+            }
+            const seen = new Set<string>();
+            for (const rule of decoded.value.rules) {
+              if (seen.has(rule.id)) return jsonError(400, `Duplicate rule id: ${rule.id}`);
+              seen.add(rule.id);
+            }
+            return yield* store.replace(decoded.value.revision, decoded.value.rules).pipe(
+              Effect.map((saved) => json(saved)),
+              Effect.catchTags({
+                RevisionConflict: (error) =>
+                  Effect.succeed(json({ error: error.message, revision: error.current }, 409)),
+                RulesWriteError: (error) => Effect.succeed(jsonError(500, error.message)),
+              }),
+            );
+          }
+          default:
+            return jsonError(405, "Method not allowed");
+        }
+      }),
+    ),
+  );
+
+  const ruleTestRoute = HttpRouter.add(
+    "*",
+    "/api/rules/:id/test",
+    guarded((request) =>
+      Effect.gen(function* () {
+        if (request.method !== "POST") return jsonError(405, "Method not allowed");
+        const parsed = yield* readJson(request, MAX_TEST_BODY);
+        if (!parsed.ok) return parsed.response;
+        const body = Schema.decodeUnknownExit(Schema.Struct({ username: Schema.String }))(parsed.value);
+        if (body._tag === "Failure") return jsonError(400, 'Body must be {"username": "<streamer>"}');
+        const username = normalizeUsername(body.value.username);
+        if (!Schema.is(Username)(username)) return jsonError(400, "Invalid username");
+
+        const manager = yield* SessionManager;
+        const session = yield* manager.get(username);
+        if (Option.isNone(session)) {
+          return jsonError(
+            404,
+            `No session for @${username}. Open the dashboard or the actions player first.`,
+          );
+        }
+        const params = yield* HttpRouter.params;
+        const id = params.id ?? "";
+        const engine = yield* RuleEngine;
+        const action = yield* engine.test(username, id);
+        if (Option.isNone(action)) return jsonError(404, `No action with id ${id}`);
+        yield* session.value.emitAction(action.value);
+        return json({ ok: true, action: action.value });
+      }),
+    ),
+  );
+
+  const mediaRoute = HttpRouter.add(
+    "*",
+    "/api/media",
+    guarded((request) =>
+      Effect.gen(function* () {
+        const media = yield* MediaStore;
+        switch (request.method) {
+          case "GET":
+            return json({ media: yield* media.list });
+          case "POST": {
+            const bytes = yield* readBytes(request, MAX_MEDIA_BYTES);
+            if (bytes === "tooLarge") return jsonError(413, "File is over 25 MB.");
+            if (bytes === "unreadable") return jsonError(400, "Could not read the upload");
+            const name = decodeHeader(request.headers["x-file-name"], "file");
+            return yield* media.add(name, request.headers["content-type"] ?? "", bytes).pipe(
+              Effect.map((item) => json(item, 201)),
+              Effect.catchTag("MediaError", (error) =>
+                Effect.succeed(jsonError(MEDIA_STATUS[error.reason], error.message)),
+              ),
+            );
+          }
+          default:
+            return jsonError(405, "Method not allowed");
+        }
+      }),
+    ),
+  );
+
+  const mediaItemRoute = HttpRouter.add(
+    "*",
+    "/api/media/:id",
+    guarded((request) =>
+      Effect.gen(function* () {
+        if (request.method !== "DELETE") return jsonError(405, "Method not allowed");
+        const media = yield* MediaStore;
+        const params = yield* HttpRouter.params;
+        const id = params.id ?? "";
+        if (!(yield* media.remove(id))) return jsonError(404, `No media with id ${id}`);
+        return json({ ok: true });
+      }),
+    ),
+  );
+
+  // Not guarded: OBS and plain <img>/<audio>/<video> tags can't send headers, like the static files.
+  const mediaFileRoute = HttpRouter.add("GET", "/media/:file", () =>
+    Effect.gen(function* () {
+      const media = yield* MediaStore;
+      const params = yield* HttpRouter.params;
+      const found = yield* media.resolve(params.file ?? "");
+      if (Option.isNone(found)) return jsonError(404, "Not found");
+      return yield* HttpServerResponse.file(found.value.path, {
+        contentType: found.value.contentType,
+        headers: MEDIA_HEADERS,
+      }).pipe(Effect.orElseSucceed(() => jsonError(404, "Not found")));
+    }),
+  );
+
+  // ---- Sound search (MyInstants) ----
+
+  const soundSearchRoute = HttpRouter.add(
+    "*",
+    "/api/sounds/search",
+    guarded((request, url) =>
+      Effect.gen(function* () {
+        if (request.method !== "GET") return jsonError(405, "Method not allowed");
+        const query = cleanQuery(url.searchParams.get("q") ?? "");
+        if (query === undefined) return jsonError(400, "Type 1 to 100 characters");
+        const sounds = yield* SoundSearch;
+        return yield* sounds.search(query, Number(url.searchParams.get("page") ?? "1")).pipe(
+          Effect.map((found) => json(found)),
+          Effect.catchTag("SoundSearchError", (error) => Effect.succeed(jsonError(502, error.message))),
+        );
+      }),
+    ),
+  );
+
+  const importRoute = HttpRouter.add(
+    "*",
+    "/api/media/import",
+    guarded((request) =>
+      Effect.gen(function* () {
+        if (request.method !== "POST") return jsonError(405, "Method not allowed");
+        const parsed = yield* readJson(request, MAX_IMPORT_BODY);
+        if (!parsed.ok) return parsed.response;
+        const body = Schema.decodeUnknownExit(ImportMediaRequest)(parsed.value);
+        if (body._tag === "Failure") return jsonError(400, 'Body must be {"url": "<MyInstants sound link>"}');
+        const { url, name } = body.value;
+        if (!isAllowedSoundUrl(url)) return jsonError(400, "Only MyInstants sound links can be imported");
+
+        const sounds = yield* SoundSearch;
+        const downloaded = yield* sounds.download(url).pipe(Effect.result);
+        if (downloaded._tag === "Failure") return jsonError(502, downloaded.failure.message);
+
+        const media = yield* MediaStore;
+        const file = decodeHeader(
+          new URL(url).pathname
+            .split("/")
+            .pop()
+            ?.replace(/\.mp3$/i, ""),
+          "sound",
+        );
+        return yield* media.add(name ?? file, "audio/mpeg", downloaded.success).pipe(
+          Effect.map((item) => json(item, 201)),
+          Effect.catchTag("MediaError", (error) =>
+            Effect.succeed(jsonError(MEDIA_STATUS[error.reason], error.message)),
+          ),
+        );
+      }),
+    ),
+  );
+
   // Successful catalog lookups are cached for an hour. Failures are not cached, so the next request retries.
   const giftCatalog = Layer.unwrap(
     Effect.gen(function* () {
@@ -284,6 +579,7 @@ export const routes = (options: HttpOptions = {}) => {
             raw: string,
             events: ReadonlyArray<LiveEventTypeT> | undefined,
             replay: boolean,
+            actions: boolean,
           ) =>
             Effect.gen(function* () {
               const username = normalizeUsername(raw);
@@ -312,10 +608,19 @@ export const routes = (options: HttpOptions = {}) => {
                   }
                   while (true) {
                     const message = yield* PubSub.take(updates);
-                    if (message._tag === "Status")
-                      yield* send({ type: "status", username, status: message.status });
-                    else if (wants(message.event))
-                      yield* send({ type: "event", username, event: message.event });
+                    switch (message._tag) {
+                      case "Status":
+                        yield* send({ type: "status", username, status: message.status });
+                        break;
+                      case "Event":
+                        if (wants(message.event))
+                          yield* send({ type: "event", username, event: message.event });
+                        break;
+                      // Actions skip the `events` filter and are never replayed.
+                      case "Action":
+                        if (actions) yield* send({ type: "action", username, action: message.action });
+                        break;
+                    }
                   }
                 }),
               ).pipe(Effect.forkIn(scope));
@@ -344,7 +649,12 @@ export const routes = (options: HttpOptions = {}) => {
               }
               const message = decoded.value;
               if (message.action === "subscribe") {
-                yield* subscribe(message.username, message.events, message.replay ?? false);
+                yield* subscribe(
+                  message.username,
+                  message.events,
+                  message.replay ?? false,
+                  message.actions ?? false,
+                );
               } else {
                 yield* unsubscribe(message.username);
               }
@@ -356,7 +666,7 @@ export const routes = (options: HttpOptions = {}) => {
             serverVersion: options.serverVersion ?? pkg.version,
           });
 
-          // Shortcut for overlays: /ws?username=foo&events=chat,gift&replay=1
+          // Shortcut for overlays: /ws?username=foo&events=chat,gift&replay=1&actions=1
           const shortcut = url.searchParams.get("username");
           if (shortcut) {
             const eventsParam = url.searchParams.get("events");
@@ -364,7 +674,12 @@ export const routes = (options: HttpOptions = {}) => {
               eventsParam === null
                 ? undefined
                 : eventsParam.split(",").filter((e): e is LiveEventTypeT => Schema.is(LiveEventType)(e));
-            yield* subscribe(shortcut, events, url.searchParams.get("replay") === "1");
+            yield* subscribe(
+              shortcut,
+              events,
+              url.searchParams.get("replay") === "1",
+              url.searchParams.get("actions") === "1",
+            );
           }
 
           const decoder = new TextDecoder();
@@ -464,8 +779,15 @@ export const routes = (options: HttpOptions = {}) => {
     listSessions,
     sessionRoute,
     simulateRoute,
+    rulesRoute,
+    ruleTestRoute,
+    mediaRoute,
+    mediaItemRoute,
+    soundSearchRoute,
+    importRoute,
     giftCatalog,
     wsRoute,
+    mediaFileRoute,
     clientBundle,
     staticFiles,
   );

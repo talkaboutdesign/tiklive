@@ -1,0 +1,502 @@
+/**
+ * Matching rules for action triggers. Pure functions, so no Effect and no clock:
+ * `now` is passed in explicitly.
+ */
+import { describe, expect, it } from "@effect/vitest";
+import { LiveEvent, type LiveUser, type Rule, type RuleStep, type RuleTrigger } from "@tiklive/contracts";
+import * as Schema from "effect/Schema";
+import { emptyState, evaluate, renderTemplate, sampleEvent } from "./evaluate.ts";
+
+const NOW = 1_700_000_000_000;
+const USER: LiveUser = { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" };
+
+const say = (text: string): RuleStep => ({ kind: "speak", text });
+
+const rule = (id: string, trigger: RuleTrigger, overrides: Partial<Rule> = {}): Rule => ({
+  id,
+  name: `Rule ${id}`,
+  enabled: true,
+  trigger,
+  steps: [say("hi")],
+  ...overrides,
+});
+
+const gift = (overrides: Partial<Extract<LiveEvent, { type: "gift" }>> = {}): LiveEvent => ({
+  type: "gift",
+  timestamp: NOW,
+  user: USER,
+  giftId: 5655,
+  giftName: "Rose",
+  giftImageUrl: "",
+  diamondCount: 1,
+  repeatCount: 1,
+  streaking: false,
+  totalDiamonds: 1,
+  groupId: "0",
+  ...overrides,
+});
+
+const chat = (comment: string, user: LiveUser = USER): LiveEvent => ({
+  type: "chat",
+  timestamp: NOW,
+  user,
+  comment,
+  emotes: [],
+});
+
+const like = (likeCount: number, user: LiveUser = USER): LiveEvent => ({
+  type: "like",
+  timestamp: NOW,
+  user,
+  likeCount,
+  totalLikeCount: likeCount,
+});
+
+const plain = (type: "follow" | "share", user: LiveUser = USER): LiveEvent => ({
+  type,
+  timestamp: NOW,
+  user,
+});
+
+const texts = (firings: ReturnType<typeof evaluate>) =>
+  firings.map((firing) => firing.steps.map((step) => (step.kind === "speak" ? step.text : step.kind)));
+
+describe("evaluate: rule order and skipping", () => {
+  it("fires every matching rule, in array order", () => {
+    const rules = [
+      rule("a", { type: "gift" }, { steps: [say("first")] }),
+      rule("b", { type: "follow" }),
+      rule("c", { type: "gift" }, { steps: [say("third")] }),
+    ];
+    const firings = evaluate(rules, emptyState(), gift(), NOW);
+    expect(firings.map((f) => f.rule.id)).toEqual(["a", "c"]);
+    expect(texts(firings)).toEqual([["first"], ["third"]]);
+  });
+
+  it("skips disabled rules and rules without steps", () => {
+    const rules = [
+      rule("off", { type: "gift" }, { enabled: false }),
+      rule("empty", { type: "gift" }, { steps: [] }),
+      rule("on", { type: "gift" }),
+    ];
+    expect(evaluate(rules, emptyState(), gift(), NOW).map((f) => f.rule.id)).toEqual(["on"]);
+  });
+
+  it("attaches the viewer to the firing", () => {
+    const [firing] = evaluate([rule("g", { type: "gift" })], emptyState(), gift(), NOW);
+    expect(firing?.user).toEqual(USER);
+  });
+
+  it("does nothing for events without a matching trigger", () => {
+    expect(evaluate([rule("g", { type: "gift" })], emptyState(), plain("follow"), NOW)).toEqual([]);
+  });
+});
+
+describe("evaluate: gift triggers", () => {
+  it("ignores gifts that are still streaking", () => {
+    const rules = [rule("g", { type: "gift" })];
+    expect(evaluate(rules, emptyState(), gift({ streaking: true }), NOW)).toEqual([]);
+    expect(evaluate(rules, emptyState(), gift({ streaking: false }), NOW)).toHaveLength(1);
+  });
+
+  it("matches only the configured gift id", () => {
+    const rules = [rule("g", { type: "gift", giftId: 1 })];
+    expect(evaluate(rules, emptyState(), gift({ giftId: 5655 }), NOW)).toEqual([]);
+    expect(evaluate(rules, emptyState(), gift({ giftId: 1 }), NOW)).toHaveLength(1);
+  });
+
+  it("requires at least minCoins for the whole combo", () => {
+    const rules = [rule("g", { type: "gift", minCoins: 10 })];
+    expect(evaluate(rules, emptyState(), gift({ totalDiamonds: 9 }), NOW)).toEqual([]);
+    expect(evaluate(rules, emptyState(), gift({ totalDiamonds: 10 }), NOW)).toHaveLength(1);
+  });
+
+  it("fires once per combo by default", () => {
+    const firings = evaluate([rule("g", { type: "gift" })], emptyState(), gift({ repeatCount: 5 }), NOW);
+    expect(firings).toHaveLength(1);
+  });
+
+  it("fires once per gift with perGift, using the combo's repeat count", () => {
+    const firings = evaluate(
+      [rule("g", { type: "gift", perGift: true })],
+      emptyState(),
+      gift({ repeatCount: 3 }),
+      NOW,
+    );
+    expect(firings).toHaveLength(3);
+    expect(firings[0]?.steps).toEqual(firings[1]?.steps);
+  });
+
+  it("caps perGift at 10 firings and treats a repeat count below 1 as 1", () => {
+    const capped = evaluate(
+      [rule("g", { type: "gift", perGift: true })],
+      emptyState(),
+      gift({ repeatCount: 25 }),
+      NOW,
+    );
+    expect(capped).toHaveLength(10);
+    const floor = evaluate(
+      [rule("g", { type: "gift", perGift: true })],
+      emptyState(),
+      gift({ repeatCount: 0 }),
+      NOW,
+    );
+    expect(floor).toHaveLength(1);
+  });
+
+  it("checks the cooldown once for all perGift copies", () => {
+    const rules = [rule("g", { type: "gift", perGift: true }, { cooldown: 10 })];
+    const state = emptyState();
+    expect(evaluate(rules, state, gift({ repeatCount: 3 }), NOW)).toHaveLength(3);
+    expect(evaluate(rules, state, gift({ repeatCount: 3 }), NOW + 1_000)).toHaveLength(0);
+  });
+});
+
+describe("evaluate: follow, share and subscribe", () => {
+  it("matches the same event type", () => {
+    expect(evaluate([rule("f", { type: "follow" })], emptyState(), plain("follow"), NOW)).toHaveLength(1);
+    expect(evaluate([rule("f", { type: "follow" })], emptyState(), plain("share"), NOW)).toEqual([]);
+    expect(evaluate([rule("s", { type: "share" })], emptyState(), plain("share"), NOW)).toHaveLength(1);
+  });
+
+  it("matches subscriptions and fills in the month count", () => {
+    const sub: LiveEvent = { type: "subscribe", timestamp: NOW, user: USER, subMonth: 3 };
+    const firings = evaluate(
+      [rule("s", { type: "subscribe" }, { steps: [say("{months} months!")] })],
+      emptyState(),
+      sub,
+      NOW,
+    );
+    expect(texts(firings)).toEqual([["3 months!"]]);
+  });
+});
+
+describe("evaluate: chat triggers", () => {
+  it("any matches every chat message", () => {
+    const rules = [rule("c", { type: "chat", match: "any" })];
+    expect(evaluate(rules, emptyState(), chat("anything at all"), NOW)).toHaveLength(1);
+    expect(evaluate(rules, emptyState(), plain("follow"), NOW)).toEqual([]);
+  });
+
+  it("command matches the first word, ignoring case and surrounding spaces", () => {
+    const rules = [rule("c", { type: "chat", match: "command", text: "!dance" })];
+    expect(evaluate(rules, emptyState(), chat("!dance now"), NOW)).toHaveLength(1);
+    expect(evaluate(rules, emptyState(), chat("  !DANCE  "), NOW)).toHaveLength(1);
+    expect(evaluate(rules, emptyState(), chat("please !dance"), NOW)).toEqual([]);
+    expect(evaluate(rules, emptyState(), chat("!dancer"), NOW)).toEqual([]);
+  });
+
+  it("command ignores spaces around the configured text", () => {
+    const rules = [rule("c", { type: "chat", match: "command", text: "  !dance  " })];
+    expect(evaluate(rules, emptyState(), chat("!dance"), NOW)).toHaveLength(1);
+  });
+
+  it("contains matches anywhere, ignoring case", () => {
+    const rules = [rule("c", { type: "chat", match: "contains", text: "GG" })];
+    expect(evaluate(rules, emptyState(), chat("good game gg"), NOW)).toHaveLength(1);
+    expect(evaluate(rules, emptyState(), chat("GG everyone"), NOW)).toHaveLength(1);
+    expect(evaluate(rules, emptyState(), chat("nope"), NOW)).toEqual([]);
+  });
+
+  it("a blank or missing text never matches command or contains", () => {
+    const comment = chat("  ");
+    for (const trigger of [
+      { type: "chat", match: "command", text: "" },
+      { type: "chat", match: "command", text: "   " },
+      { type: "chat", match: "contains", text: "  " },
+      { type: "chat", match: "contains" },
+      { type: "chat", match: "command" },
+    ] satisfies Array<RuleTrigger>) {
+      expect(evaluate([rule("c", trigger)], emptyState(), comment, NOW)).toEqual([]);
+      expect(evaluate([rule("c", trigger)], emptyState(), chat("", USER), NOW)).toEqual([]);
+    }
+  });
+
+  it("limits the audience with the from field", () => {
+    const plainUser: LiveUser = { ...USER };
+    const followers = [rule("c", { type: "chat", match: "any", from: "followers" })];
+    const subscribers = [rule("c", { type: "chat", match: "any", from: "subscribers" })];
+    const moderators = [rule("c", { type: "chat", match: "any", from: "moderators" })];
+
+    expect(evaluate(followers, emptyState(), chat("hi", plainUser), NOW)).toEqual([]);
+    expect(evaluate(followers, emptyState(), chat("hi", { ...USER, isFollower: true }), NOW)).toHaveLength(1);
+    expect(evaluate(subscribers, emptyState(), chat("hi", { ...USER, isFollower: true }), NOW)).toEqual([]);
+    expect(
+      evaluate(subscribers, emptyState(), chat("hi", { ...USER, isSubscriber: true }), NOW),
+    ).toHaveLength(1);
+    expect(evaluate(moderators, emptyState(), chat("hi", { ...USER, isSubscriber: true }), NOW)).toEqual([]);
+    expect(evaluate(moderators, emptyState(), chat("hi", { ...USER, isModerator: true }), NOW)).toHaveLength(
+      1,
+    );
+  });
+
+  it("treats everyone as the default audience", () => {
+    const rules = [rule("c", { type: "chat", match: "any", from: "everyone" })];
+    expect(evaluate(rules, emptyState(), chat("hi"), NOW)).toHaveLength(1);
+  });
+});
+
+describe("evaluate: likes triggers", () => {
+  const likesRule = (every: number, overrides: Partial<Rule> = {}) =>
+    rule("L", { type: "likes", every }, { steps: [say("{likes} likes")], ...overrides });
+
+  it("fires each time the total passes a multiple of every", () => {
+    const rules = [likesRule(10)];
+    const state = emptyState();
+    expect(evaluate(rules, state, like(4), NOW)).toEqual([]);
+    expect(texts(evaluate(rules, state, like(6), NOW))).toEqual([["10 likes"]]);
+    expect(evaluate(rules, state, like(5), NOW)).toEqual([]);
+    expect(texts(evaluate(rules, state, like(10), NOW))).toEqual([["20 likes"]]);
+  });
+
+  it("fires for each milestone a single event crosses, capped at 3", () => {
+    const rules = [likesRule(10)];
+    const state = emptyState();
+    expect(texts(evaluate(rules, state, like(35), NOW))).toEqual([["30 likes"], ["30 likes"], ["30 likes"]]);
+    // Still at the 30 milestone: nothing more until the next one.
+    expect(evaluate(rules, state, like(4), NOW)).toEqual([]);
+  });
+
+  it("drops missed milestones beyond the cap instead of firing them later", () => {
+    const rules = [likesRule(10)];
+    const state = emptyState();
+    // 10 milestones crossed at once: 3 firings, and the counter jumps to 10.
+    expect(evaluate(rules, state, like(100), NOW)).toHaveLength(3);
+    expect(evaluate(rules, state, like(1), NOW)).toEqual([]);
+    // 10 -> 19 is nine milestones, but only 3 fire.
+    expect(texts(evaluate(rules, state, like(90), NOW))).toEqual([
+      ["190 likes"],
+      ["190 likes"],
+      ["190 likes"],
+    ]);
+  });
+
+  it("counts likes once per event, however many likes rules there are", () => {
+    const rules = [likesRule(10), likesRule(10, { id: "M" })];
+    const state = emptyState();
+    evaluate(rules, state, like(10), NOW);
+    expect(state.likeTotal).toBe(10);
+  });
+
+  it("resets the count on streamEnd, so the next stream starts from zero", () => {
+    const rules = [likesRule(10)];
+    const state = emptyState();
+    evaluate(rules, state, like(9), NOW);
+    const ended: LiveEvent = { type: "streamEnd", timestamp: NOW, reason: "ended" };
+    expect(evaluate(rules, state, ended, NOW)).toEqual([]);
+    expect(state.likeTotal).toBe(0);
+    expect(evaluate(rules, state, like(1), NOW)).toEqual([]);
+    expect(texts(evaluate(rules, state, like(9), NOW))).toEqual([["10 likes"]]);
+  });
+
+  it("keeps separate milestones for two rules with different every", () => {
+    const rules = [likesRule(5, { id: "five" }), likesRule(10, { id: "ten" })];
+    const firings = evaluate(rules, emptyState(), like(10), NOW);
+    // Every 5 crosses 5 and 10 at once (two firings); every 10 crosses 10 (one).
+    expect(firings.map((f) => f.rule.id)).toEqual(["five", "five", "ten"]);
+    expect(texts(firings)).toEqual([["10 likes"], ["10 likes"], ["10 likes"]]);
+  });
+
+  it("gives each firing the viewer behind the like", () => {
+    const [firing] = evaluate([likesRule(10)], emptyState(), like(10), NOW);
+    expect(firing?.user).toEqual(USER);
+  });
+
+  it("advances the milestone while cooling down, so the miss does not pile up", () => {
+    const rules = [likesRule(10, { cooldown: 60 })];
+    const state = emptyState();
+    expect(evaluate(rules, state, like(10), NOW)).toHaveLength(1);
+    // Milestone 2 is reached during the cooldown: skipped, but counted as reached.
+    expect(evaluate(rules, state, like(10), NOW + 1_000)).toEqual([]);
+    expect(evaluate(rules, state, like(1), NOW + 2_000)).toEqual([]);
+    // After the cooldown only milestone 3 fires, not the skipped 2.
+    expect(texts(evaluate(rules, state, like(10), NOW + 60_000))).toEqual([["30 likes"]]);
+  });
+});
+
+describe("evaluate: cooldowns", () => {
+  it("blocks the rule for everyone until cooldown seconds have passed (boundary fires)", () => {
+    const rules = [rule("g", { type: "gift" }, { cooldown: 10 })];
+    const state = emptyState();
+    expect(evaluate(rules, state, gift(), NOW)).toHaveLength(1);
+    expect(evaluate(rules, state, gift({ user: { ...USER, userId: "2" } }), NOW + 9_999)).toEqual([]);
+    expect(evaluate(rules, state, gift(), NOW + 10_000)).toHaveLength(1);
+  });
+
+  it("blocks each viewer for userCooldown seconds, but not other viewers (boundary fires)", () => {
+    const rules = [rule("g", { type: "gift" }, { userCooldown: 5 })];
+    const state = emptyState();
+    const other: LiveUser = { ...USER, userId: "2" };
+    expect(evaluate(rules, state, gift(), NOW)).toHaveLength(1);
+    expect(evaluate(rules, state, gift({ user: other }), NOW + 1_000)).toHaveLength(1);
+    expect(evaluate(rules, state, gift(), NOW + 4_999)).toEqual([]);
+    expect(evaluate(rules, state, gift(), NOW + 5_000)).toHaveLength(1);
+  });
+
+  it("does not record a cooldown for a rule that rendered no steps", () => {
+    const rules = [rule("g", { type: "gift" }, { cooldown: 10, steps: [say("   ")] })];
+    const state = emptyState();
+    expect(evaluate(rules, state, gift(), NOW)).toEqual([]);
+    expect(state.lastFired.has("g")).toBe(false);
+  });
+});
+
+describe("renderTemplate", () => {
+  it("replaces known variables that are present and leaves the rest as typed", () => {
+    expect(renderTemplate("{foo} {nickname} {unknown_x}", { nickname: "Ada" })).toBe("{foo} Ada {unknown_x}");
+  });
+
+  it("keeps a known variable that is absent from vars", () => {
+    expect(renderTemplate("{nickname}", {})).toBe("{nickname}");
+  });
+
+  it("renders an empty variable as nothing", () => {
+    expect(renderTemplate("[{giftName}]", { giftName: "" })).toBe("[]");
+  });
+
+  it("truncates to 300 characters", () => {
+    expect(renderTemplate("a".repeat(400), {})).toHaveLength(300);
+  });
+
+  it("does not leave half a surrogate pair at the cut", () => {
+    const out = renderTemplate(`${"a".repeat(299)}😀`, {});
+    expect(out).toBe("a".repeat(299));
+  });
+});
+
+describe("evaluate: template variables in steps", () => {
+  it("fills nickname (falling back to the handle), username and the gift vars", () => {
+    const steps = [say("{nickname} / {username} / {count}x {giftName} = {coins}")];
+    const firings = evaluate(
+      [rule("g", { type: "gift" }, { steps })],
+      emptyState(),
+      gift({ repeatCount: 3, totalDiamonds: 30 }),
+      NOW,
+    );
+    expect(texts(firings)).toEqual([["Viewer / viewer / 3x Rose = 30"]]);
+  });
+
+  it("uses the handle when the nickname is empty", () => {
+    const firings = evaluate(
+      [rule("f", { type: "follow" }, { steps: [say("hi {nickname}")] })],
+      emptyState(),
+      plain("follow", { ...USER, nickname: "" }),
+      NOW,
+    );
+    expect(texts(firings)).toEqual([["hi viewer"]]);
+  });
+
+  it("renders variables that don't apply to the event as empty", () => {
+    const firings = evaluate(
+      [rule("f", { type: "follow" }, { steps: [say("Thanks {nickname}, {giftName}!")] })],
+      emptyState(),
+      plain("follow"),
+      NOW,
+    );
+    expect(texts(firings)).toEqual([["Thanks Viewer, !"]]);
+  });
+
+  it("fills comment for chat rules", () => {
+    const firings = evaluate(
+      [rule("c", { type: "chat", match: "any" }, { steps: [say("{nickname} said: {comment}")] })],
+      emptyState(),
+      chat("hello"),
+      NOW,
+    );
+    expect(texts(firings)).toEqual([["Viewer said: hello"]]);
+  });
+
+  it("renders media captions, and leaves a media step without text alone", () => {
+    const firings = evaluate(
+      [
+        rule(
+          "m",
+          { type: "follow" },
+          {
+            steps: [
+              { kind: "media", url: "/media/x.png", text: "Welcome {nickname}!" },
+              { kind: "media", url: "/media/y.png" },
+            ],
+          },
+        ),
+      ],
+      emptyState(),
+      plain("follow"),
+      NOW,
+    );
+    expect(firings[0]?.steps[0]).toEqual({ kind: "media", url: "/media/x.png", text: "Welcome Viewer!" });
+    expect(firings[0]?.steps[1]).toEqual({ kind: "media", url: "/media/y.png" });
+    expect(firings[0]?.steps[1]).not.toHaveProperty("text");
+  });
+
+  it("drops blank speak steps and keeps the rest", () => {
+    const firings = evaluate(
+      [rule("g", { type: "gift" }, { steps: [say("   "), say("ok")] })],
+      emptyState(),
+      gift(),
+      NOW,
+    );
+    expect(firings[0]?.steps).toEqual([say("ok")]);
+  });
+
+  it("does not fire a rule whose steps are all blank", () => {
+    const firings = evaluate([rule("g", { type: "gift" }, { steps: [say(" ")] })], emptyState(), gift(), NOW);
+    expect(firings).toEqual([]);
+  });
+});
+
+describe("sampleEvent", () => {
+  const triggers: Array<RuleTrigger> = [
+    { type: "gift" },
+    { type: "gift", giftId: 1, giftName: "Heart", minCoins: 50, perGift: true },
+    { type: "follow" },
+    { type: "share" },
+    { type: "subscribe" },
+    { type: "chat", match: "any" },
+    { type: "chat", match: "command", text: "!dance", from: "subscribers" },
+    { type: "chat", match: "contains", text: "gg", from: "moderators" },
+    { type: "likes", every: 50 },
+  ];
+
+  it.each(triggers.map((trigger) => [trigger.type, trigger] as const))(
+    "decodes as a LiveEvent for %s triggers",
+    (_, trigger) => {
+      expect(() => Schema.decodeUnknownSync(LiveEvent)(sampleEvent(trigger, NOW))).not.toThrow();
+    },
+  );
+
+  it.each(triggers.map((trigger) => [trigger.type, trigger] as const))(
+    "matches its own %s trigger",
+    (_, trigger) => {
+      const firings = evaluate([rule("s", trigger)], emptyState(), sampleEvent(trigger, NOW), NOW);
+      expect(firings).toHaveLength(1);
+    },
+  );
+
+  it("uses the trigger's gift settings, with Rose as the default", () => {
+    const event = sampleEvent({ type: "gift" }, NOW);
+    expect(event).toMatchObject({
+      type: "gift",
+      giftId: 5655,
+      giftName: "Rose",
+      totalDiamonds: 1,
+      streaking: false,
+    });
+    const heart = sampleEvent({ type: "gift", giftId: 1, giftName: "Heart", minCoins: 50 }, NOW);
+    expect(heart).toMatchObject({ giftId: 1, giftName: "Heart", totalDiamonds: 50 });
+  });
+
+  it("uses the trigger's text as the chat message, or a greeting", () => {
+    expect(sampleEvent({ type: "chat", match: "command", text: "!dance" }, NOW)).toMatchObject({
+      comment: "!dance",
+    });
+    expect(sampleEvent({ type: "chat", match: "any" }, NOW)).toMatchObject({ comment: "Hello!" });
+  });
+
+  it("uses the trigger's count for likes", () => {
+    expect(sampleEvent({ type: "likes", every: 50 }, NOW)).toMatchObject({
+      likeCount: 50,
+      totalLikeCount: 50,
+    });
+  });
+});

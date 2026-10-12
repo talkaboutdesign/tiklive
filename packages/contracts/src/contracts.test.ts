@@ -6,7 +6,11 @@ import {
   LIVE_EVENT_TYPES,
   LiveEvent,
   normalizeUsername,
+  Rule,
+  RuleSet,
+  ServerMessage,
   SessionStatus,
+  SubscribeMessage,
   Username,
 } from "./index.ts";
 
@@ -103,5 +107,91 @@ describe("contracts", () => {
     expect(normalizeUsername("https://www.tiktok.com/@zaynscape/live")).toBe("zaynscape");
     expect(Schema.is(Username)("some.one")).toBe(true);
     expect(Schema.is(Username)("../etc")).toBe(false);
+  });
+});
+
+describe("actions", () => {
+  const decodeRule = Schema.decodeUnknownSync(Rule);
+  const baseRule = {
+    id: "r1",
+    name: "Rule",
+    enabled: true,
+    trigger: { type: "follow" },
+    steps: [{ kind: "speak", text: "hi" }],
+  };
+
+  it("decodes a full rule with every trigger and step kind", () => {
+    const triggers = [
+      { type: "gift", giftId: 5655, giftName: "Rose", minCoins: 10, perGift: true },
+      { type: "follow" },
+      { type: "share" },
+      { type: "subscribe" },
+      { type: "chat", match: "command", text: "!dance", from: "subscribers" },
+      { type: "chat", match: "contains", text: "wave", from: "moderators" },
+      { type: "chat", match: "any", from: "everyone" },
+      { type: "likes", every: 100 },
+    ];
+    for (const trigger of triggers) {
+      expect(decodeRule({ ...baseRule, trigger }).trigger).toEqual(trigger);
+    }
+
+    const steps = [
+      { kind: "sound", url: "/media/abc123.mp3", volume: 0.5 },
+      { kind: "media", url: "https://img.example/a.gif", duration: 3, text: "Hi {nickname}", volume: 1 },
+      { kind: "speak", text: "{nickname} says {comment}", voice: "Samantha", rate: 1.2, volume: 0.8 },
+      { kind: "obsScene", scene: "Dance", revertAfter: 30 },
+    ];
+    const full = { ...baseRule, cooldown: 10, userCooldown: 60, steps };
+    expect(decodeRule(full)).toEqual(full);
+  });
+
+  it("rejects media URLs other than /media/<file> and http(s)", () => {
+    const decode = Schema.decodeUnknownSync(Rule);
+    const withUrl = (url: string) => ({ ...baseRule, steps: [{ kind: "sound", url }] });
+    expect(() => decode(withUrl("javascript:alert(1)"))).toThrow();
+    expect(() => decode(withUrl("data:audio/mpeg;base64,AAAA"))).toThrow();
+    expect(() => decode(withUrl("../media/x.png"))).toThrow();
+    expect(decode(withUrl("/media/x.png")).steps[0]).toMatchObject({ kind: "sound" });
+  });
+
+  it("rejects rules with more than 10 steps and unknown step kinds", () => {
+    const decode = Schema.decodeUnknownSync(Rule);
+    const steps = Array.from({ length: 11 }, () => ({ kind: "speak", text: "hi" }));
+    expect(() => decode({ ...baseRule, steps })).toThrow();
+    expect(() => decode({ ...baseRule, steps: [{ kind: "explode" }] })).toThrow();
+  });
+
+  it("validates rule sets", () => {
+    const decode = Schema.decodeUnknownSync(RuleSet);
+    expect(decode({ revision: 0, rules: [] })).toEqual({ revision: 0, rules: [] });
+    expect(() => decode({ revision: -1, rules: [] })).toThrow();
+  });
+
+  it("accepts actions on subscribe", () => {
+    const decode = Schema.decodeUnknownSync(SubscribeMessage);
+    expect(decode({ action: "subscribe", username: "demo", actions: true }).actions).toBe(true);
+    expect(decode({ action: "subscribe", username: "demo" }).actions).toBeUndefined();
+    expect(
+      Schema.decodeUnknownSync(ClientMessage)({ action: "subscribe", username: "demo", actions: true }),
+    ).toMatchObject({ actions: true });
+  });
+
+  it("decodes action server messages", () => {
+    const message = {
+      type: "action",
+      username: "demo",
+      action: {
+        id: "a1",
+        ruleId: "r1",
+        ruleName: "Rule",
+        timestamp: 1,
+        user: { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" },
+        steps: [{ kind: "speak", text: "Viewer says hi" }],
+      },
+    };
+    expect(Schema.decodeUnknownSync(ServerMessage)(message)).toEqual(message);
+    expect(() =>
+      Schema.decodeUnknownSync(ServerMessage)({ type: "action", username: "demo", action: { id: "a1" } }),
+    ).toThrow();
   });
 });

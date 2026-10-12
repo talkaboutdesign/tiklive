@@ -179,12 +179,38 @@ They contain no session data. The API and WebSocket are the protected surface.
 
 ## Server composition (`server/server`)
 
-`Server.layer(options)` takes the `HttpRouter` routes and provides `SessionManager`, which needs a
+`Server.layer(options)` takes the `HttpRouter` routes and provides `SessionManager`, `RulesStore`,
+`MediaStore` and one `RuleEngine` shared by the sessions and the routes. `SessionManager` needs a
 TikTok connection layer. By default that's `LiveConnection.layer()`, which uses the runtime's global
 `fetch` and `WebSocket`. `ServerOptions.tiktok` replaces it, which is how you add a proxy or a fake in tests.
 
 `Server.layer` doesn't bind a port. It needs an `HttpServer` layer. The bundled ones are in
 `packages/server/src/platform/bun.ts` and `node.ts`. The CLI picks one at runtime by checking for `Bun`.
+
+## Actions (`server/rules`)
+
+Actions are rules like "when someone sends a Rose, play a sound and show a GIF". The server evaluates them,
+and players (`/overlays/actions.html`) only play what they're sent.
+
+- `RulesStore` holds the rules: `<dataDir>/rules.json`, or memory when there's no data directory. Every
+  save replaces the whole list and bumps a revision number. A save based on an older revision fails, so two
+  open editor tabs can't overwrite each other. Writes go to a temporary file and are then renamed. A file
+  that doesn't decode is moved aside and the server starts with no rules.
+- `MediaStore` keeps uploads in `<dataDir>/media/` with an `index.json`. `/media/:file` only serves names in
+  the index, so a request can't reach other paths.
+- `SoundSearch` (`rules/SoundSearch.ts`) finds sounds on MyInstants. Browsers can't call the site (no CORS), so the
+  server reads its public search page and caches results for 10 minutes. Imports copy the MP3 into the media
+  library, so overlays never depend on myinstants.com. Downloads are limited to MyInstants sound URLs, and
+  redirects are refused, so the server isn't an open proxy.
+- `RuleEngine` runs `evaluate` (`rules/evaluate.ts`, pure) for each event. It keeps cooldowns and like
+  counters per streamer, in memory. `SessionManager` passes it to each session when it's in context, and
+  `Session` publishes the results as `Action` messages after the event. Test events from `/simulate` and
+  demo events go through the same path.
+- The WebSocket forwards `Action` messages only to subscriptions with `actions: true`. They skip the
+  `events` filter and are never replayed, so a reconnecting player doesn't play old actions again.
+
+Running the rules once on the server, not in each overlay, keeps cooldowns and like milestones right
+when several players are open.
 
 ## Client (`packages/client`)
 

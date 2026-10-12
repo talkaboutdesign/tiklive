@@ -24,6 +24,7 @@ Usage: tiklive [options]
       --static <dir>       Serve a directory of overlays/pages
       --allow-origin <url> Allow browser pages from this origin to use the API; repeatable
       --allow-host <name>  Accept this Host header (default: localhost names only); repeatable
+      --data-dir <dir>     Where action rules and uploads are kept (env TIKLIVE_DATA_DIR, default ~/.tiklive)
       --log-requests       Log every HTTP request
   -h, --help               Show this help
   -v, --version            Print the version
@@ -95,6 +96,8 @@ The root entry, `tiklive`, exports `Server.layer(options)`. It builds the routes
 `HttpServer` layer to run. Provide one yourself, as `src/platform/node.ts` does for Node. `ServerOptions.port`
 and `host` are read only by the platform layers, not by `Server.layer`. Pass `clientBundle` to serve
 `/tiklive.js`, for example `fileURLToPath(import.meta.resolve("tiklive/tiklive.js"))`. The CLI does this for you.
+Pass `dataDir` to keep action rules and uploads on disk. Without it, rules stay in memory until the server
+stops and uploads are turned off.
 
 ## HTTP and WebSocket API
 

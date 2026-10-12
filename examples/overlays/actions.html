@@ -1,0 +1,3427 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>tiklive actions</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f1016;
+        --panel: #181a24;
+        --line: #2a2d3c;
+        --muted: #8b8fa7;
+        --accent: #ff4f8b;
+        --text: #e9e9f1;
+        --error: #ff8a8a;
+        --ok: #8ee6a8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          15px/1.45 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      p {
+        margin: 0;
+      }
+      h1,
+      h2,
+      h3 {
+        font-weight: 600;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      h3 {
+        margin: 0;
+        font-size: 14px;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .logo {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+      }
+      .logo span {
+        color: var(--accent);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .hint {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .field-error {
+        margin-top: 6px;
+        color: var(--error);
+        font-size: 13px;
+      }
+      .field-error:empty {
+        display: none;
+      }
+      [aria-invalid="true"] {
+        border-color: var(--error) !important;
+      }
+
+      /* Buttons and inputs */
+      button,
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 14px;
+        font: inherit;
+        font-weight: 500;
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      button:hover:not(:disabled),
+      .button:hover {
+        border-color: var(--muted);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+        font-weight: 600;
+      }
+      button.primary:hover:not(:disabled) {
+        filter: brightness(1.08);
+      }
+      button.ghost {
+        background: transparent;
+        border-color: transparent;
+        color: var(--muted);
+      }
+      button.ghost:hover:not(:disabled) {
+        border-color: var(--line);
+        color: var(--text);
+      }
+      button.danger:hover:not(:disabled) {
+        color: var(--error);
+        border-color: var(--error);
+      }
+      button.link {
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--accent);
+        font-weight: 600;
+      }
+      button.link:hover:not(:disabled) {
+        text-decoration: underline;
+      }
+      button.small,
+      .button.small {
+        padding: 5px 10px;
+        font-size: 13px;
+      }
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: inherit;
+        padding: 8px 12px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+      input[type="range"] {
+        padding: 0;
+        accent-color: var(--accent);
+      }
+      input[type="checkbox"],
+      input[type="radio"] {
+        accent-color: var(--accent);
+      }
+      textarea {
+        width: 100%;
+        min-height: 72px;
+        resize: vertical;
+      }
+      .inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .inline input[type="number"] {
+        width: 110px;
+      }
+      .fields {
+        display: grid;
+        gap: 14px;
+      }
+      .field-label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .field-label input,
+      .field-label select,
+      .field-label textarea {
+        color: var(--text);
+      }
+      .check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+
+      /* Shell */
+      .top {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 24px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+      }
+      .nav {
+        display: flex;
+        gap: 4px;
+      }
+      .nav a {
+        padding: 6px 12px;
+        color: var(--muted);
+        border: 1px solid transparent;
+        border-radius: 10px;
+        text-decoration: none;
+        font-weight: 500;
+      }
+      .nav a:hover {
+        color: var(--text);
+      }
+      .nav a[aria-current="page"] {
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--line);
+      }
+      .top-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+      .account {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        padding: 4px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      main {
+        display: grid;
+        gap: 16px;
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 16px 24px 48px;
+      }
+      #app {
+        display: grid;
+        gap: 16px;
+      }
+      .card {
+        padding: 16px 18px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+      }
+      .card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .card-head h2 {
+        margin: 0;
+      }
+      .card > p + p {
+        margin-top: 8px;
+      }
+      details.card > summary {
+        cursor: pointer;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      details.card[open] > summary {
+        margin-bottom: 12px;
+      }
+      details.card > summary::-webkit-details-marker {
+        color: var(--muted);
+      }
+      .tips {
+        margin: 10px 0 0;
+        padding-left: 20px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .tips li + li {
+        margin-top: 4px;
+      }
+      .url-row {
+        display: flex;
+        gap: 6px;
+      }
+      .url-row .url {
+        flex: 1;
+        min-width: 0;
+        padding: 6px 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .url-row button,
+      .url-row .button {
+        padding: 6px 12px;
+        font-size: 13px;
+      }
+      .page-gate {
+        max-width: 440px;
+        margin: 80px auto;
+        padding: 28px;
+        text-align: center;
+      }
+      .page-gate p + p {
+        margin-top: 14px;
+      }
+
+      /* Rules list */
+      .rules {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .rule {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+      }
+      .rule:first-child {
+        border-top: 0;
+      }
+      .rule.off .rule-main {
+        opacity: 0.5;
+      }
+      .rule-name {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rule-sum {
+        color: var(--muted);
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rule-main {
+        min-width: 0;
+      }
+      .rule-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+      .switch {
+        position: relative;
+        width: 38px;
+        height: 22px;
+        padding: 0;
+        border-radius: 999px;
+        background: var(--line);
+        border-color: var(--line);
+        flex: none;
+      }
+      .switch::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--text);
+        transition: transform 0.15s ease;
+      }
+      .switch[aria-checked="true"] {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .switch[aria-checked="true"]::after {
+        transform: translateX(16px);
+        background: #fff;
+      }
+      .templates {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .template {
+        display: grid;
+        justify-items: start;
+        gap: 4px;
+        padding: 12px;
+        text-align: left;
+        background: var(--bg);
+      }
+      .template span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .more-templates {
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        align-items: center;
+      }
+
+      /* Activity */
+      .feed {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: 360px;
+        overflow-y: auto;
+        font-size: 14px;
+      }
+      .feed li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 0;
+        border-top: 1px solid #1f2230;
+      }
+      .feed li:first-child {
+        border-top: 0;
+      }
+      .feed .time {
+        flex: none;
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .feed .fired-name {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .feed .who {
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        min-width: 0;
+      }
+      .badge {
+        flex: none;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        background: #22517a;
+      }
+      .empty {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      /* Media library */
+      .lib-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .lib {
+        border: 1px dashed transparent;
+        border-radius: 12px;
+        padding: 6px;
+        transition: border-color 0.1s ease;
+      }
+      .lib.drag,
+      .sound-panel.drag {
+        border-color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+      }
+      .lib-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 8px;
+        max-height: 320px;
+        overflow-y: auto;
+      }
+      .lib-grid > p {
+        grid-column: 1 / -1;
+      }
+      .lib-item {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 6px;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        min-width: 0;
+      }
+      .lib-item.selected {
+        border-color: var(--accent);
+      }
+      .lib-pick {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+      }
+      .lib-thumb {
+        display: grid;
+        place-items: center;
+        height: 72px;
+        border-radius: 8px;
+        background: #11131b;
+        color: var(--muted);
+        font-size: 12px;
+        overflow: hidden;
+      }
+      .lib-thumb img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+      .lib-name {
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: left;
+      }
+      .lib-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .lib-meta button {
+        padding: 2px 6px;
+        font-size: 11px;
+      }
+      .lib-paste {
+        display: flex;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .lib-paste input {
+        flex: 1;
+        min-width: 0;
+      }
+
+      /* Editor dialog */
+      dialog {
+        width: min(720px, calc(100vw - 32px));
+        max-height: calc(100vh - 32px);
+        padding: 0;
+        color: var(--text);
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+      }
+      dialog::backdrop {
+        background: rgba(5, 6, 10, 0.7);
+      }
+      .dialog-form {
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 32px);
+      }
+      .dialog-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+      .dialog-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 20px;
+        display: grid;
+        gap: 20px;
+      }
+      .dialog-foot {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 20px;
+        border-top: 1px solid var(--line);
+        background: var(--panel);
+      }
+      .dialog-foot .foot-error {
+        margin-right: auto;
+        color: var(--error);
+        font-size: 13px;
+      }
+      .section h3 {
+        margin-bottom: 8px;
+      }
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .section-head h3 {
+        margin: 0;
+      }
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .tile {
+        display: grid;
+        place-items: center;
+        gap: 2px;
+        padding: 10px 6px;
+        background: var(--bg);
+        font-size: 13px;
+        text-align: center;
+      }
+      .tile b {
+        font-size: 20px;
+        line-height: 1;
+      }
+      .tile[aria-checked="true"] {
+        border-color: var(--accent);
+        background: color-mix(in srgb, var(--accent) 14%, transparent);
+      }
+      .option-block {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 12px;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      .gift-opts {
+        display: grid;
+        gap: 10px;
+      }
+      .option-block fieldset {
+        margin: 0;
+        padding: 0;
+        border: 0;
+        display: grid;
+        gap: 6px;
+      }
+      .option-block legend {
+        padding: 0;
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .radio-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        font-size: 14px;
+      }
+      .radio-row label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .gift-picker {
+        display: grid;
+        gap: 8px;
+      }
+      .gift-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+        gap: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+        padding: 2px;
+      }
+      .gift {
+        display: grid;
+        justify-items: center;
+        gap: 2px;
+        padding: 8px 6px;
+        background: var(--panel);
+        font-size: 12px;
+        text-align: center;
+      }
+      .gift[aria-pressed="true"] {
+        border-color: var(--accent);
+      }
+      .gift img {
+        width: 40px;
+        height: 40px;
+        object-fit: contain;
+      }
+      .gift .gname {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .gift .gcoins {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .steps-list {
+        display: grid;
+        gap: 10px;
+      }
+      .step {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      .step-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .step-head .kind {
+        margin-right: auto;
+        font-weight: 600;
+      }
+      .step-head button {
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+      .add-steps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .add-steps button {
+        font-size: 13px;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .chips button.var {
+        padding: 2px 8px;
+        font-size: 12px;
+        font-family: ui-monospace, Menlo, monospace;
+      }
+      .row-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .range-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .range-row input[type="range"] {
+        flex: 1;
+        min-width: 0;
+      }
+      .range-row output {
+        min-width: 56px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        font-size: 13px;
+      }
+      .media-pick {
+        display: grid;
+        gap: 8px;
+      }
+      .media-current {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .media-current img {
+        width: 56px;
+        height: 40px;
+        object-fit: cover;
+        border-radius: 6px;
+        background: #11131b;
+      }
+      .media-current .mname {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+      }
+      .media-current .mname.none {
+        color: var(--muted);
+      }
+      .media-panel {
+        display: grid;
+        gap: 8px;
+        padding: 10px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      .sound-query {
+        display: flex;
+        gap: 6px;
+      }
+      .sound-query input {
+        flex: 1;
+        min-width: 0;
+      }
+      .sound-list {
+        display: grid;
+        gap: 2px;
+        max-height: 280px;
+        margin: 0;
+        padding: 0;
+        overflow-y: auto;
+        list-style: none;
+      }
+      .sound-row {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) 64px 96px 58px;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 6px;
+        border-radius: 8px;
+      }
+      .sound-row:hover {
+        background: var(--bg);
+      }
+      .sound-row button,
+      .sound-row .button {
+        padding: 4px 10px;
+        font-size: 13px;
+      }
+      .preview {
+        min-width: 34px;
+      }
+      .sound-title {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sound-row .field-error {
+        grid-column: 1 / -1;
+        margin: 0;
+      }
+      .sound-more {
+        display: flex;
+        justify-content: center;
+      }
+      /* Sound picker: a search box, your sounds, then MyInstants, in one panel */
+      .sound-pick {
+        display: grid;
+        gap: 8px;
+      }
+      .sound-current {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 8px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+      }
+      .sound-current .mname {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sound-panel {
+        display: grid;
+        gap: 14px;
+        padding: 12px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        transition: border-color 0.1s ease;
+      }
+      .sound-section {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+      }
+      .sound-heading {
+        margin: 0;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      .sound-intro {
+        display: grid;
+        gap: 8px;
+      }
+      .sound-intro .hint {
+        margin-top: 0;
+      }
+      .sound-status {
+        margin-top: 0;
+      }
+      .sound-status:empty {
+        display: none;
+      }
+      .sound-note {
+        padding: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .sound-row.selected {
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+      .sound-meta,
+      .sound-action,
+      .sound-trailing {
+        justify-self: end;
+        min-width: 0;
+      }
+      .sound-meta {
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .sound-chosen {
+        color: var(--ok);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .sound-foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+      }
+      @media (max-width: 560px) {
+        .sound-row {
+          grid-template-columns: 34px minmax(0, 1fr) auto auto;
+        }
+        .sound-meta {
+          display: none;
+        }
+      }
+
+      .toast {
+        position: fixed;
+        left: 50%;
+        bottom: 24px;
+        transform: translateX(-50%);
+        z-index: 30;
+        max-width: calc(100vw - 32px);
+        padding: 10px 16px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        font-size: 14px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+      .toast.error {
+        border-color: var(--error);
+        color: var(--error);
+      }
+      .load-error {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        color: var(--error);
+      }
+
+      @media (max-width: 800px) {
+        .tiles {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .rule {
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+        .rule-actions {
+          grid-column: 1 / -1;
+          justify-content: flex-start;
+        }
+        .templates {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+      @media (max-width: 560px) {
+        .top {
+          flex-wrap: wrap;
+          padding: 10px 16px;
+        }
+        main {
+          padding: 12px 16px 40px;
+        }
+        .row-2 {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .tiles {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="logo">tik<span>live</span></div>
+      <nav class="nav" aria-label="Pages">
+        <a id="nav-dashboard" href="/">Dashboard</a>
+        <a id="nav-actions" href="/actions.html" aria-current="page">Actions</a>
+      </nav>
+      <div class="top-right">
+        <div class="account" id="account" hidden></div>
+      </div>
+    </header>
+
+    <main>
+      <section id="gate" class="card page-gate" hidden>
+        <p>Set your TikTok username on the dashboard first.</p>
+        <p><a class="button primary" href="/">Go to the dashboard</a></p>
+      </section>
+
+      <div id="app" hidden>
+        <section id="load-error" class="card" hidden>
+          <div class="load-error" role="alert">
+            <span id="load-error-text">Couldn't load your actions.</span>
+            <button id="load-retry" type="button" class="small">Retry</button>
+          </div>
+        </section>
+
+        <div id="setup-slot"></div>
+
+        <section class="card" aria-labelledby="rules-title">
+          <div class="card-head">
+            <h2 id="rules-title">Actions</h2>
+            <button id="new" class="primary small" type="button">New action</button>
+          </div>
+          <ul id="rules" class="rules" hidden></ul>
+          <div id="rules-empty" hidden>
+            <p class="empty">No actions yet.</p>
+            <p class="hint">Start from a template, or make your own with New action.</p>
+            <div id="templates" class="templates"></div>
+          </div>
+          <div id="more-templates" class="more-templates" hidden></div>
+        </section>
+
+        <section class="card" aria-labelledby="activity-title">
+          <div class="card-head">
+            <h2 id="activity-title">Activity</h2>
+          </div>
+          <ol id="feed" class="feed" role="log" aria-live="polite" aria-label="Fired actions"></ol>
+          <p id="feed-empty" class="empty">
+            Fired actions show up here. This page doesn't play them; the player in OBS does.
+          </p>
+        </section>
+
+        <details id="library-card" class="card">
+          <summary>Media library</summary>
+          <div id="library-slot"></div>
+        </details>
+      </div>
+    </main>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <dialog id="editor" aria-labelledby="editor-title">
+      <form id="editor-form" class="dialog-form" novalidate>
+        <div class="dialog-head">
+          <h2 id="editor-title" class="sr-only">New action</h2>
+          <span id="editor-heading" class="logo" style="font-size: 17px">New action</span>
+          <button id="editor-close" type="button" class="ghost small">Close</button>
+        </div>
+        <div class="dialog-body">
+          <section class="section">
+            <label class="field-label">
+              Name
+              <input
+                id="f-name"
+                data-key="name"
+                maxlength="100"
+                autocomplete="off"
+                placeholder="Leave empty to use the summary"
+              />
+            </label>
+            <p class="field-error" data-error="name"></p>
+          </section>
+
+          <section class="section" aria-labelledby="when-title">
+            <h3 id="when-title">When…</h3>
+            <div id="tiles" class="tiles" role="radiogroup" aria-labelledby="when-title"></div>
+            <div id="trigger-opts" class="option-block"></div>
+          </section>
+
+          <section class="section" aria-labelledby="then-title">
+            <h3 id="then-title">Then…</h3>
+            <div id="steps-list" class="steps-list"></div>
+            <p class="field-error" data-error="steps"></p>
+            <div class="add-steps" role="group" aria-label="Add a step">
+              <button type="button" data-add="sound" data-key="steps">Play sound</button>
+              <button type="button" data-add="media">Show image or video</button>
+              <button type="button" data-add="speak">Say something</button>
+              <button type="button" data-add="obsScene">Switch OBS scene</button>
+            </div>
+          </section>
+
+          <section class="section">
+            <h3>Options</h3>
+            <div class="row-2">
+              <div class="fields">
+                <label class="field-label">
+                  Cooldown (seconds, anyone)
+                  <input
+                    id="f-cooldown"
+                    data-key="cooldown"
+                    type="number"
+                    min="0"
+                    max="86400"
+                    step="1"
+                    inputmode="numeric"
+                  />
+                </label>
+                <p class="hint">Stops the action firing again for anyone for this long. Empty for none.</p>
+                <p class="field-error" data-error="cooldown"></p>
+              </div>
+              <div class="fields">
+                <label class="field-label">
+                  Per-viewer cooldown (seconds)
+                  <input
+                    id="f-user-cooldown"
+                    data-key="userCooldown"
+                    type="number"
+                    min="0"
+                    max="86400"
+                    step="1"
+                    inputmode="numeric"
+                  />
+                </label>
+                <p class="hint">Stops the same viewer triggering it again for this long. Empty for none.</p>
+                <p class="field-error" data-error="userCooldown"></p>
+              </div>
+            </div>
+          </section>
+        </div>
+        <div class="dialog-foot">
+          <span id="e-form" class="foot-error" role="alert"></span>
+          <button id="editor-cancel" type="button" class="ghost">Cancel</button>
+          <button type="submit" class="primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+    <script type="module">
+      const $ = (id) => document.getElementById(id);
+      const params = new URLSearchParams(location.search);
+      const token = params.get("token") ?? "";
+      const STORAGE_KEY = "tiklive.username";
+      const USERNAME = /^[a-z0-9._]{1,32}$/;
+      const MAX_STEPS = 10;
+      const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+      const MEDIA_TYPES = {
+        "image/png": "image",
+        "image/jpeg": "image",
+        "image/gif": "image",
+        "image/webp": "image",
+        "video/mp4": "video",
+        "video/webm": "video",
+        "audio/mpeg": "audio",
+        "audio/wav": "audio",
+        "audio/ogg": "audio",
+        "audio/mp4": "audio",
+      };
+      const UNSUPPORTED =
+        "That file type isn't supported. Use PNG, JPG, GIF, WebP, MP4, WebM, MP3, WAV, OGG or M4A.";
+      const TOO_BIG = "That file is over 25 MB.";
+      const TRIGGERS = [
+        ["gift", "Gift"],
+        ["follow", "Follow"],
+        ["share", "Share"],
+        ["subscribe", "Subscribe"],
+        ["chat", "Chat"],
+        ["likes", "Likes"],
+      ];
+      const STEP_LABELS = {
+        sound: "Sound",
+        media: "Image / video",
+        speak: "Speech",
+        obsScene: "Scene",
+      };
+      // Variables offered in "Say something", per trigger (see TEMPLATE_VARIABLES in contracts).
+      const VARS_BY_TRIGGER = {
+        always: ["nickname", "username"],
+        gift: ["giftName", "count", "coins"],
+        chat: ["comment"],
+        likes: ["likes"],
+        subscribe: ["months"],
+      };
+      const SAMPLE = {
+        nickname: "Test User",
+        username: "test_user",
+        giftName: "Rose",
+        count: "5",
+        coins: "5",
+        comment: "Hello!",
+        likes: "1000",
+        months: "1",
+      };
+      const TEMPLATES = [
+        {
+          name: "Thank new followers out loud",
+          trigger: { type: "follow" },
+          steps: [{ kind: "speak", text: "Thanks for the follow, {nickname}!" }],
+        },
+        {
+          name: "Celebrate big gifts",
+          trigger: { type: "gift", minCoins: 100 },
+          steps: [{ kind: "speak", text: "{nickname} sent {count} {giftName}! Thank you!" }],
+        },
+        {
+          name: "!hello chat command",
+          trigger: { type: "chat", match: "command", text: "!hello" },
+          steps: [{ kind: "speak", text: "Hello {nickname}!" }],
+          userCooldown: 30,
+        },
+        {
+          name: "Every 1,000 likes",
+          trigger: { type: "likes", every: 1000 },
+          steps: [{ kind: "speak", text: "We just hit {likes} likes!" }],
+        },
+      ];
+
+      let TikLive = null; // the client class, loaded below; null if /tiklive.js is missing
+      let ruleSet = { revision: 0, rules: [] }; // last state read from or saved to the server
+      let activity = null; // the activity connection, if any
+      let editor = null; // { draft, isNew, saved } while the editor is open
+
+      // Mirrors normalizeUsername() in packages/contracts/src/protocol.ts.
+      function normalizeUsername(input) {
+        const trimmed = input.trim();
+        const fromUrl = trimmed.match(/tiktok\.com\/@([^/?#]+)/i);
+        return (fromUrl?.[1] ?? trimmed).replace(/^@/, "").toLowerCase();
+      }
+
+      // localStorage can throw (private mode, storage disabled). The page still works without it.
+      function readSaved() {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY) ?? "";
+          return USERNAME.test(saved) ? saved : "";
+        } catch {
+          return "";
+        }
+      }
+
+      // Only http(s) URLs may reach an <img>; anything else renders as nothing.
+      // Relative urls (uploads are /media/...) resolve against this page; the result must still be http(s).
+      const safeUrl = (u) => {
+        try {
+          const url = new URL(String(u ?? ""), location.href);
+          return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+        } catch {
+          return "";
+        }
+      };
+
+      // Small DOM builder: strings become text nodes, so nothing is parsed as HTML.
+      function el(tag, props = {}, ...children) {
+        const node = document.createElement(tag);
+        for (const [key, value] of Object.entries(props)) {
+          if (value === undefined || value === null || value === false) continue;
+          if (key === "class") node.className = value;
+          else node.setAttribute(key, String(value));
+        }
+        node.append(...children.filter((c) => c !== undefined && c !== null && c !== false));
+        return node;
+      }
+
+      function img(src, props = {}) {
+        const url = safeUrl(src);
+        if (!url) return null;
+        const node = el("img", { ...props, src: url, referrerpolicy: "no-referrer" });
+        node.addEventListener("error", () => {
+          node.style.visibility = "hidden";
+        });
+        return node;
+      }
+
+      // Only ?username= and the saved name are used here. The dashboard is where the name gets set.
+      const fromUrl = params.get("username") ?? "";
+      const username = (() => {
+        const name = fromUrl ? normalizeUsername(fromUrl) : readSaved();
+        return USERNAME.test(name) ? name : "";
+      })();
+
+      // Query string shared by the page's links: the token and, if it came from the URL, the username.
+      function linkQuery() {
+        const parts = [];
+        if (fromUrl && username) parts.push(`username=${encodeURIComponent(username)}`);
+        if (token) parts.push(`token=${encodeURIComponent(token)}`);
+        return parts.length ? `?${parts.join("&")}` : "";
+      }
+
+      class ApiError extends Error {
+        constructor(status, message, data) {
+          super(message);
+          this.status = status;
+          this.data = data;
+        }
+      }
+
+      // Calls the server's /api. Errors become ApiError with the server's message and body.
+      async function request(path, { method = "GET", json, body, headers = {} } = {}) {
+        const init = { method, headers: { ...headers } };
+        if (token) init.headers.Authorization = `Bearer ${token}`;
+        if (json !== undefined) {
+          init.headers["Content-Type"] = "application/json";
+          init.body = JSON.stringify(json);
+        } else if (body !== undefined) {
+          init.body = body;
+        }
+        const res = await fetch(path, init);
+        const text = await res.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+        if (!res.ok) {
+          const message = data?.message ?? data?.error ?? (text || `HTTP ${res.status}`);
+          throw new ApiError(res.status, message, data);
+        }
+        return data;
+      }
+
+      function toast(message, isError = false) {
+        const node = $("toast");
+        node.textContent = message;
+        node.className = isError ? "toast error" : "toast";
+        node.hidden = false;
+        clearTimeout(toast.timer);
+        toast.timer = setTimeout(() => (node.hidden = true), 3000);
+      }
+
+      // ---- summaries ----
+
+      const FROM_LABEL = { followers: "followers", subscribers: "subscribers", moderators: "moderators" };
+
+      function triggerText(t) {
+        switch (t.type) {
+          case "gift": {
+            const what = t.giftId !== undefined ? (t.giftName ?? "a specific gift") : "a gift";
+            const min = t.minCoins ? ` (${t.minCoins.toLocaleString()}+ coins)` : "";
+            return `When someone sends ${what}${min}${t.perGift ? ", each gift" : ""}`;
+          }
+          case "follow":
+            return "When someone follows";
+          case "share":
+            return "When someone shares the stream";
+          case "subscribe":
+            return "When someone subscribes";
+          case "chat": {
+            const from = FROM_LABEL[t.from] ? ` (${FROM_LABEL[t.from]} only)` : "";
+            if (t.match === "command") return `When someone types ${t.text ?? ""}${from}`;
+            if (t.match === "contains") return `When chat contains “${t.text ?? ""}”${from}`;
+            return `When anyone chats${from}`;
+          }
+          case "likes":
+            return `Every ${Number(t.every).toLocaleString()} likes`;
+          default:
+            return "When something happens";
+        }
+      }
+
+      function stepText(s) {
+        switch (s.kind) {
+          case "sound":
+            return "Sound";
+          case "media":
+            return /\.(mp4|webm)(\?|$)/i.test(s.url) ? "Video" : "Image";
+          case "speak":
+            return "Speak";
+          case "obsScene":
+            return `Scene “${s.scene}”`;
+          default:
+            return "";
+        }
+      }
+
+      // The one-line summary: "When someone sends Rose (100+ coins) → Sound · Speak".
+      function summarize(rule) {
+        const steps = rule.steps.map(stepText).filter(Boolean).join(" · ");
+        return `${triggerText(rule.trigger)} → ${steps || "no steps"}`;
+      }
+
+      // ---- setup card ----
+
+      // Shown on its own while there are no rules; folded into a <details> once there are.
+      let setupMode = null;
+
+      function setupContent() {
+        const url = `${location.origin}/overlays/actions.html?username=${encodeURIComponent(username)}${
+          token ? `&token=${encodeURIComponent(token)}` : ""
+        }`;
+        const input = el("input", { class: "url", readonly: true, "aria-label": "Player URL" });
+        input.value = url;
+        const copy = el("button", { type: "button" }, "Copy");
+        let timer;
+        copy.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(url);
+            copy.textContent = "Copied";
+            clearTimeout(timer);
+            timer = setTimeout(() => (copy.textContent = "Copy"), 1500);
+          } catch {
+            input.select();
+          }
+        };
+        const open = el("a", { class: "button small", href: url, target: "_blank", rel: "noopener" }, "Open");
+        return [
+          el("div", { class: "url-row" }, input, copy, open),
+          el(
+            "ul",
+            { class: "tips" },
+            el("li", {}, "In OBS, add a Browser Source, size 1920×1080, and tick Control audio via OBS."),
+            el("li", {}, "To switch scenes, set the source's Page permissions to Advanced access to OBS."),
+            el("li", {}, "The player stays invisible until an action plays."),
+          ),
+        ];
+      }
+
+      function renderSetup() {
+        const mode = ruleSet.rules.length > 0 ? "folded" : "open";
+        if (mode === setupMode) return;
+        setupMode = mode;
+        if (mode === "folded") {
+          $("setup-slot").replaceChildren(
+            el(
+              "details",
+              { class: "card" },
+              el("summary", {}, "OBS player setup"),
+              el("p", { class: "hint" }, "Add this URL to OBS as a Browser Source."),
+              ...setupContent(),
+            ),
+          );
+        } else {
+          $("setup-slot").replaceChildren(
+            el(
+              "section",
+              { class: "card", "aria-labelledby": "setup-title" },
+              el("h2", { id: "setup-title" }, "Add the actions player to OBS"),
+              el("p", { class: "hint" }, "Add this URL to OBS as a Browser Source."),
+              ...setupContent(),
+            ),
+          );
+        }
+      }
+
+      // ---- saving ----
+
+      function newId() {
+        const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+        const bytes = crypto.getRandomValues(new Uint8Array(10));
+        return `r-${Array.from(bytes, (b) => chars[b % chars.length]).join("")}`;
+      }
+
+      let loaded = false;
+
+      // Saves the list that `apply` builds from the current one. On a 409 (someone else saved
+      // first) it re-reads the list, applies the same edit again and retries once.
+      async function commit(apply) {
+        if (!loaded) throw new Error("Your actions haven't loaded yet. Retry first.");
+        for (let attempt = 0; ; attempt++) {
+          try {
+            ruleSet = await request("/api/rules", {
+              method: "PUT",
+              json: { revision: ruleSet.revision, rules: apply(ruleSet.rules) },
+            });
+            renderRules();
+            return;
+          } catch (err) {
+            if (err.status !== 409 || attempt > 0) throw err;
+            ruleSet = await request("/api/rules");
+          }
+        }
+      }
+
+      function clampName(name) {
+        return name.length > 100 ? name.slice(0, 100) : name;
+      }
+
+      // Runs a commit from a button; failures become a toast.
+      async function run(task, failure = "Couldn't save.") {
+        try {
+          await task();
+        } catch (err) {
+          toast(`${failure} ${err.message}`, true);
+        }
+      }
+
+      function toggleRule(id) {
+        return run(() =>
+          commit((rules) => rules.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))),
+        );
+      }
+
+      function deleteRule(rule) {
+        if (!confirm(`Delete “${rule.name}”?`)) return;
+        return run(() => commit((rules) => rules.filter((r) => r.id !== rule.id)));
+      }
+
+      function duplicateRule(rule) {
+        return run(() =>
+          commit((rules) => {
+            const copy = { ...structuredClone(rule), id: newId(), name: clampName(`${rule.name} (copy)`) };
+            const at = rules.findIndex((r) => r.id === rule.id);
+            return at < 0 ? [...rules, copy] : [...rules.slice(0, at + 1), copy, ...rules.slice(at + 1)];
+          }),
+        );
+      }
+
+      async function testRule(rule) {
+        try {
+          await request(`/api/rules/${encodeURIComponent(rule.id)}/test`, {
+            method: "POST",
+            json: { username },
+          });
+          toast("Sent to the player");
+        } catch (err) {
+          toast(err.message, true);
+        }
+      }
+
+      // Templates are saved straight away, then opened in the editor so they can be tweaked.
+      function useTemplate(template) {
+        const rule = { ...structuredClone(template), id: newId(), enabled: true };
+        return run(() => commit((rules) => [...rules, rule]), "Couldn't create the action.").then(() => {
+          if (ruleSet.rules.some((r) => r.id === rule.id)) openEditor(rule);
+        });
+      }
+
+      // ---- rules list ----
+
+      function ruleButton(label, rule, onClick, extra = "") {
+        const button = el(
+          "button",
+          { type: "button", class: `small ${extra}`.trim(), "aria-label": `${label} ${rule.name}` },
+          label,
+        );
+        button.onclick = onClick;
+        return button;
+      }
+
+      function ruleRow(rule) {
+        const toggle = el("button", {
+          type: "button",
+          role: "switch",
+          class: "switch",
+          "aria-checked": String(rule.enabled),
+          "aria-label": `${rule.name} enabled`,
+        });
+        toggle.onclick = () => toggleRule(rule.id);
+        return el(
+          "li",
+          { class: rule.enabled ? "rule" : "rule off" },
+          toggle,
+          el(
+            "div",
+            { class: "rule-main" },
+            el("div", { class: "rule-name" }, rule.name),
+            el("div", { class: "rule-sum" }, summarize(rule)),
+          ),
+          el(
+            "div",
+            { class: "rule-actions" },
+            ruleButton("Test", rule, () => testRule(rule), "ghost"),
+            ruleButton("Edit", rule, () => openEditor(rule), "ghost"),
+            ruleButton("Duplicate", rule, () => duplicateRule(rule), "ghost"),
+            ruleButton("Delete", rule, () => deleteRule(rule), "ghost danger"),
+          ),
+        );
+      }
+
+      function renderRules() {
+        const rules = ruleSet.rules;
+        $("rules").replaceChildren(...rules.map(ruleRow));
+        $("rules").hidden = rules.length === 0;
+        $("rules-empty").hidden = rules.length > 0;
+        $("more-templates").hidden = rules.length === 0;
+        renderSetup();
+        syncEnabled();
+      }
+
+      // Buttons that save need the list loaded first, or a save would overwrite it.
+      function syncEnabled() {
+        $("new").disabled = !loaded;
+        for (const button of document.querySelectorAll("#templates button, #more-templates button")) {
+          button.disabled = !loaded;
+        }
+      }
+
+      function templateButton(template) {
+        const button = el(
+          "button",
+          { type: "button", class: "template" },
+          el("b", {}, template.name),
+          el("span", {}, summarize({ ...template, enabled: true })),
+        );
+        button.onclick = () => useTemplate(template);
+        return button;
+      }
+
+      function buildTemplates() {
+        $("templates").replaceChildren(...TEMPLATES.map(templateButton));
+        $("more-templates").replaceChildren(
+          el("span", {}, "Start from a template:"),
+          ...TEMPLATES.map((t) => {
+            const button = el("button", { type: "button", class: "link small" }, t.name);
+            button.onclick = () => useTemplate(t);
+            return button;
+          }),
+        );
+      }
+
+      // ---- loading ----
+
+      async function loadRules() {
+        $("load-error").hidden = true;
+        try {
+          ruleSet = await request("/api/rules");
+          loaded = true;
+          renderRules();
+        } catch (err) {
+          loaded = false;
+          syncEnabled();
+          $("load-error-text").textContent =
+            err.status === 404
+              ? "This tiklive server doesn't have actions yet. Update tiklive, then retry."
+              : `Couldn't load your actions. ${err.message}`;
+          $("load-error").hidden = false;
+        }
+      }
+      $("load-retry").onclick = loadRules;
+
+      // ---- activity ----
+
+      const FEED_MAX = 30;
+
+      function addFeed(action) {
+        const feed = $("feed");
+        const when = Number(action.timestamp) || Date.now();
+        const who = action.user ? action.user.nickname || action.user.uniqueId || "" : "";
+        feed.prepend(
+          el(
+            "li",
+            {},
+            el(
+              "span",
+              { class: "time" },
+              new Date(when).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            ),
+            el("span", { class: "fired-name" }, action.ruleName ?? ""),
+            who ? el("span", { class: "who" }, `by ${who}`) : null,
+            action.test ? el("span", { class: "badge" }, "test") : null,
+          ),
+        );
+        while (feed.children.length > FEED_MAX) feed.lastElementChild.remove();
+        $("feed-empty").hidden = true;
+      }
+
+      // One connection for the page. It also keeps the streamer's session running, so Test works.
+      function connectActivity() {
+        activity?.close?.();
+        activity = null;
+        if (!TikLive) {
+          $("feed-empty").textContent = "Live activity needs /tiklive.js. Run bun run build on the server.";
+          return;
+        }
+        activity = new TikLive({ username, token, events: [], actions: true });
+        activity.on("action", (action) => addFeed(action));
+      }
+
+      // ---- boot ----
+
+      const clientReady = import("/tiklive.js").then(
+        (m) => m.TikLive,
+        () => null,
+      );
+
+      async function boot() {
+        $("nav-dashboard").href = `/${linkQuery()}`;
+        $("nav-actions").href = `/actions.html${linkQuery()}`;
+        if (!username) {
+          $("gate").hidden = false;
+          return;
+        }
+        $("app").hidden = false;
+        $("account").hidden = false;
+        $("account").textContent = `@${username}`;
+        buildTemplates();
+        syncEnabled();
+        renderSetup();
+        TikLive = await clientReady;
+        connectActivity();
+        await loadRules();
+        buildLibrary();
+      }
+
+      // ---- editor: shell ----
+
+      // Field errors: each message sits in a <p data-error="key">, and the control has data-key="key".
+      function showErrors(list) {
+        const form = $("editor-form");
+        for (const p of form.querySelectorAll("[data-error]")) p.textContent = "";
+        for (const c of form.querySelectorAll("[aria-invalid]")) c.removeAttribute("aria-invalid");
+        for (const { key, message } of list) {
+          const p = form.querySelector(`[data-error="${key}"]`);
+          if (p) p.textContent = message;
+          form.querySelector(`[data-key="${key}"]`)?.setAttribute("aria-invalid", "true");
+        }
+        const first = list[0] ? form.querySelector(`[data-key="${list[0].key}"]`) : null;
+        first?.focus();
+      }
+
+      function openEditor(rule) {
+        const draft = rule
+          ? structuredClone(rule)
+          : { id: newId(), name: "", enabled: true, trigger: { type: "gift" }, steps: [] };
+        editor = {
+          draft,
+          isNew: !rule,
+          original: JSON.stringify(draft),
+          giftScope: draft.trigger.giftId !== undefined ? "one" : "any",
+        };
+        $("editor-heading").textContent = editor.isNew ? "New action" : "Edit action";
+        $("editor-title").textContent = $("editor-heading").textContent;
+        $("f-name").value = draft.name;
+        $("f-cooldown").value = draft.cooldown ?? "";
+        $("f-user-cooldown").value = draft.userCooldown ?? "";
+        $("e-form").textContent = "";
+        stopSearchPreview();
+        soundSearch = newSoundSearch();
+        renderEditor();
+        $("editor").showModal();
+        $("f-name").focus();
+      }
+
+      function renderEditor() {
+        renderTiles();
+        renderTriggerOpts();
+        renderSteps();
+      }
+
+      function isDirty() {
+        return editor && JSON.stringify(editor.draft) !== editor.original;
+      }
+
+      // Escape, Cancel and Close all come through here. Unsaved changes ask first.
+      function closeEditor() {
+        if (isDirty() && !confirm("Discard changes?")) return;
+        editor = null;
+        $("editor").close();
+      }
+
+      // Parses a number input into obj[key]. An empty input removes the key.
+      function setNumber(obj, key, raw) {
+        const n = raw === "" ? NaN : Number(raw);
+        if (Number.isNaN(n)) delete obj[key];
+        else obj[key] = n;
+      }
+
+      // ---- editor: when ----
+
+      function defaultTrigger(type) {
+        switch (type) {
+          case "chat":
+            return { type, match: "command", text: "" };
+          case "likes":
+            return { type, every: 1000 };
+          default:
+            return { type };
+        }
+      }
+
+      function renderTiles() {
+        const current = editor.draft.trigger.type;
+        $("tiles").replaceChildren(
+          ...TRIGGERS.map(([type, label]) => {
+            const selected = type === current;
+            const tile = el(
+              "button",
+              {
+                type: "button",
+                role: "radio",
+                class: "tile",
+                "data-type": type,
+                "aria-checked": String(selected),
+                tabindex: selected ? "0" : "-1",
+              },
+              label,
+            );
+            tile.onclick = () => selectTrigger(type);
+            return tile;
+          }),
+        );
+      }
+
+      function selectTrigger(type) {
+        if (editor.draft.trigger.type === type) return;
+        const hadFocus = $("tiles").contains(document.activeElement);
+        editor.draft.trigger = defaultTrigger(type);
+        editor.giftScope = "any";
+        renderTiles();
+        renderTriggerOpts();
+        renderSteps();
+        if (hadFocus) $("tiles").querySelector(`[data-type="${type}"]`)?.focus();
+      }
+
+      // Arrow keys move through the tiles and select, as in a radio group.
+      $("tiles").addEventListener("keydown", (e) => {
+        const keys = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+        const types = TRIGGERS.map(([type]) => type);
+        const at = types.indexOf(editor.draft.trigger.type);
+        let next = null;
+        if (e.key in keys) next = types[(at + keys[e.key] + types.length) % types.length];
+        else if (e.key === "Home") next = types[0];
+        else if (e.key === "End") next = types[types.length - 1];
+        if (!next) return;
+        e.preventDefault();
+        selectTrigger(next);
+        $("tiles").querySelector(`[data-type="${next}"]`)?.focus();
+      });
+
+      function renderTriggerOpts() {
+        const t = editor.draft.trigger;
+        let fields;
+        switch (t.type) {
+          case "gift":
+            fields = giftFields(t);
+            break;
+          case "chat":
+            fields = chatFields(t);
+            break;
+          case "likes":
+            fields = likesFields(t);
+            break;
+          default:
+            fields = [el("p", { class: "hint" }, triggerHint(t.type))];
+        }
+        $("trigger-opts").replaceChildren(...fields);
+      }
+
+      function triggerHint(type) {
+        switch (type) {
+          case "follow":
+            return "Runs once for each new follower.";
+          case "share":
+            return "Runs each time someone shares the stream.";
+          case "subscribe":
+            return "Runs each time someone subscribes. {months} is the subscriber's month count.";
+          default:
+            return "";
+        }
+      }
+
+      function radioOption(name, value, label, checked, onChange) {
+        const input = el("input", { type: "radio", name, value });
+        input.checked = checked;
+        input.onchange = onChange;
+        return el("label", {}, input, label);
+      }
+
+      function giftFields(t) {
+        const picker = giftPicker(t);
+        const anyRadio = radioOption("gift-scope", "any", "Any gift", editor.giftScope === "any", () => {
+          editor.giftScope = "any";
+          delete t.giftId;
+          delete t.giftName;
+          picker.hidden = true;
+          notifyGifts();
+        });
+        const oneRadio = radioOption(
+          "gift-scope",
+          "one",
+          "A specific gift",
+          editor.giftScope === "one",
+          () => {
+            editor.giftScope = "one";
+            picker.hidden = false;
+            loadGifts();
+            notifyGifts();
+          },
+        );
+        picker.hidden = editor.giftScope !== "one";
+        if (editor.giftScope === "one") loadGifts();
+
+        const min = el("input", {
+          type: "number",
+          min: "0",
+          max: "1000000000",
+          step: "1",
+          inputmode: "numeric",
+          placeholder: "None",
+          "data-key": "minCoins",
+        });
+        min.value = t.minCoins ?? "";
+        min.oninput = () => setNumber(t, "minCoins", min.value);
+        const perGift = el("input", { type: "checkbox" });
+        perGift.checked = Boolean(t.perGift);
+        perGift.onchange = () => {
+          if (perGift.checked) t.perGift = true;
+          else delete t.perGift;
+        };
+        return [
+          el(
+            "div",
+            { class: "gift-opts" },
+            el(
+              "fieldset",
+              {},
+              el("legend", {}, "Which gift"),
+              el("div", { class: "radio-row" }, anyRadio, oneRadio),
+            ),
+            picker,
+            el("label", { class: "field-label" }, "Minimum coins for the combo (optional)", min),
+            el("p", { class: "field-error", "data-error": "minCoins" }),
+            el("label", { class: "check" }, perGift, "Repeat for each gift in a combo (up to 10)"),
+          ),
+        ];
+      }
+
+      // Gift catalog: loaded once, the first time a specific gift is wanted.
+      let gifts = null; // GiftInfo[] once loaded
+      let giftsLoading = false;
+      let giftsFailed = false;
+      const giftViews = new Set(); // redraw functions of open pickers
+
+      function notifyGifts() {
+        for (const view of giftViews) {
+          if (view.node.isConnected) view();
+          else giftViews.delete(view);
+        }
+      }
+
+      async function loadGifts() {
+        if (gifts || giftsLoading) return;
+        giftsLoading = true;
+        giftsFailed = false;
+        try {
+          gifts = (await request("/api/gifts")).gifts ?? [];
+        } catch {
+          giftsFailed = true;
+        }
+        giftsLoading = false;
+        notifyGifts();
+      }
+
+      function giftPicker(t) {
+        const search = el("input", {
+          type: "search",
+          placeholder: "Search gifts",
+          "aria-label": "Search gifts",
+          autocomplete: "off",
+          "data-key": "gift",
+        });
+        const selected = el("p", { class: "hint" });
+        const status = el("p", { class: "hint", role: "status" });
+        const grid = el("div", { class: "gift-grid", role: "group", "aria-label": "Gifts" });
+        const error = el("p", { class: "field-error", "data-error": "gift" });
+
+        const draw = () => {
+          selected.textContent = t.giftName ? `Selected: ${t.giftName}` : "No gift chosen yet.";
+          if (giftsFailed) {
+            const retry = el("button", { type: "button", class: "small" }, "Retry");
+            retry.onclick = () => {
+              giftsFailed = false;
+              loadGifts();
+            };
+            status.replaceChildren("Couldn't load TikTok's gift list. ", retry);
+            grid.replaceChildren();
+            return;
+          }
+          if (!gifts) {
+            status.textContent = "Loading gifts…";
+            grid.replaceChildren();
+            return;
+          }
+          const q = search.value.trim().toLowerCase();
+          const list = gifts.filter((g) => !q || g.name.toLowerCase().includes(q));
+          status.textContent = list.length ? "" : "No gifts match.";
+          grid.replaceChildren(...list.map((g) => giftButton(g, t.giftId === g.giftId)));
+        };
+        search.oninput = draw;
+        draw.node = grid;
+        giftViews.add(draw);
+        draw();
+        return el("div", { class: "gift-picker" }, search, selected, status, grid, error);
+      }
+
+      function giftButton(g, isSelected) {
+        const button = el(
+          "button",
+          { type: "button", class: "gift", "aria-pressed": String(isSelected) },
+          img(g.imageUrl, { alt: "", loading: "lazy" }),
+          el("span", { class: "gname", title: g.name }, g.name),
+          el(
+            "span",
+            { class: "gcoins" },
+            `${Number(g.diamondCount).toLocaleString()} ${Number(g.diamondCount) === 1 ? "coin" : "coins"}`,
+          ),
+        );
+        button.onclick = () => {
+          const t = editor.draft.trigger;
+          t.giftId = g.giftId;
+          t.giftName = g.name;
+          notifyGifts();
+        };
+        return button;
+      }
+
+      function chatFields(t) {
+        const match = el(
+          "select",
+          { "aria-label": "Match" },
+          el("option", { value: "command" }, "Command (first word, e.g. !dance)"),
+          el("option", { value: "contains" }, "Contains text"),
+          el("option", { value: "any" }, "Any message"),
+        );
+        match.value = t.match;
+        const text = el("input", {
+          maxlength: "100",
+          placeholder: "!dance",
+          autocomplete: "off",
+          "aria-label": "Text to match",
+          "data-key": "chat.text",
+        });
+        text.value = t.text ?? "";
+        text.hidden = t.match === "any";
+        const error = el("p", { class: "field-error", "data-error": "chat.text" });
+        match.onchange = () => {
+          t.match = match.value;
+          text.hidden = t.match === "any";
+        };
+        text.oninput = () => (t.text = text.value);
+        const from = el(
+          "select",
+          { "aria-label": "From" },
+          el("option", { value: "everyone" }, "Everyone"),
+          el("option", { value: "followers" }, "Followers"),
+          el("option", { value: "subscribers" }, "Subscribers"),
+          el("option", { value: "moderators" }, "Moderators"),
+        );
+        from.value = t.from ?? "everyone";
+        from.onchange = () => (t.from = from.value);
+        return [
+          el(
+            "div",
+            { class: "row-2" },
+            el("label", { class: "field-label" }, "Match", match),
+            el("label", { class: "field-label" }, "From", from),
+          ),
+          el("label", { class: "field-label" }, "Text", text),
+          error,
+        ];
+      }
+
+      function likesFields(t) {
+        const every = el("input", {
+          type: "number",
+          min: "1",
+          max: "1000000000",
+          step: "1",
+          inputmode: "numeric",
+          "aria-label": "Likes per milestone",
+          "data-key": "likes.every",
+        });
+        every.value = t.every ?? "";
+        every.oninput = () => setNumber(t, "every", every.value);
+        return [
+          el(
+            "div",
+            { class: "fields" },
+            el("label", { class: "inline" }, "Every", every, "likes"),
+            el("p", { class: "field-error", "data-error": "likes.every" }),
+          ),
+        ];
+      }
+
+      // ---- editor: then ----
+
+      const STEP_TITLES = {
+        sound: "Play sound",
+        media: "Show image or video",
+        speak: "Say something",
+        obsScene: "Switch OBS scene",
+      };
+
+      const isVideoUrl = (url) => /\.(mp4|webm)(\?|$)/i.test(url ?? "");
+
+      function varsFor(type) {
+        return [...VARS_BY_TRIGGER.always, ...(VARS_BY_TRIGGER[type] ?? [])];
+      }
+
+      function renderSteps() {
+        // Re-rendering removes any open picker, so its search preview stops with it.
+        stopSearchPreview();
+        const steps = editor.draft.steps;
+        const list = $("steps-list");
+        if (steps.length) list.replaceChildren(...steps.map((s, i) => stepCard(s, i)));
+        else list.replaceChildren(el("p", { class: "hint" }, "No steps yet. Add one below. Up to 10 steps."));
+        for (const button of document.querySelectorAll("#editor-form .add-steps button")) {
+          button.disabled = steps.length >= MAX_STEPS;
+        }
+      }
+
+      function focusStep(i) {
+        const kind = $("steps-list").querySelector(`[data-index="${i}"] .kind`);
+        (kind ?? document.querySelector("#editor-form .add-steps button"))?.focus();
+      }
+
+      function addStep(kind) {
+        const steps = editor.draft.steps;
+        if (steps.length >= MAX_STEPS) return;
+        const step =
+          kind === "speak"
+            ? { kind, text: "" }
+            : kind === "obsScene"
+              ? { kind, scene: "" }
+              : { kind, url: "" };
+        steps.push(step);
+        renderSteps();
+        if (kind === "sound") {
+          $("steps-list")
+            .querySelector(`[data-index="${steps.length - 1}"] .sound-search-input`)
+            ?.focus();
+        } else {
+          focusStep(steps.length - 1);
+        }
+      }
+
+      function moveStep(i, by) {
+        const steps = editor.draft.steps;
+        const j = i + by;
+        if (j < 0 || j >= steps.length) return;
+        [steps[i], steps[j]] = [steps[j], steps[i]];
+        renderSteps();
+        focusStep(j);
+      }
+
+      function removeStep(i) {
+        editor.draft.steps.splice(i, 1);
+        renderSteps();
+        focusStep(Math.min(i, editor.draft.steps.length - 1));
+      }
+
+      function stepButton(label, index, disabled, onClick) {
+        const button = el(
+          "button",
+          { type: "button", disabled, "aria-label": `${label} step ${index + 1}` },
+          label,
+        );
+        button.onclick = onClick;
+        return button;
+      }
+
+      function stepCard(step, i) {
+        const last = editor.draft.steps.length - 1;
+        const head = el(
+          "div",
+          { class: "step-head" },
+          el("span", { class: "kind", tabindex: "-1" }, `${i + 1}. ${STEP_TITLES[step.kind]}`),
+          stepButton("Up", i, i === 0, () => moveStep(i, -1)),
+          stepButton("Down", i, i === last, () => moveStep(i, 1)),
+          stepButton("Remove", i, false, () => removeStep(i)),
+        );
+        const body =
+          step.kind === "sound"
+            ? soundFields(step, i)
+            : step.kind === "media"
+              ? mediaFields(step, i)
+              : step.kind === "speak"
+                ? speakFields(step, i)
+                : sceneFields(step, i);
+        return el("div", { class: "step", "data-index": String(i) }, head, ...body);
+      }
+
+      // A labelled field with its error line. The control carries data-key, the error data-error.
+      function field(label, control, key) {
+        return el(
+          "div",
+          { class: "fields" },
+          el("label", { class: "field-label" }, label, control),
+          el("p", { class: "field-error", "data-error": key }),
+        );
+      }
+
+      function numberInput({ label, key, min, max, step = "1", placeholder = "", value, onChange }) {
+        const input = el("input", {
+          type: "number",
+          min,
+          max,
+          step,
+          inputmode: "decimal",
+          placeholder,
+          "data-key": key,
+          "aria-label": label,
+        });
+        input.value = value ?? "";
+        input.oninput = () => onChange(input.value);
+        return input;
+      }
+
+      // Volume slider, 0 to 100 %. Stored as 0 to 1, and left out at 100 %.
+      function volumeField(step, label) {
+        const range = el("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": label });
+        const out = el("output");
+        const current = Math.round((step.volume ?? 1) * 100);
+        range.value = String(current);
+        out.textContent = `${current}%`;
+        range.oninput = () => {
+          const v = Number(range.value);
+          out.textContent = `${v}%`;
+          if (v === 100) delete step.volume;
+          else step.volume = v / 100;
+        };
+        return el("label", { class: "field-label" }, label, el("div", { class: "range-row" }, range, out));
+      }
+
+      // Inserts {name} at the caret, then fires input so the step picks it up.
+      function insertAt(input, text) {
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? start;
+        input.value = input.value.slice(0, start) + text + input.value.slice(end);
+        input.setSelectionRange(start + text.length, start + text.length);
+        input.focus();
+        input.dispatchEvent(new Event("input"));
+      }
+
+      function varChips(input) {
+        return el(
+          "div",
+          { class: "chips" },
+          el("span", {}, "Insert:"),
+          ...varsFor(editor.draft.trigger.type).map((name) => {
+            const chip = el("button", { type: "button", class: "var" }, `{${name}}`);
+            chip.onclick = () => insertAt(input, `{${name}}`);
+            return chip;
+          }),
+        );
+      }
+
+      // ---- sound ----
+
+      function soundFields(step, i) {
+        return [soundPicker(step, i), volumeField(step, "Volume")];
+      }
+
+      // ---- image or video ----
+
+      function mediaFields(step, i) {
+        const caption = el("input", {
+          maxlength: "300",
+          autocomplete: "off",
+          "aria-label": "Caption",
+          "data-key": `s${i}.text`,
+        });
+        caption.value = step.text ?? "";
+        caption.oninput = () => {
+          if (caption.value) step.text = caption.value;
+          else delete step.text;
+        };
+        const parts = [
+          mediaPicker(step, i, ["image", "video"]),
+          field(
+            "Duration (seconds)",
+            numberInput({
+              label: "Duration (seconds)",
+              key: `s${i}.duration`,
+              min: "0.5",
+              max: "120",
+              step: "0.5",
+              placeholder: "5 s for images, full video",
+              value: step.duration,
+              onChange: (raw) => setNumber(step, "duration", raw),
+            }),
+            `s${i}.duration`,
+          ),
+          el(
+            "div",
+            { class: "fields" },
+            el("label", { class: "field-label" }, "Caption (optional)", caption),
+            varChips(caption),
+          ),
+          el("p", { class: "field-error", "data-error": `s${i}.text` }),
+        ];
+        if (isVideoUrl(step.url)) parts.push(volumeField(step, "Video volume"));
+        return parts;
+      }
+
+      // ---- speech ----
+
+      function speakFields(step, i) {
+        const text = el("textarea", {
+          maxlength: "300",
+          placeholder: "Thanks for the follow, {nickname}!",
+          "aria-label": "What to say",
+          "data-key": `s${i}.text`,
+        });
+        text.value = step.text ?? "";
+        text.oninput = () => (step.text = text.value);
+        const voice = voiceSelect(step);
+        const rate = el("input", { type: "range", min: "0.5", max: "2", step: "0.1", "aria-label": "Speed" });
+        const rateOut = el("output");
+        rate.value = String(step.rate ?? 1);
+        rateOut.textContent = `${Number(rate.value).toFixed(1)}×`;
+        rate.oninput = () => {
+          const v = Math.round(Number(rate.value) * 10) / 10;
+          rateOut.textContent = `${v.toFixed(1)}×`;
+          if (v === 1) delete step.rate;
+          else step.rate = v;
+        };
+        const preview = el("button", { type: "button", class: "small" }, "Preview");
+        preview.onclick = () => previewSpeech(step);
+        return [
+          el(
+            "div",
+            { class: "fields" },
+            el("label", { class: "field-label" }, "What to say", text),
+            varChips(text),
+            el("p", { class: "field-error", "data-error": `s${i}.text` }),
+          ),
+          el(
+            "div",
+            { class: "row-2" },
+            el("label", { class: "field-label" }, "Voice", voice),
+            el("label", { class: "field-label" }, "Speed", el("div", { class: "range-row" }, rate, rateOut)),
+          ),
+          el("div", { class: "chips" }, preview),
+        ];
+      }
+
+      function fillVoices(select, current) {
+        const names = window.speechSynthesis?.getVoices?.().map((v) => v.name) ?? [];
+        const options = [
+          el("option", { value: "" }, "Default voice"),
+          ...names.map((name) => el("option", { value: name }, name)),
+        ];
+        if (current && !names.includes(current)) {
+          options.push(el("option", { value: current }, `${current} (not on this device)`));
+        }
+        select.replaceChildren(...options);
+        select.value = current ?? "";
+      }
+
+      function voiceSelect(step) {
+        const select = el("select", { "aria-label": "Voice", "data-voice": "" });
+        fillVoices(select, step.voice ?? "");
+        select.onchange = () => {
+          if (select.value) step.voice = select.value;
+          else delete step.voice;
+        };
+        return select;
+      }
+
+      // Voices load asynchronously, so refresh the open voice lists when they arrive.
+      window.speechSynthesis?.addEventListener?.("voiceschanged", () => {
+        for (const select of document.querySelectorAll("select[data-voice]"))
+          fillVoices(select, select.value);
+      });
+
+      function previewSpeech(step) {
+        const text = (step.text ?? "").replace(/\{(\w+)\}/g, (m, name) => SAMPLE[name] ?? m);
+        if (!text.trim()) return toast("Type something to say first.", true);
+        if (!("speechSynthesis" in window)) return toast("This browser can't speak.", true);
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = step.rate ?? 1;
+        if (step.voice)
+          utterance.voice = window.speechSynthesis.getVoices().find((v) => v.name === step.voice) ?? null;
+        window.speechSynthesis.speak(utterance);
+      }
+
+      // ---- OBS scene ----
+
+      function sceneFields(step, i) {
+        const scene = el("input", {
+          maxlength: "200",
+          autocomplete: "off",
+          placeholder: "Dance",
+          "aria-label": "Scene name",
+          "data-key": `s${i}.scene`,
+        });
+        scene.value = step.scene ?? "";
+        scene.oninput = () => (step.scene = scene.value);
+        const revert = numberInput({
+          label: "Switch back after (seconds)",
+          key: `s${i}.revert`,
+          min: "1",
+          max: "3600",
+          placeholder: "Stay",
+          value: step.revertAfter,
+          onChange: (raw) => setNumber(step, "revertAfter", raw),
+        });
+        return [
+          field("Scene name", scene, `s${i}.scene`),
+          el(
+            "div",
+            { class: "fields" },
+            el("label", { class: "inline" }, "Switch back after", revert, "seconds (optional)"),
+            el("p", { class: "field-error", "data-error": `s${i}.revert` }),
+          ),
+          el(
+            "p",
+            { class: "hint" },
+            "Needs the player's Page permissions set to Advanced access to OBS. Leave the switch-back empty to stay on the new scene.",
+          ),
+        ];
+      }
+
+      // ---- media library ----
+
+      const KIND_LABEL = { image: "Image", video: "Video", audio: "Sound" };
+      const NEEDS = { audio: "a sound", image: "an image", video: "a video" };
+      let mediaList = []; // newest first, from /api/media
+      let mediaFailed = false;
+      let mediaLoaded = false; // true once /api/media has answered, successfully or not
+      const mediaViews = new Set(); // { node, render, setStatus, ... } for each open library panel
+
+      function renderMediaViews() {
+        for (const view of mediaViews) {
+          if (view.node.isConnected) view.render();
+          else mediaViews.delete(view);
+        }
+      }
+
+      async function loadMedia() {
+        try {
+          mediaList = (await request("/api/media")).media ?? [];
+          mediaFailed = false;
+        } catch {
+          mediaFailed = true;
+        }
+        mediaLoaded = true;
+        renderMediaViews();
+      }
+
+      function formatSize(bytes) {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      }
+
+      function isHttpLink(text) {
+        if (!text || /\s/.test(text) || text.length > 2048) return false;
+        try {
+          const url = new URL(text);
+          return url.protocol === "https:" || url.protocol === "http:";
+        } catch {
+          return false;
+        }
+      }
+
+      async function uploadFile(file, view) {
+        const kind = MEDIA_TYPES[file.type];
+        if (!kind) return view.setStatus(UNSUPPORTED);
+        if (file.size > MAX_MEDIA_BYTES) return view.setStatus(TOO_BIG);
+        if (view.filter && !view.filter.includes(kind)) {
+          return view.setStatus(`This step needs ${view.filter.map((k) => NEEDS[k]).join(" or ")}.`);
+        }
+        view.setStatus("Uploading…");
+        try {
+          const item = await request("/api/media", {
+            method: "POST",
+            body: file,
+            headers: { "Content-Type": file.type, "X-File-Name": encodeURIComponent(file.name) },
+          });
+          mediaList = [item, ...mediaList.filter((m) => m.id !== item.id)];
+          renderMediaViews();
+          view.setStatus("");
+          view.onPick?.(item.url);
+        } catch (err) {
+          const messages = { 413: TOO_BIG, 415: UNSUPPORTED };
+          view.setStatus(messages[err.status] ?? err.message);
+        }
+      }
+
+      async function deleteMedia(item) {
+        if (!confirm(`Delete ${item.name}? Rules that use it will stop working.`)) return;
+        try {
+          await request(`/api/media/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+          mediaList = mediaList.filter((m) => m.id !== item.id);
+          renderMediaViews();
+        } catch (err) {
+          toast(`Couldn't delete ${item.name}. ${err.message}`, true);
+        }
+      }
+
+      function thumb(item) {
+        return el(
+          "span",
+          { class: "lib-thumb" },
+          item.kind === "image" ? img(item.url, { alt: "" }) : KIND_LABEL[item.kind],
+        );
+      }
+
+      // Dropping a file on a panel uploads it.
+      function wireDrops(node, view) {
+        node.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          node.classList.add("drag");
+        });
+        node.addEventListener("dragleave", (e) => {
+          if (!node.contains(e.relatedTarget)) node.classList.remove("drag");
+        });
+        node.addEventListener("drop", (e) => {
+          e.preventDefault();
+          node.classList.remove("drag");
+          const file = e.dataTransfer?.files?.[0];
+          if (file) uploadFile(file, view);
+        });
+      }
+
+      // The media library. With `onPick` it's a picker (a step's "Choose…" panel); without it,
+      // it only manages files (the card at the bottom of the page).
+      function libraryPanel({ filter = null, onPick = null, current = () => "" } = {}) {
+        const accept = Object.keys(MEDIA_TYPES)
+          .filter((t) => !filter || filter.includes(MEDIA_TYPES[t]))
+          .join(",");
+        const status = el("p", { class: "hint", role: "status" });
+        const grid = el("div", { class: "lib-grid" });
+        const fileInput = el("input", { type: "file", accept, hidden: true, "aria-label": "Upload a file" });
+        const upload = el("button", { type: "button", class: "small" }, "Upload");
+        upload.onclick = () => fileInput.click();
+        const node = el(
+          "div",
+          { class: "lib" },
+          el("div", { class: "lib-toolbar" }, upload, fileInput, status),
+          grid,
+        );
+        const view = {
+          node,
+          filter,
+          onPick,
+          setStatus: (message) => (status.textContent = message),
+          render: () => {
+            if (mediaFailed) {
+              const retry = el("button", { type: "button", class: "small" }, "Retry");
+              retry.onclick = loadMedia;
+              grid.replaceChildren(el("p", { class: "hint" }, "Couldn't load your media. ", retry));
+              return;
+            }
+            const items = mediaList.filter((m) => !filter || filter.includes(m.kind));
+            if (!items.length) {
+              grid.replaceChildren(
+                el("p", { class: "hint" }, "Nothing here yet. Upload a file or paste a link."),
+              );
+              return;
+            }
+            grid.replaceChildren(...items.map((item) => libraryItem(item, view, current)));
+          },
+        };
+        mediaViews.add(view);
+
+        fileInput.onchange = () => {
+          const file = fileInput.files?.[0];
+          fileInput.value = "";
+          if (file) uploadFile(file, view);
+        };
+        wireDrops(node, view);
+
+        if (onPick) node.append(pasteRow(view));
+        else node.append(el("p", { class: "hint" }, "Files are stored on this server. Up to 25 MB each."));
+        view.render();
+        return view;
+      }
+
+      function libraryItem(item, view, current) {
+        const selected = Boolean(view.onPick) && current() === item.url;
+        const body = view.onPick
+          ? el(
+              "button",
+              {
+                type: "button",
+                class: "lib-pick",
+                "aria-pressed": String(selected),
+                "aria-label": `Use ${item.name}`,
+              },
+              thumb(item),
+              el("span", { class: "lib-name" }, item.name),
+            )
+          : el("div", { class: "lib-pick" }, thumb(item), el("span", { class: "lib-name" }, item.name));
+        if (view.onPick) body.onclick = () => view.onPick(item.url);
+        const remove = el(
+          "button",
+          { type: "button", class: "ghost danger", "aria-label": `Delete ${item.name}` },
+          "Delete",
+        );
+        remove.onclick = () => deleteMedia(item);
+        return el(
+          "div",
+          { class: selected ? "lib-item selected" : "lib-item" },
+          body,
+          el(
+            "div",
+            { class: "lib-meta" },
+            el("span", {}, `${KIND_LABEL[item.kind]} · ${formatSize(item.size)}`),
+            remove,
+          ),
+        );
+      }
+
+      function pasteRow(view, label = "Or paste a link") {
+        const input = el("input", {
+          type: "url",
+          placeholder: "https://…",
+          autocomplete: "off",
+          "aria-label": "Link to a file",
+        });
+        const use = el("button", { type: "button", class: "small" }, "Use link");
+        use.onclick = () => {
+          const link = input.value.trim();
+          if (!isHttpLink(link)) return view.setStatus("Enter a link that starts with https:// or http://.");
+          view.onPick(link);
+        };
+        return el("label", { class: "field-label" }, label, el("div", { class: "lib-paste" }, input, use));
+      }
+
+      // The "Choose…" control for an image or video step. The grid opens inline.
+      function mediaPicker(step, i, filter) {
+        const key = `s${i}.url`;
+        const panel = el("div", { class: "media-panel", hidden: true });
+        const choose = el("button", { type: "button", "data-key": key, "aria-expanded": "false" }, "Choose…");
+        choose.onclick = () => {
+          const opening = panel.hidden;
+          choose.setAttribute("aria-expanded", String(opening));
+          panel.hidden = !opening;
+          if (!opening) {
+            stopSearchPreview();
+            return;
+          }
+          const onPick = (url) => {
+            step.url = url;
+            renderSteps();
+            document.querySelector(`#steps-list [data-key="${key}"]`)?.focus();
+          };
+          const view = libraryPanel({ filter, current: () => step.url, onPick });
+          panel.replaceChildren(view.node);
+          loadMedia();
+        };
+        return el(
+          "div",
+          { class: "media-pick" },
+          el("span", { class: "field-label" }, "Image or video"),
+          currentMedia(step),
+          el("div", { class: "chips" }, choose),
+          el("p", { class: "field-error", "data-error": key }),
+          panel,
+        );
+      }
+
+      function currentMedia(step) {
+        if (!step.url)
+          return el(
+            "div",
+            { class: "media-current" },
+            el("span", { class: "mname none" }, "No file chosen yet."),
+          );
+        const item = mediaList.find((m) => m.url === step.url);
+        const name = item?.name ?? (step.url.split("?")[0].split("/").pop() || step.url);
+        const preview = step.kind === "media" && !isVideoUrl(step.url) ? img(step.url, { alt: "" }) : null;
+        return el(
+          "div",
+          { class: "media-current" },
+          preview,
+          el("span", { class: "mname", title: step.url }, name),
+        );
+      }
+
+      // Library card at the bottom of the page.
+      function buildLibrary() {
+        $("library-slot").replaceChildren(libraryPanel().node);
+        loadMedia();
+      }
+
+      // ---- sound picker ----
+      // One panel, no tabs: a search box, your saved sounds, then MyInstants. Upload and paste-a-link sit
+      // at the bottom. Image and video steps keep the grid in mediaPicker.
+
+      const SUGGESTIONS = ["airhorn", "applause", "bruh", "drumroll", "wow", "sad trombone"];
+      const AUDIO_ACCEPT = Object.keys(MEDIA_TYPES)
+        .filter((t) => MEDIA_TYPES[t] === "audio")
+        .join(",");
+
+      const playable = (url) => (url ? safeUrl(url) : "");
+
+      // The ▶ button in every sound row. togglePreview() turns it into ■ while its sound plays.
+      function previewButton(name, url, volume) {
+        const button = el(
+          "button",
+          {
+            type: "button",
+            class: "small preview",
+            "aria-label": `Preview ${name}`,
+            "aria-pressed": "false",
+            "data-preview": url,
+            disabled: !playable(url),
+          },
+          "▶",
+        );
+        button.onclick = () => togglePreview(url, volume());
+        return button;
+      }
+
+      // One row of either sound list. Both lists use the same columns, so their rows line up:
+      // preview, title, a muted meta cell, the action, then a trailing cell.
+      function soundRow({
+        name,
+        url,
+        volume,
+        meta = null,
+        action,
+        trailing = null,
+        selected = false,
+        footer = null,
+      }) {
+        return el(
+          "li",
+          { class: selected ? "sound-row selected" : "sound-row" },
+          previewButton(name, url, volume),
+          el("span", { class: "sound-title", title: name }, name),
+          el("span", { class: "sound-meta" }, meta),
+          el("span", { class: "sound-action" }, action),
+          el("span", { class: "sound-trailing" }, trailing),
+          footer,
+        );
+      }
+
+      // A saved sound in "Your sounds". The chosen one says so, and Delete sits at the end.
+      function librarySound(item, step, onPick) {
+        const chosen = step.url === item.url;
+        let action;
+        if (chosen) {
+          action = el("span", { class: "sound-chosen" }, "✓ Selected");
+        } else {
+          action = el("button", { type: "button", class: "small", "aria-label": `Use ${item.name}` }, "Use");
+          action.onclick = () => onPick(item.url);
+        }
+        const remove = el(
+          "button",
+          { type: "button", class: "ghost danger small", "aria-label": `Delete ${item.name}` },
+          "Delete",
+        );
+        remove.onclick = () => deleteMedia(item);
+        return soundRow({
+          name: item.name,
+          url: item.url,
+          volume: () => step.volume ?? 1,
+          meta: formatSize(item.size),
+          action,
+          trailing: remove,
+          selected: chosen,
+        });
+      }
+
+      // A grey line in a sound list: a status or an empty state.
+      const soundNote = (...children) => el("li", { class: "sound-note" }, ...children);
+
+      // The chosen sound, shown on its step: preview, name, and Change.
+      function currentSound(step, change) {
+        const item = mediaList.find((m) => m.url === step.url);
+        const name = item?.name ?? (step.url.split("?")[0].split("/").pop() || step.url);
+        return el(
+          "div",
+          { class: "sound-current" },
+          previewButton(name, step.url, () => step.volume ?? 1),
+          el("span", { class: "mname", title: step.url }, name),
+          change,
+        );
+      }
+
+      // The panel. Its views stay in sync through renderMediaViews(), as the image and video library does.
+      function soundPanel(step, key, onPick) {
+        const panel = el("div", { class: "sound-panel" });
+        const status = el("p", { class: "hint sound-status", role: "status" });
+        const libList = el("ul", { class: "sound-list", "aria-label": "Your sounds" });
+        const renderLibrary = () => {
+          const query = soundSearch.draft.trim().toLowerCase();
+          const sounds = mediaList.filter((m) => m.kind === "audio");
+          if (mediaFailed) {
+            const retry = el("button", { type: "button", class: "small" }, "Retry");
+            retry.onclick = loadMedia;
+            libList.replaceChildren(soundNote("Couldn't load your sounds. ", retry));
+          } else if (!mediaLoaded) {
+            libList.replaceChildren(soundNote("Loading your sounds…"));
+          } else if (!sounds.length) {
+            libList.replaceChildren(soundNote("No saved sounds yet. Search below or upload one."));
+          } else {
+            const shown = sounds.filter((m) => m.name.toLowerCase().includes(query));
+            const rows = shown.length
+              ? shown.map((m) => librarySound(m, step, onPick))
+              : [soundNote("No saved sounds match.")];
+            libList.replaceChildren(...rows);
+          }
+          syncPreviewButtons();
+        };
+        // Uploads, drops and pasted links report through this view. renderMediaViews() calls render().
+        const view = {
+          node: panel,
+          filter: ["audio"],
+          onPick,
+          setStatus: (message) => (status.textContent = message),
+          render: renderLibrary,
+        };
+        mediaViews.add(view);
+
+        const input = el("input", {
+          type: "search",
+          class: "sound-search-input",
+          placeholder: "Search your sounds and MyInstants",
+          "aria-label": "Search your sounds and MyInstants",
+          autocomplete: "off",
+          "data-key": key,
+        });
+        input.value = soundSearch.draft;
+        // Typing filters your sounds at once. Enter, or Search, runs the MyInstants search.
+        input.oninput = () => {
+          soundSearch.draft = input.value;
+          renderLibrary();
+        };
+        input.onkeydown = (e) => {
+          // Enter searches. Stop the key here, or the editor's form would save.
+          if (e.key !== "Enter" || e.isComposing) return;
+          e.preventDefault();
+          submitSearch();
+        };
+        const go = el("button", { type: "button", class: "small" }, "Search");
+        go.onclick = submitSearch;
+
+        const fileInput = el("input", {
+          type: "file",
+          accept: AUDIO_ACCEPT,
+          hidden: true,
+          "aria-label": "Upload a sound file",
+        });
+        const upload = el("button", { type: "button", class: "ghost small" }, "Upload a file");
+        upload.onclick = () => fileInput.click();
+        fileInput.onchange = () => {
+          const file = fileInput.files?.[0];
+          fileInput.value = "";
+          if (file) uploadFile(file, view);
+        };
+        const link = pasteRow(view, "Link to a sound file");
+        link.hidden = true;
+        const paste = el(
+          "button",
+          { type: "button", class: "ghost small", "aria-expanded": "false" },
+          "Paste a link",
+        );
+        paste.onclick = () => {
+          const opening = link.hidden;
+          link.hidden = !opening;
+          paste.setAttribute("aria-expanded", String(opening));
+          if (opening) link.querySelector("input")?.focus();
+        };
+
+        wireDrops(panel, view);
+        panel.append(
+          el("div", { class: "sound-query" }, input, go),
+          el(
+            "section",
+            { class: "sound-section", "aria-label": "Your sounds" },
+            el("h3", { class: "sound-heading" }, "Your sounds"),
+            libList,
+          ),
+          myInstantsSection(input, onPick, () => step.volume ?? 1),
+          el("div", { class: "sound-foot" }, upload, paste, fileInput),
+          link,
+          status,
+        );
+        renderLibrary();
+        return panel;
+      }
+
+      // The "Sound file" part of a Play sound step. With no sound yet, the panel is open and addStep focuses
+      // its search box. With a sound, a compact row shows it, and Change opens or closes the panel.
+      function soundPicker(step, i) {
+        const key = `s${i}.url`;
+        const onPick = (url) => {
+          // Picking a sound clears the search, so the next panel starts with all your sounds.
+          soundSearch = newSoundSearch();
+          step.url = url;
+          renderSteps();
+          document.querySelector(`#steps-list [data-key="${key}"]`)?.focus();
+        };
+        const panel = soundPanel(step, key, onPick);
+        panel.hidden = Boolean(step.url);
+        const parts = [];
+        if (step.url) {
+          const change = el(
+            "button",
+            { type: "button", class: "small", "data-key": key, "aria-expanded": "false" },
+            "Change",
+          );
+          change.onclick = () => {
+            const opening = panel.hidden;
+            change.setAttribute("aria-expanded", String(opening));
+            panel.hidden = !opening;
+            if (!opening) {
+              stopSearchPreview();
+              return;
+            }
+            loadMedia();
+            panel.querySelector(".sound-search-input")?.focus();
+          };
+          parts.push(currentSound(step, change));
+        } else {
+          loadMedia();
+        }
+        parts.push(el("p", { class: "field-error", "data-error": key }), panel);
+        return el("div", { class: "sound-pick", role: "group", "aria-label": "Sound file" }, ...parts);
+      }
+
+      // ---- sound picker: search MyInstants ----
+
+      const MYINSTANTS_NOTE =
+        "Sounds from MyInstants are uploaded by its users. Make sure you're allowed to use a sound on your stream.";
+
+      // One preview player for the whole page. Its state is soundSearch, reset each time the editor opens.
+      const searchAudio = new Audio();
+      const searchViews = new Set(); // { node, render } for each search tab
+
+      function newSoundSearch() {
+        return {
+          draft: "", // the search box's text
+          query: "", // the last query sent
+          results: [],
+          page: 0, // the last page loaded
+          hasMore: false,
+          done: false, // a search has finished for `query`
+          loading: false,
+          error: null, // { status, message, page } when the last request failed
+          seq: 0, // the latest request; responses to older ones are dropped
+          playing: "", // url of the result being previewed
+          importing: new Set(), // urls being copied into the library
+          importErrors: new Map(), // url -> message
+        };
+      }
+      let soundSearch = newSoundSearch();
+
+      function renderSearchViews() {
+        for (const view of searchViews) {
+          if (view.node.isConnected) view.render();
+          else searchViews.delete(view);
+        }
+        syncPreviewButtons();
+      }
+
+      function syncPreviewButtons() {
+        for (const button of document.querySelectorAll("[data-preview]")) {
+          const on = soundSearch.playing !== "" && button.dataset.preview === soundSearch.playing;
+          button.textContent = on ? "■" : "▶";
+          button.setAttribute("aria-pressed", String(on));
+        }
+      }
+
+      function stopSearchPreview() {
+        searchAudio.pause();
+        if (!soundSearch.playing) return;
+        soundSearch.playing = "";
+        syncPreviewButtons();
+      }
+
+      function togglePreview(url, volume = 1) {
+        if (soundSearch.playing === url) {
+          stopSearchPreview();
+          return;
+        }
+        const src = playable(url);
+        if (!src) return;
+        searchAudio.pause();
+        searchAudio.src = src;
+        searchAudio.volume = volume;
+        soundSearch.playing = url;
+        syncPreviewButtons();
+        searchAudio.play().catch(() => {
+          // Ignore it if a newer preview took over, or the error event already stopped this one.
+          if (soundSearch.playing !== url) return;
+          stopSearchPreview();
+          toast("Couldn't play that sound.", true);
+        });
+      }
+
+      searchAudio.addEventListener("ended", () => stopSearchPreview());
+      searchAudio.addEventListener("error", () => {
+        if (!soundSearch.playing) return;
+        stopSearchPreview();
+        toast("Couldn't play that sound.", true);
+      });
+
+      // The MyInstants part of the panel. Before the first search it shows a hint and suggestions.
+      function myInstantsSection(input, onPick, volume) {
+        const intro = el(
+          "div",
+          { class: "sound-intro" },
+          el("p", { class: "hint" }, "Press Enter to search MyInstants for meme sounds."),
+          el(
+            "div",
+            { class: "chips" },
+            ...SUGGESTIONS.map((term) => {
+              const chip = el(
+                "button",
+                { type: "button", class: "small", "aria-label": `Search MyInstants for ${term}` },
+                term,
+              );
+              chip.onclick = () => {
+                input.value = term;
+                input.dispatchEvent(new Event("input"));
+                submitSearch();
+              };
+              return chip;
+            }),
+          ),
+        );
+        const status = el("p", { class: "hint sound-status", role: "status" });
+        const list = el("ul", { class: "sound-list", "aria-label": "MyInstants results" });
+        const more = el("div", { class: "sound-more" });
+        const node = el(
+          "section",
+          { class: "sound-section", "aria-label": "From MyInstants" },
+          el("h3", { class: "sound-heading" }, "From MyInstants"),
+          intro,
+          status,
+          list,
+          more,
+          el("p", { class: "hint" }, MYINSTANTS_NOTE),
+        );
+
+        const renderStatus = () => {
+          const s = soundSearch;
+          status.className = "hint sound-status";
+          if (s.loading) return status.replaceChildren("Searching…");
+          if (s.error) {
+            const { status: code, message, page } = s.error;
+            status.className = "field-error sound-status";
+            if (code === 400) return status.replaceChildren(message);
+            const text =
+              code === 502
+                ? "Couldn't reach MyInstants. Try again in a moment."
+                : code === 404
+                  ? "This tiklive server can't search MyInstants. Update tiklive, then retry."
+                  : "Couldn't search. Try again.";
+            const retry = el("button", { type: "button", class: "small" }, "Retry");
+            retry.onclick = () => fetchSounds(page);
+            return status.replaceChildren(text, " ", retry);
+          }
+          if (s.done && !s.results.length) return status.replaceChildren(`No sounds found for “${s.query}”.`);
+          status.replaceChildren();
+        };
+
+        const render = () => {
+          const s = soundSearch;
+          intro.hidden = Boolean(s.query || s.error || s.loading);
+          renderStatus();
+          list.replaceChildren(...s.results.map((r) => resultRow(r, onPick, volume)));
+          more.replaceChildren();
+          if (s.hasMore && s.results.length) {
+            const button = el("button", { type: "button", class: "small", disabled: s.loading }, "Load more");
+            button.onclick = () => fetchSounds(s.page + 1);
+            more.append(button);
+          }
+        };
+        searchViews.add({ node, render });
+        render();
+        return node;
+      }
+
+      // Runs the search typed in the panel's box (or a suggestion). Results come from fetchSounds().
+      function submitSearch() {
+        const query = soundSearch.draft.trim();
+        if (!query) {
+          // Drop any search still in flight, and say what's missing.
+          soundSearch.seq++;
+          soundSearch.loading = false;
+          soundSearch.error = { status: 400, message: "Type a word to search for.", page: 1 };
+          renderSearchViews();
+          return;
+        }
+        Object.assign(soundSearch, { query, results: [], page: 0, hasMore: false, done: false });
+        soundSearch.importErrors.clear();
+        fetchSounds(1);
+      }
+
+      // Loads one page of results for the current query. Page 1 replaces the list, later pages add to it.
+      async function fetchSounds(page) {
+        const state = soundSearch;
+        const seq = ++state.seq;
+        state.loading = true;
+        state.error = null;
+        renderSearchViews();
+        try {
+          const q = encodeURIComponent(state.query);
+          const data = await request(`/api/sounds/search?q=${q}&page=${page}`);
+          if (seq !== state.seq) return;
+          state.results = page === 1 ? data.results : [...state.results, ...data.results];
+          state.page = data.page;
+          state.hasMore = data.hasMore;
+          state.done = true;
+        } catch (err) {
+          if (seq !== state.seq) return;
+          state.error = { status: err.status, message: err.message, page };
+        } finally {
+          if (seq === state.seq) state.loading = false;
+          renderSearchViews();
+        }
+      }
+
+      function resultRow(result, onPick, volume) {
+        const title = result.title || "Untitled sound";
+        const busy = soundSearch.importing.has(result.url);
+        const page = safeUrl(result.pageUrl);
+        const link = page
+          ? el(
+              "a",
+              {
+                class: "button small",
+                href: page,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                title: "Open on MyInstants",
+                "aria-label": `Open ${title} on MyInstants`,
+              },
+              "↗",
+            )
+          : null;
+        const use = el(
+          "button",
+          {
+            type: "button",
+            class: "small",
+            "aria-label": `Use ${title}`,
+            "data-use": result.url,
+            disabled: busy,
+          },
+          busy ? "Adding…" : "Use",
+        );
+        use.onclick = () => importSound(result, onPick);
+        const error = soundSearch.importErrors.get(result.url);
+        return soundRow({
+          name: title,
+          url: result.url,
+          volume,
+          meta: link,
+          action: use,
+          footer: error ? el("p", { class: "field-error", role: "alert" }, error) : null,
+        });
+      }
+
+      // Copies a result into the media library, then selects it for the step, as a saved sound does.
+      async function importSound(result, onPick) {
+        if (soundSearch.importing.has(result.url)) return;
+        const state = soundSearch;
+        state.importing.add(result.url);
+        state.importErrors.delete(result.url);
+        renderSearchViews();
+        let failed = false;
+        try {
+          const name = (result.title ?? "").trim().slice(0, 200);
+          const item = await request("/api/media/import", {
+            method: "POST",
+            json: { url: result.url, ...(name ? { name } : {}) },
+          });
+          mediaList = [item, ...mediaList.filter((m) => m.id !== item.id)];
+          renderMediaViews();
+          stopSearchPreview();
+          toast("Added to your library");
+          onPick(item.url);
+        } catch (err) {
+          failed = true;
+          state.importErrors.set(
+            result.url,
+            err instanceof ApiError ? err.message : "Couldn't reach tiklive. Try again.",
+          );
+        } finally {
+          state.importing.delete(result.url);
+          renderSearchViews();
+          if (failed) {
+            // The row was rebuilt, so put focus back on its Use button.
+            for (const button of document.querySelectorAll("[data-use]")) {
+              if (button.dataset.use === result.url) button.focus();
+            }
+          }
+        }
+      }
+
+      // ---- editor: validate and save ----
+
+      const inRange = (n, lo, hi) => typeof n === "number" && Number.isFinite(n) && n >= lo && n <= hi;
+
+      function validateStep(s, i, add) {
+        const longText = (text, max) => (text ?? "").length > max;
+        switch (s.kind) {
+          case "sound":
+            if (!s.url) add(`s${i}.url`, "Choose a sound, or paste a link.");
+            break;
+          case "media":
+            if (!s.url) add(`s${i}.url`, "Choose an image or video, or paste a link.");
+            if (s.duration !== undefined && !inRange(s.duration, 0.5, 120)) {
+              add(`s${i}.duration`, "Enter 0.5 to 120 seconds.");
+            }
+            if (longText(s.text, 300)) add(`s${i}.text`, "Keep the caption to 300 characters.");
+            break;
+          case "speak":
+            if (!(s.text ?? "").trim()) add(`s${i}.text`, "Type what to say.");
+            else if (longText(s.text, 300)) add(`s${i}.text`, "Keep it to 300 characters.");
+            break;
+          case "obsScene":
+            if (!(s.scene ?? "").trim()) add(`s${i}.scene`, "Enter the scene name.");
+            if (s.revertAfter !== undefined && !inRange(s.revertAfter, 1, 3600)) {
+              add(`s${i}.revert`, "Enter 1 to 3600 seconds.");
+            }
+            break;
+        }
+      }
+
+      function validate(draft) {
+        const errors = [];
+        const add = (key, message) => errors.push({ key, message });
+        const t = draft.trigger;
+        if (t.type === "gift") {
+          if (editor.giftScope === "one" && t.giftId === undefined)
+            add("gift", "Choose a gift from the list.");
+          if (t.minCoins !== undefined && !inRange(t.minCoins, 0, 1e9))
+            add("minCoins", "Enter a number from 0 up.");
+        }
+        if (t.type === "chat" && t.match !== "any") {
+          const text = (t.text ?? "").trim();
+          if (!text) add("chat.text", "Type the command or words to match.");
+          else if (text.length > 100) add("chat.text", "Keep it to 100 characters.");
+        }
+        if (t.type === "likes" && !(Number.isInteger(t.every) && inRange(t.every, 1, 1e9))) {
+          add("likes.every", "Enter a whole number from 1 up.");
+        }
+        if (draft.steps.length === 0) add("steps", "Add at least one step.");
+        draft.steps.forEach((s, i) => validateStep(s, i, add));
+        if (
+          draft.cooldown !== undefined &&
+          !(Number.isInteger(draft.cooldown) && inRange(draft.cooldown, 0, 86400))
+        ) {
+          add("cooldown", "Cooldown must be a whole number from 0 to 86400.");
+        }
+        if (
+          draft.userCooldown !== undefined &&
+          !(Number.isInteger(draft.userCooldown) && inRange(draft.userCooldown, 0, 86400))
+        ) {
+          add("userCooldown", "Per-viewer cooldown must be a whole number from 0 to 86400.");
+        }
+        return errors;
+      }
+
+      // Builds the exact JSON the server expects: optional keys are left out, never null or "".
+      function cleanTrigger(t) {
+        switch (t.type) {
+          case "gift": {
+            const out = { type: "gift" };
+            if (t.giftId !== undefined) {
+              out.giftId = t.giftId;
+              if (t.giftName) out.giftName = t.giftName;
+            }
+            if (t.minCoins) out.minCoins = t.minCoins;
+            if (t.perGift) out.perGift = true;
+            return out;
+          }
+          case "chat": {
+            const out = { type: "chat", match: t.match };
+            if (t.match !== "any") out.text = (t.text ?? "").trim();
+            if (t.from && t.from !== "everyone") out.from = t.from;
+            return out;
+          }
+          case "likes":
+            return { type: "likes", every: t.every };
+          default:
+            return { type: t.type };
+        }
+      }
+
+      function cleanStep(s) {
+        switch (s.kind) {
+          case "sound":
+            return { kind: "sound", url: s.url, ...(s.volume !== undefined ? { volume: s.volume } : {}) };
+          case "media": {
+            const out = { kind: "media", url: s.url };
+            if (s.duration !== undefined) out.duration = s.duration;
+            const text = (s.text ?? "").trim();
+            if (text) out.text = text;
+            if (isVideoUrl(s.url) && s.volume !== undefined) out.volume = s.volume;
+            return out;
+          }
+          case "speak": {
+            const out = { kind: "speak", text: (s.text ?? "").trim() };
+            if (s.voice) out.voice = s.voice;
+            if (s.rate !== undefined) out.rate = s.rate;
+            return out;
+          }
+          default: {
+            const out = { kind: "obsScene", scene: (s.scene ?? "").trim() };
+            if (s.revertAfter !== undefined) out.revertAfter = s.revertAfter;
+            return out;
+          }
+        }
+      }
+
+      function cleanRule(draft) {
+        const rule = {
+          id: draft.id,
+          name: draft.name.trim(),
+          enabled: draft.enabled,
+          trigger: cleanTrigger(draft.trigger),
+          steps: draft.steps.map(cleanStep),
+        };
+        if (draft.cooldown) rule.cooldown = draft.cooldown;
+        if (draft.userCooldown) rule.userCooldown = draft.userCooldown;
+        if (!rule.name) rule.name = summarize(rule);
+        rule.name = clampName(rule.name);
+        return rule;
+      }
+
+      function upsert(rules, rule) {
+        return rules.some((r) => r.id === rule.id)
+          ? rules.map((r) => (r.id === rule.id ? rule : r))
+          : [...rules, rule];
+      }
+
+      async function saveEditor(event) {
+        event.preventDefault();
+        $("e-form").textContent = "";
+        const errors = validate(editor.draft);
+        showErrors(errors);
+        if (errors.length) return;
+        const rule = cleanRule(editor.draft);
+        const submit = $("editor-form").querySelector('button[type="submit"]');
+        submit.disabled = true;
+        try {
+          await commit((rules) => upsert(rules, rule));
+          editor = null;
+          $("editor").close();
+          toast("Saved");
+        } catch (err) {
+          $("e-form").textContent = err.message;
+        } finally {
+          submit.disabled = false;
+        }
+      }
+
+      // ---- wiring and start ----
+
+      $("editor-form").onsubmit = saveEditor;
+      $("editor").addEventListener("cancel", (e) => {
+        e.preventDefault();
+        closeEditor();
+      });
+      $("editor").addEventListener("close", stopSearchPreview);
+      $("editor-close").onclick = closeEditor;
+      $("editor-cancel").onclick = closeEditor;
+      $("new").onclick = () => openEditor(null);
+      $("f-name").oninput = () => (editor.draft.name = $("f-name").value);
+      $("f-cooldown").oninput = () => setNumber(editor.draft, "cooldown", $("f-cooldown").value);
+      $("f-user-cooldown").oninput = () =>
+        setNumber(editor.draft, "userCooldown", $("f-user-cooldown").value);
+      $("editor-form").querySelector(".add-steps").onclick = (e) => {
+        const button = e.target.closest("button[data-add]");
+        if (button) addStep(button.dataset.add);
+      };
+
+      boot();
+    </script>
+  </body>
+</html>

@@ -41,7 +41,7 @@ Requests without an `Origin` header (OBS, curl, Node, Bun) are allowed.
 
 ```ts
 // Follow a streamer. Replaces any earlier subscription to the same username.
-{ action: "subscribe", username: string, events?: LiveEventType[], replay?: boolean }
+{ action: "subscribe", username: string, events?: LiveEventType[], replay?: boolean, actions?: boolean }
 
 // Stop following a streamer.
 { action: "unsubscribe", username: string }
@@ -51,6 +51,7 @@ Requests without an `Origin` header (OBS, curl, Node, Bun) are allowed.
   Invalid names get an `invalid_username` error.
 - `events` omitted: all event types. `[]`: status updates only, no events.
 - `replay: true`: send recent events first (see [Replay](#replay)).
+- `actions: true`: also send `action` messages for this streamer (see [Actions](#actions)). Default off.
 - One socket can follow several streamers. The limit is `maxSubscriptionsPerSocket`
   (default **20**). Re-subscribing to a streamer you already follow doesn't count again.
 
@@ -60,6 +61,7 @@ Requests without an `Origin` header (OBS, curl, Node, Bun) are allowed.
 { type: "hello", protocolVersion: number, serverVersion: string }
 { type: "event", username: string, event: LiveEvent, replay?: true }
 { type: "status", username: string, status: SessionStatus }
+{ type: "action", username: string, action: FiredAction }
 { type: "error", code: ErrorCode, message: string }
 ```
 
@@ -69,15 +71,17 @@ Requests without an `Origin` header (OBS, curl, Node, Bun) are allowed.
   events replayed from history. Live events omit the key.
 - **`status`** is sent right after each subscribe, on every state change, and at most once
   per second while the stats change. Subscribers get no status after unsubscribing.
+- **`action`** is sent when one of the streamer's [action rules](#actions) fires. Only
+  subscriptions with `actions: true` get it. It is never replayed, and `events` doesn't filter it.
 - **`error`** is about the last client message. The connection stays open.
 
 ### Order on subscribe
 
 1. `status` for the streamer (current state and stats)
 2. `event` messages with `replay: true`, oldest first, if `replay` was requested
-3. live `event` and `status` messages
+3. live `event`, `action` and `status` messages
 
-`events` filters both replayed and live events. It never filters `status`.
+`events` filters both replayed and live events. It never filters `status` or `action`.
 
 ### Replay
 
@@ -90,13 +94,14 @@ frequent to be useful when replayed.
 Overlays can subscribe without sending a message:
 
 ```
-ws://localhost:8080/ws?username=someone&events=chat,gift&replay=1
+ws://localhost:8080/ws?username=someone&events=chat,gift&replay=1&actions=1
 ```
 
 - `username`: subscribes right after `hello`.
 - `events`: comma-separated. Unknown names are dropped silently. If none are valid, you get
   status updates only.
 - `replay=1`: same as `replay: true`. Any other value means off.
+- `actions=1`: same as `actions: true`. Any other value means off.
 
 Query `token` works here too.
 
@@ -113,30 +118,45 @@ Errors don't close the connection.
 
 ## REST API
 
-All routes except `/api/health` go through the Host, Origin and token checks above.
+All routes except `/api/health` go through the Host, Origin and token checks above. The exceptions
+are `/media/:file` and the static files: they aren't guarded, because OBS loads them as plain
+`<img>`, `<audio>` and `<video>` sources and can't send headers.
 Responses are JSON. Errors look like `{"error": "message"}`.
 
-| Method and path                         | Success                                | Notes                                                                                            |
-| --------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `GET /api/health`                       | `200 {ok: true, protocolVersion}`      | No auth, no Host or Origin check                                                                 |
-| `GET /api/sessions`                     | `200 {sessions: SessionInfo[]}`        | Only sessions that are running                                                                   |
-| `GET /api/sessions/:username`           | `200 SessionStatus`                    | `404` if no session is running for that streamer                                                 |
-| `PUT` or `POST /api/sessions/:username` | `200 SessionStatus & {watching: true}` | Keeps the session running until `DELETE`. Same as `--watch`                                      |
-| `DELETE /api/sessions/:username`        | `200 {ok: true}`                       | Stops watching. The session still closes after its subscribers leave and the idle timeout passes |
-| `POST /api/sessions/:username/simulate` | `200 {ok: true, event}`                | Injects an event as if TikTok sent it. Needs a running session                                   |
-| `GET /api/gifts`                        | `200 {gifts: GiftInfo[]}`              | TikTok's gift catalog, sorted by price. Cached for an hour. `502` if TikTok's lookup fails       |
+| Method and path                         | Success                                | Notes                                                                                                                                                                                                    |
+| --------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health`                       | `200 {ok: true, protocolVersion}`      | No auth, no Host or Origin check                                                                                                                                                                         |
+| `GET /api/sessions`                     | `200 {sessions: SessionInfo[]}`        | Only sessions that are running                                                                                                                                                                           |
+| `GET /api/sessions/:username`           | `200 SessionStatus`                    | `404` if no session is running for that streamer                                                                                                                                                         |
+| `PUT` or `POST /api/sessions/:username` | `200 SessionStatus & {watching: true}` | Keeps the session running until `DELETE`. Same as `--watch`                                                                                                                                              |
+| `DELETE /api/sessions/:username`        | `200 {ok: true}`                       | Stops watching. The session still closes after its subscribers leave and the idle timeout passes                                                                                                         |
+| `POST /api/sessions/:username/simulate` | `200 {ok: true, event}`                | Injects an event as if TikTok sent it. Needs a running session                                                                                                                                           |
+| `GET /api/gifts`                        | `200 {gifts: GiftInfo[]}`              | TikTok's gift catalog, sorted by price. Cached for an hour. `502` if TikTok's lookup fails                                                                                                               |
+| `GET /api/rules`                        | `200 RuleSet`                          | The action rules and their `revision`                                                                                                                                                                    |
+| `PUT /api/rules`                        | `200 RuleSet`                          | Body is a `RuleSet` whose `revision` is the one you last read. `409` if the rules changed since. Up to 1 MB                                                                                              |
+| `POST /api/rules/:id/test`              | `200 {ok: true, action}`               | Body `{username}`. Fires rule `:id` once, with a sample event, for a streamer with a running session. The action has `test: true`. `404` if either is missing                                            |
+| `GET /api/media`                        | `200 {media: MediaItem[]}`             | Uploaded files, newest first                                                                                                                                                                             |
+| `POST /api/media`                       | `201 MediaItem`                        | Raw file bytes. `Content-Type` is the file's type, and `X-File-Name` its percent-encoded name. Up to 25 MB. Needs `--data-dir`                                                                           |
+| `DELETE /api/media/:id`                 | `200 {ok: true}`                       | `404` if no such item                                                                                                                                                                                    |
+| `GET /api/sounds/search?q=&page=`       | `200 SoundSearchResponse`              | Searches myinstants.com. `q` is 1 to 100 characters, `page` 1 to 50. Cached for 10 minutes. `400` for a bad `q`, `502` if MyInstants fails                                                               |
+| `POST /api/media/import`                | `201 MediaItem`                        | Body `{url, name?}`. Copies a MyInstants sound (`https://www.myinstants.com/media/sounds/<file>.mp3`) into the library. `400` for any other URL, `502` if the download fails, `503` without `--data-dir` |
+| `GET /media/:file`                      | `200` the file                         | Not guarded (see above). Cached for a year. `Range` requests (for seeking in video) work on Bun. On Node the whole file is sent                                                                          |
 
 Status codes used across these routes:
 
-| Status | Meaning                                                           |
-| ------ | ----------------------------------------------------------------- |
-| `400`  | Invalid username, invalid JSON, or an event that fails validation |
-| `401`  | Missing or wrong token                                            |
-| `403`  | Host or Origin not allowed                                        |
-| `404`  | No such session (or unknown path under `/api`)                    |
-| `405`  | Method not supported on `/api/sessions/:username`                 |
-| `413`  | Simulate body over 64 KB                                          |
-| `415`  | Simulate without `Content-Type: application/json`                 |
+| Status | Meaning                                                                                                                                           |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | Invalid username, invalid JSON, a body that fails validation (rules, events), or a duplicate rule id                                              |
+| `401`  | Missing or wrong token                                                                                                                            |
+| `403`  | Host or Origin not allowed                                                                                                                        |
+| `404`  | No such session, rule or media item (or unknown path under `/api`)                                                                                |
+| `405`  | Method not supported on that route                                                                                                                |
+| `409`  | Rules were saved since you read them. The body has `revision`, the current one                                                                    |
+| `413`  | Simulate body over 64 KB, rules over 1 MB, test or import body over 16 KB, or upload over 25 MB                                                   |
+| `415`  | Body isn't JSON where JSON is required (simulate, rules, the test and import endpoints), or an upload of a type that isn't allowed                |
+| `500`  | Rules or the media index couldn't be saved                                                                                                        |
+| `502`  | MyInstants couldn't be reached, or returned an error or a file that isn't an audio file (sound search, import), or TikTok's lookup failed (gifts) |
+| `503`  | Uploads and imports are turned off because the server has no `--data-dir`                                                                         |
 
 ### Simulate body
 
@@ -241,6 +261,56 @@ interface SessionStats {
 Stats are running totals for the current stream. They reset when a connection is established
 (see the caveat in [ARCHITECTURE.md](ARCHITECTURE.md#known-gaps)).
 
+## Actions
+
+An action rule says what to play when an event happens, for example "when someone sends `!dance`,
+play a sound and show a GIF". The server checks every event against the rules. Each match becomes a
+`FiredAction`, sent as an `action` message to subscriptions with `actions: true`. The player
+(`/overlays/actions.html`) runs the steps. The server never plays anything itself.
+
+The schemas are in [`packages/contracts/src/rules.ts`](../packages/contracts/src/rules.ts):
+
+- **`Rule`**: `id`, `name`, `enabled`, `trigger`, `steps` (at most 10), and optional `cooldown` and
+  `userCooldown` in seconds.
+- **Triggers**: `gift`, `follow`, `share`, `subscribe`, `chat` (`command`, `contains` or `any`), and
+  `likes` (every N likes).
+- **Steps**: `sound`, `media`, `speak` (text to speech) and `obsScene`. Text can use placeholders
+  such as `{nickname}` and `{comment}`.
+- **`RuleSet`**: `{revision, rules}`, at most 200 rules. `revision` goes up on every save.
+- **`FiredAction`**: `id`, `ruleId`, `ruleName`, `timestamp`, `user` (when there is one), `test`, and
+  `steps` with the placeholders already filled in.
+- **`MediaItem`**: `id`, `name`, `kind` (`image`, `video` or `audio`), `contentType`, `size`, `url`
+  and `createdAt`.
+
+A media step's `url` is either `/media/<file>` (a file uploaded to this server) or an `http(s)` URL.
+Other schemes, such as `javascript:` and `data:`, are rejected. Uploads can be PNG, JPEG, GIF, WebP,
+MP4, WebM, MP3, WAV, OGG or M4A, up to 25 MB. SVG isn't allowed.
+
+Sound search reads myinstants.com on the user's behalf; nothing is sent there unless someone searches or imports.
+`POST /api/media/import` copies a found sound into the media library, so rules keep working without the site.
+
+Rules are stored in `rules.json` in the data directory (in memory when there isn't one). Save them
+with `PUT /api/rules`, sending the `revision` you last read. A save based on an older revision gets
+`409`.
+
+```json
+{
+  "type": "action",
+  "username": "someone",
+  "action": {
+    "id": "lq3x9-0",
+    "ruleId": "dance",
+    "ruleName": "Dance",
+    "timestamp": 1791770120000,
+    "user": { "userId": "1", "uniqueId": "tester", "nickname": "Tester", "profilePictureUrl": "" },
+    "steps": [{ "kind": "speak", "text": "Tester dances" }]
+  }
+}
+```
+
+- `action` messages go only to subscriptions with `actions: true` (or `actions=1` in the URL).
+- They are never replayed, and the `events` filter doesn't apply to them.
+
 ## Versioning
 
 - `PROTOCOL_VERSION` is in `packages/contracts/src/protocol.ts`. It's sent in `hello`, and
@@ -249,6 +319,8 @@ Stats are running totals for the current stream. They reset when a connection is
   type, making an optional field required, or changing what a field means.
 - **Additive** changes don't bump it. Examples: a new optional field, or a new event type.
   Clients must ignore unknown fields and event types. The browser client already does.
+- Actions (the `action` message, the `actions` subscribe option, `actions=1`, and the `/api/rules`,
+  `/api/media`, `/api/media/import`, `/api/sounds/search` and `/media/:file` routes) was an additive change, so `PROTOCOL_VERSION` stays at 1.
 - The browser client (`packages/client`) checks `hello.protocolVersion` against its own
   constant and logs one warning on a mismatch. It doesn't refuse to connect.
 - When the version changes, update `PROTOCOL_VERSION`, this document, and the client together.
