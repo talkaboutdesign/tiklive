@@ -19,7 +19,7 @@
     },
     "packages/client": {
       "name": "@tiklive/client",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@tiklive/contracts": "workspace:*",
       },
@@ -29,7 +29,7 @@
     },
     "packages/contracts": {
       "name": "@tiklive/contracts",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "devDependencies": {
         "@effect/vitest": "catalog:",
         "effect": "catalog:",
@@ -40,7 +40,7 @@
     },
     "packages/core": {
       "name": "@tiklive/core",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@tiklive/contracts": "workspace:*",
       },
@@ -55,7 +55,7 @@
     },
     "packages/server": {
       "name": "@tiklive/server",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "bin": {
         "tiklive": "./dist/bin.mjs",
       },
