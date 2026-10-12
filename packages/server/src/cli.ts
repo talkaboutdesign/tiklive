@@ -21,6 +21,15 @@ export interface CliConfig {
   readonly helpFooter?: string;
 }
 
+/** True for localhost, any 127.x.x.x address, and ::1 in its short or expanded form. */
+const isLoopback = (host: string): boolean => {
+  const h = host
+    .trim()
+    .toLowerCase()
+    .replace(/^\[(.*)\]$/, "$1");
+  return h === "localhost" || /^127(\.\d{1,3}){3}$/.test(h) || h === "::1" || h === "0:0:0:0:0:0:0:1";
+};
+
 export const parseCli = (argv: ReadonlyArray<string>, config: CliConfig = {}): ServerOptions => {
   const { values } = parseArgs({
     args: [...argv],
@@ -33,6 +42,7 @@ export const parseCli = (argv: ReadonlyArray<string>, config: CliConfig = {}): S
       "data-dir": { type: "string" },
       "allow-origin": { type: "string", multiple: true },
       "allow-host": { type: "string", multiple: true },
+      "allow-no-token": { type: "boolean" },
       "log-requests": { type: "boolean" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
@@ -51,12 +61,13 @@ Usage: tiklive [options]
 
   -p, --port <n>           Port (env PORT, default 8080)
       --host <addr>        Interface to bind (env HOST, default 127.0.0.1)
-      --token <secret>     Require this token for the API and WebSocket (env TIKLIVE_TOKEN)
+      --token <secret>     Require this token for the API and WebSocket (env TIKLIVE_TOKEN; required beyond localhost)
   -w, --watch <user>       Stay connected to a streamer; repeatable (env TIKLIVE_WATCH, comma-separated)
       --static <dir>       Serve a directory of overlays/pages
       --data-dir <dir>     Where action rules and uploads are kept (env TIKLIVE_DATA_DIR, default ~/.tiklive)
       --allow-origin <url> Allow browser pages from this origin to use the API; repeatable
       --allow-host <name>  Accept this Host header (default: localhost names only); repeatable
+      --allow-no-token     Allow listening beyond localhost without --token (not recommended)
       --log-requests       Log every HTTP request
   -h, --help               Show this help
   -v, --version            Print the version
@@ -70,7 +81,15 @@ Clients connect to ws://HOST:PORT/ws. Use the username "demo" for fake events.${
   const host = values.host ?? process.env.HOST ?? "127.0.0.1";
   const staticDir = values.static ?? config.defaultStaticDir;
   const token = values.token ?? process.env.TIKLIVE_TOKEN;
-  const loopback = ["127.0.0.1", "localhost", "::1"].includes(host);
+  const loopback = isLoopback(host);
+  const allowNoToken = values["allow-no-token"] ?? false;
+  if (!loopback && !token && !allowNoToken) {
+    console.error(
+      `error: --host ${host} exposes tiklive beyond this computer. Set --token <secret> (or TIKLIVE_TOKEN), ` +
+        "or pass --allow-no-token if that is really what you want.",
+    );
+    process.exit(1);
+  }
   const watch = [
     ...(values.watch ?? []),
     ...(process.env.TIKLIVE_WATCH?.split(",").filter(Boolean) ?? []),
