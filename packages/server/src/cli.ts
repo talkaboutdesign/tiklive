@@ -11,6 +11,8 @@ import type { ServerOptions } from "./server.ts";
 export interface CliConfig {
   /** Browser client bundle served at /tiklive.js. */
   readonly clientBundle?: string;
+  /** Directory served when `--static` is not given. */
+  readonly defaultStaticDir?: string;
   /** Files embedded in the program, served when `--static` is not given. */
   readonly assets?: ReadonlyMap<string, Uint8Array>;
   /** Extra lines appended to `--help`. */
@@ -62,6 +64,7 @@ Clients connect to ws://HOST:PORT/ws. Use the username "demo" for fake events.${
   }
 
   const host = values.host ?? process.env.HOST ?? "127.0.0.1";
+  const staticDir = values.static ?? config.defaultStaticDir;
   const token = values.token ?? process.env.TIKLIVE_TOKEN;
   const loopback = ["127.0.0.1", "localhost", "::1"].includes(host);
   const watch = [
@@ -80,7 +83,7 @@ Clients connect to ws://HOST:PORT/ws. Use the username "demo" for fake events.${
         ? ["localhost", "127.0.0.1", "[::1]"]
         : "any",
     ...(values["allow-origin"] ? { allowedOrigins: values["allow-origin"] } : {}),
-    ...(values.static ? { staticDir: values.static } : {}),
+    ...(staticDir ? { staticDir } : {}),
     ...(config.clientBundle ? { clientBundle: config.clientBundle } : {}),
     ...(config.assets ? { assets: config.assets } : {}),
     ...(values["log-requests"] ? { logRequests: true } : {}),
