@@ -2,7 +2,7 @@
  * Shares one Session per streamer between everything that needs it, starting
  * sessions on first use and stopping them after they've been unused for a while.
  */
-import type { SessionStatus } from "@tiklive/contracts";
+import type { FiredAction, LiveEvent, SessionStatus } from "@tiklive/contracts";
 import type { TikTokWeb } from "@tiklive/core";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -14,6 +14,7 @@ import * as RcMap from "effect/RcMap";
 import * as Scope from "effect/Scope";
 import type * as Socket from "effect/socket/Socket";
 import * as Session from "./Session.ts";
+import { PointsStore } from "./points/PointsStore.ts";
 import { RuleEngine } from "./rules/RuleEngine.ts";
 
 export interface SessionInfo extends SessionStatus {
@@ -50,13 +51,22 @@ export const make = (options: SessionManagerOptions = {}) =>
     const running = new Map<string, Session.Session>();
     const subscribers = new Map<string, number>();
     const watching = new Map<string, Scope.Closeable>();
-    // Optional: without a RuleEngine in context, sessions fire no actions.
+    // Both optional: without a RuleEngine sessions fire no actions, and without a PointsStore they
+    // record no points.
     const engine = yield* Effect.serviceOption(RuleEngine);
+    const points = yield* Effect.serviceOption(PointsStore);
 
-    const sessionOptionsFor = (username: string): Session.SessionOptions | undefined =>
-      Option.isSome(engine)
-        ? { ...options.session, actions: (event) => engine.value.fire(username, event) }
-        : options.session;
+    const sessionOptionsFor = (username: string): Session.SessionOptions | undefined => {
+      if (Option.isNone(engine) && Option.isNone(points)) return options.session;
+      // Points first, so a rule that runs on this event already sees the viewer's new total.
+      const actions = (event: LiveEvent): Effect.Effect<ReadonlyArray<FiredAction>> =>
+        Effect.gen(function* () {
+          if (Option.isSome(points)) yield* points.value.record(username, event);
+          if (Option.isNone(engine)) return [];
+          return yield* engine.value.fire(username, event);
+        });
+      return { ...options.session, actions };
+    };
 
     const sessions = yield* RcMap.make({
       lookup: (username: string) =>

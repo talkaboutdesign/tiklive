@@ -254,6 +254,7 @@
         gifts: "Top gifters",
         likes: "Top likers",
         both: "Top supporters",
+        points: "Top viewers",
       };
       const WHEEL_OPTIONS = "Dance,Sing,Push-ups,Shout out,Spin again,Free pick";
 
@@ -539,7 +540,7 @@
         leaderboard: {
           name: "Leaderboard",
           path: "/overlays/leaderboard.html",
-          desc: "Top gifters and likers for the current stream.",
+          desc: "Top gifters, likers or viewers for the current stream.",
           sections: [
             {
               title: "Ranking",
@@ -549,12 +550,13 @@
                   key: "metric",
                   param: "metric",
                   title: "Ranks by",
-                  desc: "Coins from gifts, likes, or both in two columns.",
+                  desc: "Coins from gifts, likes, or both in two columns. Viewer points come from the server, so they also count chat and follows.",
                   def: "gifts",
                   options: [
                     ["gifts", "Coins from gifts"],
                     ["likes", "Likes"],
                     ["both", "Both, side by side"],
+                    ["points", "Viewer points"],
                   ],
                 },
                 {

@@ -9,9 +9,10 @@ this folder at http://127.0.0.1:8080/. Build the client first with `bun run buil
 - `index.html`: the dashboard, at `/`. It's the live view of your room: chat with filters, gifts, subscriptions, an optional video preview, and per-view silencing
 - `overlays/chat.html`, `overlays/alerts.html`, `overlays/goal.html`: the OBS overlays
 - `overlays/timer.html`: a subathon countdown that gifts, follows, subs and shares add time to, saved across reloads
-- `overlays/leaderboard.html`: top gifters and likers for the current stream, saved across reloads
+- `overlays/leaderboard.html`: top gifters and likers for the current stream, saved across reloads. `metric=points` shows viewer points from the server
 - `overlays/wheel.html`: a spin wheel that spins on a gift or a chat command
 - `media.html`: the Media Library, at `/media.html`. Record a sound, upload images, videos and sounds, and rename or delete them. It shows which actions use each file
+- `viewers.html`: the Viewers page, at `/viewers.html`. The points leaderboard for the streamer, with search, adjustments, the points settings and a reset
 
 The URL parameters, the OBS setup, and how to write your own overlay are in
 [docs/user/overlays.md](../../docs/user/overlays.md). The client API is in

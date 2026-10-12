@@ -122,6 +122,7 @@ Start at [docs/README.md](docs/README.md).
 - [Run the server](docs/user/server.md): command-line options, watching streamers, tokens, security, embedding
 - [Overlays](docs/user/overlays.md): OBS setup and the built-in overlays
 - [Actions](docs/user/actions.md): play sounds, GIFs and speech, or switch OBS scenes, when viewers interact
+- [Viewer points](docs/user/points.md): loyalty points for chat, gifts, likes and follows, with a leaderboard
 - [Library](docs/user/library.md): connector, client, contracts, testing fakes, events
 - [Desktop app](docs/user/desktop.md): install, updates, first launch
 - [Wire protocol](docs/PROTOCOL.md): WebSocket messages, REST endpoints, event types
