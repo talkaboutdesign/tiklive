@@ -53,6 +53,20 @@ export const ChatEvent = Schema.Struct({
 });
 export type ChatEvent = typeof ChatEvent.Type;
 
+/**
+ * Chat messages were deleted by a moderator or the host. Remove any rendered chat
+ * message whose `msgId` is in `msgIds`. `userIds` carries user IDs when TikTok
+ * includes them, and is usually empty.
+ */
+export const ChatDeleteEvent = Schema.Struct({
+  type: Schema.tag("chatDelete"),
+  ...base,
+  /** msgIds of earlier `chat` events that were deleted. */
+  msgIds: Schema.Array(Schema.String),
+  userIds: Schema.Array(Schema.String),
+});
+export type ChatDeleteEvent = typeof ChatDeleteEvent.Type;
+
 export const GiftEvent = Schema.Struct({
   type: Schema.tag("gift"),
   ...base,
@@ -202,6 +216,7 @@ export type BattleScoreEvent = typeof BattleScoreEvent.Type;
 /** Any event that originates from TikTok. Use `LiveEvent.match` / `LiveEvent.guards` to branch on `type`. */
 export const LiveEvent = Schema.Union([
   ChatEvent,
+  ChatDeleteEvent,
   GiftEvent,
   LikeEvent,
   FollowEvent,

@@ -52,6 +52,16 @@ describe("wire codec", () => {
     expect(m.num(1)).toBe(-5);
   });
 
+  it("reads repeated uint64 fields in packed and unpacked form", () => {
+    const packed = decode(new ProtoWriter().packedVarints(1, ["7693676830666705678", 42, 0]).finish());
+    expect(packed.ids(1)).toEqual(["7693676830666705678", "42", "0"]);
+
+    const unpacked = decode(new ProtoWriter().varint(2, "300").varint(2, "5").finish());
+    expect(unpacked.ids(2)).toEqual(["300", "5"]);
+
+    expect(decode(new Uint8Array()).ids(3)).toEqual([]);
+  });
+
   it("rejects truncated input", () => {
     const buf = new ProtoWriter().string(1, "hello").finish();
     expect(() => decode(buf.subarray(0, 3))).toThrow();
@@ -285,5 +295,46 @@ describe("battle decoding", () => {
         { hostUserId: "2", score: 8, topGifters: [{ score: 5, user: { nickname: "fan11" } }, { score: 3 }] },
       ],
     });
+  });
+});
+
+describe("chat deletion decoding", () => {
+  it("decodes packed deleted message ids and user ids", () => {
+    const payload = new ProtoWriter()
+      .message(1, common("400", 1791744000456))
+      .packedVarints(2, ["7000000000000000001", "7000000000000000002"])
+      .packedVarints(3, ["555"])
+      .finish();
+
+    expect(
+      decodeLiveEvent({ method: "WebcastImDeleteMessage", payload, msgId: "", isHistory: false }),
+    ).toEqual({
+      type: "chatDelete",
+      msgId: "400",
+      timestamp: 1791744000456,
+      msgIds: ["7000000000000000001", "7000000000000000002"],
+      userIds: ["555"],
+    });
+  });
+
+  it("allows an absent user id list", () => {
+    const payload = new ProtoWriter()
+      .message(1, common("401", 1791744000789))
+      .packedVarints(2, ["9"])
+      .finish();
+    expect(
+      decodeLiveEvent({ method: "WebcastImDeleteMessage", payload, msgId: "", isHistory: false }),
+    ).toMatchObject({
+      type: "chatDelete",
+      msgIds: ["9"],
+      userIds: [],
+    });
+  });
+
+  it("drops messages that delete nothing", () => {
+    const payload = new ProtoWriter().message(1, common("402", 1791744000999)).finish();
+    expect(
+      decodeLiveEvent({ method: "WebcastImDeleteMessage", payload, msgId: "", isHistory: false }),
+    ).toBeUndefined();
   });
 });

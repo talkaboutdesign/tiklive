@@ -95,12 +95,13 @@ The four `@tiklive/*` packages are versioned together with [Changesets](https://
 2. On every push to `main`, the Release workflow opens or updates a "Release: version packages" PR that bumps
    versions and writes `CHANGELOG.md` entries.
 3. Merging that PR publishes the new versions to npm (trusted publishing, no tokens) and creates a GitHub
-   Release `vX.Y.Z` with standalone `tiklive` binaries for macOS, Linux and Windows.
+   Release `vX.Y.Z` with the server's changelog as notes.
 
 Useful commands:
 
 - `bun run release -- --dry-run` packs every package and shows what would be published.
-- `bun run build:binaries` builds the standalone binary for your platform into `dist/bin/` (`--all` for every target).
+- `bun run build:binaries` builds a standalone `tiklive` binary for your platform into `dist/bin/` (`--all` for every
+  target). Releases don't ship them yet.
 - Versions with a prerelease suffix (e.g. `0.3.0-next.1`) publish under the `next` dist-tag.
 
 ## Reporting problems

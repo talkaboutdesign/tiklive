@@ -146,8 +146,8 @@ Patterns used here:
   deciding which behavior is intended. See the "Known gaps" section of ARCHITECTURE.md.
 - **No resume cursor.** tiklive doesn't send the signed `im/fetch` request, so reconnects can drop events.
   Don't add retries that pretend otherwise. Duplicates are de-duplicated by `msgId` (a bounded set of the last 5000).
-- **Platform layers aren't exported.** `packages/server/src/platform/*.ts` is imported by `bin.ts` by relative path.
-  The package `exports` map only exposes `"."`.
+- **Package exports are public API.** `@tiklive/server` exports `.`, `./bun` and `./node` (the platform layers);
+  `@tiklive/core` exports `.` and `./testing`. The `@tiklive/source` condition maps them to `src/` for local dev.
 - The Bun-only code path: `bin.ts` picks `platform/bun.ts` when `Bun` is defined, otherwise `platform/node.ts`.
   Don't import Bun-only modules from shared code.
 - **Reference repos in `.repos/`** are for reading only. `TikTok-Live-Connector` is AGPL. Both it and

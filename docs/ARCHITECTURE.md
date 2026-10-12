@@ -208,9 +208,6 @@ These are things the code does that the design doesn't intend, or things that ar
 - **`internal` error code** is in the schema but never sent.
 - **`ServerOptions.port` and `host`** are read only by the platform layers, not by `Server.layer`. Passing
   them to `Server.layer` does nothing.
-- **Platform layers and test fakes aren't exported** from their package entry points. `@tiklive/server`
-  exports `Server`, `SessionManager`, and `Session`, but not `platform/bun` or `platform/node`. `@tiklive/core`
-  doesn't export `testing`. Package `exports` only map `"."`, so deep imports are blocked too.
 - **`encodeEnterRoom` takes an optional `cursor`**, but nothing sends one. TikTok's socket has no resume
   cursor in tiklive's flow (see Reconnects above).
-- **`packages/core/record.ts`** is a fixture-recording script that is not part of the package API.
+- **`packages/core/scripts/record.ts`** is a fixture-recording script that is not part of the package API.

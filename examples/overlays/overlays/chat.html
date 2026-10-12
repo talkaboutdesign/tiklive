@@ -152,15 +152,25 @@
             el.classList.add("fade");
             setTimeout(() => el.remove(), 700);
           }, fade * 1000);
+        return el;
       }
 
-      const events = ["chat", "emote"];
+      const events = ["chat", "emote", "chatDelete"];
       if (flag("joins")) events.push("join");
       if (flag("gifts")) events.push("gift");
       if (flag("follows")) events.push("follow");
 
       const live = new TikLive({ events, replay: true });
-      live.on("chat", (e) => add(e.user, [e.comment ?? ""]));
+      live.on("chat", (e) => {
+        const el = add(e.user, [e.comment ?? ""]);
+        if (e.msgId) el.dataset.msgId = e.msgId;
+      });
+      live.on("chatDelete", (e) => {
+        const deleted = new Set(e.msgIds);
+        for (const el of chat.querySelectorAll(".msg[data-msg-id]")) {
+          if (deleted.has(el.dataset.msgId)) el.remove();
+        }
+      });
       live.on("emote", (e) =>
         add(
           e.user,

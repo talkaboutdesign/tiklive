@@ -20,4 +20,4 @@ isEvent({ type: "follow", timestamp: Date.now(), user: {/* ... */} });
 ```
 
 This package has no runtime logic beyond the schemas and the normalizer. Field-by-field reference:
-[docs/PROTOCOL.md](../../docs/PROTOCOL.md). Source: [`src/events.ts`](src/events.ts) and [`src/protocol.ts`](src/protocol.ts).
+[docs/PROTOCOL.md](https://github.com/talkaboutdesign/tiklive/blob/main/docs/PROTOCOL.md). Source: [`src/events.ts`](https://github.com/talkaboutdesign/tiklive/blob/main/packages/contracts/src/events.ts) and [`src/protocol.ts`](https://github.com/talkaboutdesign/tiklive/blob/main/packages/contracts/src/protocol.ts).

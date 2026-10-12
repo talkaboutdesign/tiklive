@@ -3,6 +3,7 @@
  * (`/ws`), the REST API (`/api/*`), the client bundle (`/tiklive.js`) and
  * optional static files. See docs/PROTOCOL.md.
  */
+import pkg from "../package.json" with { type: "json" };
 import {
   ClientMessage,
   LIVE_EVENT_TYPES,
@@ -62,6 +63,7 @@ export interface HttpOptions {
   readonly assets?: ReadonlyMap<string, Uint8Array>;
   /** Max streamers one WebSocket may follow. Default 20. */
   readonly maxSubscriptionsPerSocket?: number;
+  /** Sent in `hello`. Defaults to this package's version. */
   readonly serverVersion?: string;
 }
 
@@ -329,7 +331,7 @@ export const routes = (options: HttpOptions = {}) => {
           yield* send({
             type: "hello",
             protocolVersion: PROTOCOL_VERSION,
-            serverVersion: options.serverVersion ?? "dev",
+            serverVersion: options.serverVersion ?? pkg.version,
           });
 
           // Shortcut for overlays: /ws?username=foo&events=chat,gift&replay=1

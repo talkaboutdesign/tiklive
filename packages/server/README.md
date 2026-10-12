@@ -11,35 +11,31 @@ overlays and apps over WebSocket, and exposes a small REST API. The CLI is `pack
 
 ## Run it
 
-From a checkout of this repo:
-
 ```sh
-bun run dev                         # builds the client, serves examples/overlays on :8080
-bun packages/server/src/bin.ts --help
+npx @tiklive/server --help          # or: bunx @tiklive/server
+npx @tiklive/server --port 8080     # then connect overlays to ws://localhost:8080/ws
 ```
 
-Full CLI flags and the REST and WebSocket API: [the root README](../../README.md#server) and
-[docs/PROTOCOL.md](../../docs/PROTOCOL.md).
+The `tiklive` bin starts with Node. To run it on Bun, install the package and run `bun node_modules/.bin/tiklive`.
+From a checkout of this repo, `bun run dev` builds the client and serves `examples/overlays` on :8080.
+
+Full CLI flags and the REST and WebSocket API: [the root README](https://github.com/talkaboutdesign/tiklive/blob/main/README.md#server) and
+[docs/PROTOCOL.md](https://github.com/talkaboutdesign/tiklive/blob/main/docs/PROTOCOL.md).
 
 ## Embed it
 
-`Server.layer` needs an HTTP server layer. Bun example:
+`@tiklive/server/bun` and `@tiklive/server/node` export `layer(options)`, the server bound to that runtime's HTTP
+server, and `runMain`:
 
 ```ts
-import { Server } from "@tiklive/server";
-import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
-import * as BunRuntime from "@effect/platform-bun/BunRuntime";
+import { layer, runMain } from "@tiklive/server/node"; // or "@tiklive/server/bun"
 import * as Layer from "effect/Layer";
 
-const app = Server.layer({ sessions: { watch: ["someone"] } }).pipe(
-  Layer.provide(
-    BunHttpServer.layer({ port: 8080, hostname: "127.0.0.1", websocket: { maxPayloadLength: 64 * 1024 } }),
-  ),
-);
-
-BunRuntime.runMain(Layer.launch(app));
+runMain(Layer.launch(layer({ port: 8080, sessions: { watch: ["someone"] } })));
 ```
 
-Add `@effect/platform-bun` or `@effect/platform-node` as a dependency of your app. The platform layers in
-`src/platform/` aren't exported from this package yet, so copy the pattern shown above.
+`@effect/platform-node` and `@effect/platform-bun` come with this package. For another HTTP server, provide one to
+`Server.layer(options)` yourself, as `src/platform/node.ts` does.
 `ServerOptions.port` and `host` are only read by those platform layers, not by `Server.layer`.
+`/tiklive.js` is served only when you pass `clientBundle`, e.g.
+`fileURLToPath(import.meta.resolve("@tiklive/client/tiklive.js"))` (the CLI does this for you).
