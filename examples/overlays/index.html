@@ -548,13 +548,14 @@
         --tag: var(--accent);
         font-weight: 700;
       }
-      .row-text {
+      .chat-text {
         max-width: 80ch;
         font-size: 15px;
         line-height: 1.4;
         overflow-wrap: anywhere;
       }
-      .row-text img {
+      /* Its own class: app.css's settings-row text class is a flex column, which stacked emotes. */
+      .chat-text img {
         width: 24px;
         height: 24px;
         margin: 0 1px;
@@ -1859,7 +1860,7 @@
         } else {
           body = el(
             "div",
-            { class: "row-text" },
+            { class: "chat-text" },
             e.comment,
             ...(e.emotes ?? []).map((m) => img(m.imageUrl, { alt: "" })),
           );
