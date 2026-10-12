@@ -4,6 +4,7 @@
  * optional static files. See docs/PROTOCOL.md.
  */
 import pkg from "../package.json" with { type: "json" };
+import { TikTokWeb } from "@tiklive/core";
 import {
   ClientMessage,
   LIVE_EVENT_TYPES,
@@ -20,6 +21,7 @@ import { timingSafeEqual } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { extname, join, resolve, sep } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -241,6 +243,26 @@ export const routes = (options: HttpOptions = {}) => {
     ),
   );
 
+  // Successful catalog lookups are cached for an hour. Failures are not cached, so the next request retries.
+  const giftCatalog = Layer.unwrap(
+    Effect.gen(function* () {
+      const tiktok = yield* TikTokWeb.TikTokWeb;
+      const gifts = yield* Effect.cachedWithTTL(tiktok.getGifts(), (exit) =>
+        Exit.isSuccess(exit) ? "1 hour" : 0,
+      );
+      return HttpRouter.add(
+        "GET",
+        "/api/gifts",
+        guarded(() =>
+          gifts.pipe(
+            Effect.map((list) => json({ gifts: list })),
+            Effect.catchTag("TikTokRequestError", (error) => Effect.succeed(jsonError(502, error.message))),
+          ),
+        ),
+      );
+    }),
+  );
+
   // ---- WebSocket ----
 
   const wsRoute = HttpRouter.add(
@@ -442,6 +464,7 @@ export const routes = (options: HttpOptions = {}) => {
     listSessions,
     sessionRoute,
     simulateRoute,
+    giftCatalog,
     wsRoute,
     clientBundle,
     staticFiles,

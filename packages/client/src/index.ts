@@ -18,6 +18,7 @@
  */
 import type {
   ErrorMessage,
+  GiftInfo,
   HelloMessage,
   LiveEvent,
   LiveEventOf,
@@ -103,6 +104,9 @@ interface LocationLike {
  *
  * Overlays are usually configured through the page URL, so one file serves any
  * streamer: `/overlays/chat.html?username=yourname&token=...`.
+ *
+ * {@link TikLive.gifts} fetches the gift catalog (names, prices, images) over HTTP
+ * from the same server, for labelling gifts in an overlay.
  */
 export class TikLive {
   /** Streamer being followed. */
@@ -175,6 +179,23 @@ export class TikLive {
     return () => {
       this.#handlers.get(type)?.delete(handler);
     };
+  }
+
+  /**
+   * Fetches the gift catalog from the server's `GET /api/gifts`, sorted by price.
+   * The server caches it for an hour. Uses the same host and token as the WebSocket.
+   *
+   * @throws If the request fails or the server answers with an error status.
+   */
+  async gifts(): Promise<GiftInfo[]> {
+    const url = new URL(this.server);
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    url.pathname = "/api/gifts";
+    if (this.token) url.searchParams.set("token", this.token);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`[tiklive] gift list request failed with HTTP ${res.status}`);
+    const body = (await res.json()) as { gifts: GiftInfo[] };
+    return body.gifts;
   }
 
   /**
