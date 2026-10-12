@@ -148,8 +148,16 @@ problem is OBS's audio or browser source, not tiklive.
 
 Uploads need a data folder. Without one, the server turns uploads off and the library says so.
 
-Uploads, pasted links and imported sounds are managed in the **Media library** at the bottom of the Actions page.
-It's collapsed until you open it.
+Uploads, pasted links and imported sounds are listed in the **Media library** at the bottom of the Actions page.
+It's collapsed until you open it. The **Media** page in the sidebar shows the whole library: play, rename and delete
+files, upload by dropping them on the page, and see how many actions use each one.
+
+### Record a sound
+
+On the Media page, click **New sound**, then record up to 30 seconds from your microphone. Drag the Start and End
+sliders to trim it, play it back, name it and save. It's saved as a WAV file and shows up with your other sounds in
+Actions. The first time, the desktop app asks for microphone access. If you said no, turn it on in System Settings
+→ Privacy & Security → Microphone (macOS), or Settings → Privacy → Microphone (Windows).
 
 ## Limits
 

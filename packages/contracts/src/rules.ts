@@ -267,3 +267,10 @@ export const ImportMediaRequest = Schema.Struct({
   name: Schema.optionalKey(Text(200)),
 });
 export type ImportMediaRequest = typeof ImportMediaRequest.Type;
+
+/** Body of `PATCH /api/media/:id`. */
+export const RenameMediaRequest = Schema.Struct({
+  /** New display name. The file and its URL don't change, so rules that use it keep working. */
+  name: NonEmptyText(200),
+});
+export type RenameMediaRequest = typeof RenameMediaRequest.Type;

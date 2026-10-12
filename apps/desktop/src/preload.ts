@@ -8,6 +8,7 @@ import type { UpdateState } from "./updates/updateMachine.ts";
 
 const bridge: DesktopBridge = {
   platform: process.platform,
+  requestMicrophone: () => ipcRenderer.invoke(IPC.requestMicrophone),
   updates: {
     getState: () => ipcRenderer.invoke(IPC.updateGetState),
     check: () => ipcRenderer.invoke(IPC.updateCheck),

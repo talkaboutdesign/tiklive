@@ -1,0 +1,1418 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Media · tiklive</title>
+    <script>
+      try {
+        var t = localStorage.getItem("tiklive.theme");
+        document.documentElement.dataset.theme = t === "light" || t === "dark" ? t : "system";
+      } catch {}
+    </script>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/app/app.css" />
+    <style>
+      /* Media page parts. The shell (app.css) supplies the tokens, sidebar, buttons, inputs and segmented control. */
+
+      .media-tools {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin: 4px 0 14px;
+      }
+      .media-tools .input {
+        flex: 1 1 200px;
+        max-width: 300px;
+      }
+      #status {
+        min-height: 1.4em;
+        margin: 0 0 6px 4px;
+      }
+      .media-section {
+        margin-bottom: 26px;
+      }
+      #content:focus {
+        outline: none;
+      }
+
+      /* Sounds: rows */
+      .item-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      .item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 60px;
+        padding: 10px 14px;
+      }
+      .item + .item {
+        border-top: 1px solid var(--line);
+      }
+      .item.is-new {
+        background: var(--accent-soft);
+      }
+      .item-main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .item-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-weight: 500;
+      }
+      .item-meta {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .item-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 4px;
+        flex: none;
+      }
+
+      /* Images and videos: cards */
+      .media-grid {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 14px;
+      }
+      .media-card {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      .media-card.is-new {
+        box-shadow: inset 0 0 0 2px var(--accent);
+      }
+      .thumb {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        background: var(--segmented);
+      }
+      .card-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 10px 10px 8px 12px;
+      }
+      .card-body .item-actions {
+        margin-top: 6px;
+        justify-content: flex-start;
+      }
+      .card-body .item-meta {
+        white-space: normal;
+      }
+      .card-body .confirm {
+        justify-content: flex-start;
+        margin-top: 6px;
+      }
+      .card-body .confirm > span {
+        flex: 1 1 100%;
+      }
+
+      /* Shared controls */
+      .icon-btn,
+      .play-btn {
+        flex: none;
+        display: inline-grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+      .play-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--segmented);
+        color: var(--text);
+      }
+      .icon-btn:hover:not(:disabled),
+      .play-btn:hover:not(:disabled) {
+        color: var(--text);
+        background: var(--segmented);
+      }
+      .icon-btn.danger:hover:not(:disabled) {
+        color: var(--danger);
+      }
+      .icon-btn:focus-visible,
+      .play-btn:focus-visible,
+      .rec-big:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 2px;
+      }
+      .name-input {
+        width: 100%;
+      }
+      .confirm {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+        max-width: 100%;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .empty {
+        padding: 44px 16px;
+        text-align: center;
+        color: var(--muted);
+        border: 1px dashed var(--line-strong);
+        border-radius: var(--radius);
+      }
+      .empty p {
+        margin: 0;
+      }
+      .empty .btn {
+        margin-top: 12px;
+      }
+
+      /* Drop anywhere to upload */
+      .drop-overlay {
+        position: fixed;
+        inset: 12px;
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        border: 2px dashed var(--accent);
+        border-radius: 18px;
+        background: color-mix(in srgb, var(--bg) 84%, transparent);
+      }
+      .drop-overlay[hidden] {
+        display: none;
+      }
+      .drop-box {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 16px;
+        color: var(--text);
+      }
+
+      /* Recorder dialog */
+      dialog.recorder {
+        width: min(540px, calc(100vw - 32px));
+        padding: 0;
+        color: var(--text);
+        background: var(--surface);
+        border: 1px solid var(--line-strong);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+      }
+      dialog.recorder::backdrop {
+        background: rgba(10, 10, 14, 0.45);
+      }
+      .rec-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 12px 12px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+      .rec-head h2 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .rec-body {
+        padding: 20px;
+      }
+      .rec-idle,
+      .rec-recording {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 0 6px;
+        text-align: center;
+      }
+      .rec-big {
+        display: grid;
+        place-items: center;
+        width: 96px;
+        height: 96px;
+        border: 0;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--accent-text);
+        cursor: pointer;
+        box-shadow: 0 8px 24px var(--accent-soft);
+      }
+      .rec-big:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .rec-big:hover:not(:disabled) {
+        filter: brightness(1.06);
+      }
+      .rec-time {
+        font-size: 28px;
+        font-variant-numeric: tabular-nums;
+      }
+      .rec-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .rec-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--live);
+      }
+      .meter {
+        width: min(320px, 100%);
+        height: 8px;
+        overflow: hidden;
+        background: var(--segmented);
+        border-radius: 99px;
+      }
+      .meter-bar {
+        display: block;
+        width: 0;
+        height: 100%;
+        background: var(--accent);
+      }
+      .rec-edit {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .wave-wrap {
+        padding: 8px 0;
+        background: var(--segmented);
+        border-radius: 10px;
+      }
+      .wave {
+        display: block;
+        width: 100%;
+        height: 120px;
+      }
+      .rec-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .rec-row .play-btn {
+        width: 36px;
+        height: 36px;
+      }
+      .rec-row .rec-range {
+        flex: 1;
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+      .trim-row {
+        display: grid;
+        grid-template-columns: 44px 1fr 72px;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .trim-out {
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .rec-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .rec-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .rec-pad {
+        padding: 40px 0;
+        text-align: center;
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .rec-dot {
+          animation: rec-pulse 1.2s ease-in-out infinite;
+        }
+      }
+      @keyframes rec-pulse {
+        50% {
+          opacity: 0.3;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .item.is-new {
+          background: var(--accent-soft);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside id="sidebar"></aside>
+      <main id="main">
+        <header id="page-header"></header>
+        <div class="page" id="page">
+          <div class="media-tools">
+            <div class="segmented" role="radiogroup" aria-label="Show">
+              <label><input type="radio" name="kind" value="all" checked /> All</label>
+              <label><input type="radio" name="kind" value="sounds" /> Sounds</label>
+              <label><input type="radio" name="kind" value="images" /> Images</label>
+              <label><input type="radio" name="kind" value="videos" /> Videos</label>
+            </div>
+            <input
+              class="input"
+              type="search"
+              id="search"
+              placeholder="Search by name"
+              aria-label="Search by name"
+            />
+          </div>
+          <p class="hint" id="status" role="status"></p>
+          <div id="content" tabindex="-1"></div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module">
+      import { api, el, icon, mountShell, toast } from "/app/shell.js";
+      import {
+        ACCEPT,
+        FILTERS,
+        cleanName,
+        deleteWarning,
+        fileProblem,
+        filterItems,
+        formatDate,
+        formatDuration,
+        formatSize,
+        nextRecordingName,
+        uploadErrorMessage,
+        usageByUrl,
+        usageText,
+      } from "/app/media.js";
+      import {
+        MAX_RECORD_SECONDS,
+        decodeRecording,
+        downmix,
+        drawWaveform,
+        encodeWav,
+        formatClock,
+        formatPrecise,
+        openMicrophone,
+        peaks,
+        playRange,
+        setSelectionEdge,
+        startRecording,
+        trimRange,
+      } from "/app/record.js";
+
+      const WAVE_BINS = 1200;
+      const MIC_DENIED =
+        "tiklive can't use the microphone. Allow it in System Settings → Privacy & Security → Microphone, then try again.";
+      const MIC_MISSING = "No microphone found.";
+      const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+      // ---------- State ----------
+
+      const state = {
+        items: [],
+        usage: null, // Map from media url to action count, or null when the rules didn't load
+        loaded: false,
+        failed: false,
+        filter: "all",
+        query: "",
+        playingUrl: null,
+        editingId: null,
+        draft: "",
+        confirmingId: null,
+        saving: false,
+        highlightId: null,
+        focusKey: null, // data-key of the control to focus after the next render
+        durations: new Map(),
+        probing: new Set(),
+      };
+
+      // ---------- Page shell and controls ----------
+
+      const newSoundButton = el(
+        "button",
+        { type: "button", class: "btn btn-primary" },
+        icon("mic", 16),
+        "New sound",
+      );
+      const uploadButton = el("button", { type: "button", class: "btn" }, icon("upload", 16), "Upload");
+      mountShell({ page: "media", crumbs: ["Media"], actions: [newSoundButton, uploadButton] });
+
+      const content = document.getElementById("content");
+      const status = document.getElementById("status");
+      const search = document.getElementById("search");
+
+      const fileInput = el("input", {
+        type: "file",
+        multiple: true,
+        accept: ACCEPT,
+        hidden: true,
+        "aria-label": "Upload files",
+      });
+      document.body.append(fileInput);
+      uploadButton.onclick = () => fileInput.click();
+      fileInput.onchange = () => {
+        const files = [...(fileInput.files ?? [])];
+        fileInput.value = "";
+        if (files.length) uploadFiles(files);
+      };
+      newSoundButton.onclick = openRecorder;
+
+      for (const radio of document.querySelectorAll('input[name="kind"]')) {
+        radio.addEventListener("change", () => {
+          if (radio.checked) {
+            state.filter = radio.value;
+            render();
+          }
+        });
+      }
+      search.addEventListener("input", () => {
+        state.query = search.value;
+        render();
+      });
+
+      // ---------- Playing library sounds (one at a time) ----------
+
+      const audio = new Audio();
+      audio.preload = "none";
+      const settlePlayback = () => {
+        if (audio.paused && state.playingUrl) {
+          state.playingUrl = null;
+          render();
+        }
+      };
+      audio.addEventListener("pause", settlePlayback);
+      audio.addEventListener("ended", settlePlayback);
+      audio.addEventListener("error", () => {
+        if (!state.playingUrl) return;
+        const item = itemByUrl(state.playingUrl);
+        state.playingUrl = null;
+        render();
+        toast(`Couldn't play ${item?.name ?? "that sound"}.`, { error: true });
+      });
+
+      function togglePlay(item) {
+        if (state.playingUrl === item.url) {
+          audio.pause();
+          return;
+        }
+        stopPreview();
+        audio.src = item.url;
+        state.playingUrl = item.url;
+        render();
+        audio.play().catch((error) => {
+          if (error?.name === "AbortError") return;
+          state.playingUrl = null;
+          render();
+          toast(`Couldn't play ${item.name}.`, { error: true });
+        });
+      }
+
+      function pauseEverything() {
+        audio.pause();
+        stopPreview();
+        if (rec.recording) rec.recording.stop(); // Keep what was captured; the editor opens with it.
+      }
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden) pauseEverything();
+      });
+      window.addEventListener("pagehide", pauseEverything);
+
+      // ---------- Loading ----------
+
+      async function load() {
+        const [media, rules] = await Promise.allSettled([api("/api/media"), api("/api/rules")]);
+        if (media.status === "fulfilled") {
+          state.items = media.value?.media ?? [];
+          state.failed = false;
+        } else {
+          state.failed = true;
+          toast(`Couldn't load your media. ${media.reason?.message ?? ""}`.trim(), { error: true });
+        }
+        state.usage = rules.status === "fulfilled" ? usageByUrl(rules.value?.rules) : null;
+        state.loaded = true;
+        render();
+      }
+
+      function itemByUrl(url) {
+        return state.items.find((item) => item.url === url);
+      }
+
+      function probeDurations() {
+        for (const item of state.items) {
+          if (item.kind !== "audio" || state.durations.has(item.url) || state.probing.has(item.url)) continue;
+          state.probing.add(item.url);
+          const probe = new Audio();
+          probe.preload = "metadata";
+          probe.onloadedmetadata = () => {
+            if (Number.isFinite(probe.duration)) {
+              state.durations.set(item.url, probe.duration);
+              scheduleRender();
+            }
+          };
+          probe.src = item.url;
+        }
+      }
+
+      // ---------- Rendering ----------
+
+      let renderQueued = false;
+      function scheduleRender() {
+        if (renderQueued) return;
+        renderQueued = true;
+        requestAnimationFrame(() => {
+          renderQueued = false;
+          render();
+        });
+      }
+
+      function render() {
+        const active = document.activeElement;
+        const activeKey = content.contains(active) ? active.dataset.key : undefined;
+        const target = state.focusKey ?? activeKey;
+        state.focusKey = null;
+        content.replaceChildren(...buildContent());
+        if (target) {
+          const node = [...content.querySelectorAll("[data-key]")].find((n) => n.dataset.key === target);
+          if (node) {
+            node.focus();
+            if (node instanceof HTMLInputElement && node.type === "text") {
+              node.setSelectionRange(node.value.length, node.value.length);
+            }
+          }
+        }
+        probeDurations();
+      }
+
+      function buildContent() {
+        if (!state.loaded) return [el("p", { class: "hint" }, "Loading media…")];
+        if (state.failed && !state.items.length) {
+          const retry = el("button", { type: "button", class: "btn" }, icon("retry", 16), "Retry");
+          retry.onclick = () => {
+            state.loaded = false;
+            render();
+            load();
+          };
+          return [el("div", { class: "empty" }, el("p", {}, "Couldn't load your media."), retry)];
+        }
+        if (!state.items.length) {
+          return [
+            el("div", { class: "empty" }, el("p", {}, "No media yet. Record a sound or drop files here.")),
+          ];
+        }
+
+        const shown = filterItems(state.items, { filter: state.filter, query: state.query });
+        const query = state.query.trim();
+        if (!shown.length) {
+          return [
+            el(
+              "div",
+              { class: "empty" },
+              el("p", {}, query ? `Nothing matches “${query}”.` : "Nothing here for this filter yet."),
+            ),
+          ];
+        }
+
+        const sounds = shown.filter((item) => item.kind === "audio");
+        const visuals = shown.filter((item) => item.kind !== "audio");
+        const headings = state.filter === "all";
+        const out = [];
+        if (sounds.length) {
+          out.push(
+            el(
+              "section",
+              { class: "media-section", "aria-label": "Sounds" },
+              headings ? el("h2", { class: "section-title" }, "Sounds") : null,
+              el("ul", { class: "item-list" }, ...sounds.map(soundRow)),
+            ),
+          );
+        }
+        if (visuals.length) {
+          out.push(
+            el(
+              "section",
+              { class: "media-section", "aria-label": "Images and videos" },
+              headings ? el("h2", { class: "section-title" }, "Images and videos") : null,
+              el("ul", { class: "media-grid" }, ...visuals.map(cardItem)),
+            ),
+          );
+        }
+        return out;
+      }
+
+      function rowClass(item, base) {
+        return state.highlightId === item.id ? `${base} is-new` : base;
+      }
+
+      function metaText(item) {
+        const duration = item.kind === "audio" ? formatDuration(state.durations.get(item.url)) : "";
+        const usage = state.usage ? usageText(state.usage.get(item.url) ?? 0) : "";
+        return [duration, formatSize(item.size), usage, formatDate(item.createdAt)]
+          .filter(Boolean)
+          .join(" · ");
+      }
+
+      function soundRow(item) {
+        const playing = state.playingUrl === item.url;
+        const play = el(
+          "button",
+          {
+            type: "button",
+            class: "play-btn",
+            "aria-label": `${playing ? "Pause" : "Play"} ${item.name}`,
+            "aria-pressed": String(playing),
+            "data-key": `${item.id}:play`,
+          },
+          icon(playing ? "pause" : "play", 16),
+        );
+        play.onclick = () => togglePlay(item);
+        return el(
+          "li",
+          { class: rowClass(item, "item"), "data-id": item.id },
+          play,
+          itemMain(item),
+          itemActions(item),
+        );
+      }
+
+      function cardItem(item) {
+        const media =
+          item.kind === "image"
+            ? el("img", { class: "thumb", src: item.url, alt: "", loading: "lazy" })
+            : el("video", {
+                class: "thumb",
+                src: item.url,
+                muted: true,
+                playsinline: true,
+                preload: "metadata",
+                "aria-hidden": "true",
+              });
+        return el(
+          "li",
+          { class: rowClass(item, "media-card"), "data-id": item.id },
+          media,
+          el("div", { class: "card-body" }, itemMain(item), itemActions(item)),
+        );
+      }
+
+      // The name, or the rename field, with its meta line.
+      function itemMain(item) {
+        if (state.editingId === item.id) {
+          return el(
+            "div",
+            { class: "item-main" },
+            renameField(item),
+            el("span", { class: "hint" }, "Enter to save, Esc to cancel."),
+          );
+        }
+        return el(
+          "div",
+          { class: "item-main" },
+          el("span", { class: "item-name", title: item.name }, item.name),
+          el("span", { class: "item-meta" }, metaText(item)),
+        );
+      }
+
+      function itemActions(item) {
+        if (state.confirmingId === item.id) return confirmBox(item);
+        const rename = el(
+          "button",
+          {
+            type: "button",
+            class: "icon-btn",
+            title: "Rename",
+            "aria-label": `Rename ${item.name}`,
+            "data-key": `${item.id}:rename`,
+          },
+          icon("pencil", 16),
+        );
+        rename.onclick = () => startRename(item);
+        const remove = el(
+          "button",
+          {
+            type: "button",
+            class: "icon-btn danger",
+            title: "Delete",
+            "aria-label": `Delete ${item.name}`,
+            "data-key": `${item.id}:delete`,
+          },
+          icon("trash", 16),
+        );
+        remove.onclick = () => askDelete(item);
+        return el("div", { class: "item-actions" }, rename, remove);
+      }
+
+      function renameField(item) {
+        const input = el("input", {
+          class: "input name-input",
+          type: "text",
+          maxlength: "100",
+          value: state.draft,
+          disabled: state.saving,
+          "aria-label": `New name for ${item.name}`,
+          "data-key": `${item.id}:name-input`,
+        });
+        input.addEventListener("input", () => {
+          state.draft = input.value;
+        });
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commitRename(item);
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            cancelRename(item);
+          }
+        });
+        return input;
+      }
+
+      function confirmBox(item) {
+        const used = state.usage?.get(item.url) ?? 0;
+        const question = `Delete ${item.name}?`;
+        const confirm = el(
+          "button",
+          {
+            type: "button",
+            class: "btn btn-danger",
+            disabled: state.saving,
+            "data-key": `${item.id}:confirm`,
+          },
+          "Delete",
+        );
+        confirm.onclick = () => deleteItem(item);
+        const keep = el(
+          "button",
+          { type: "button", class: "btn btn-ghost", "data-key": `${item.id}:keep` },
+          "Cancel",
+        );
+        keep.onclick = () => {
+          state.confirmingId = null;
+          state.focusKey = `${item.id}:delete`;
+          render();
+        };
+        const warning = deleteWarning(used);
+        return el(
+          "div",
+          { class: "confirm", role: "group", "aria-label": `Confirm delete ${item.name}` },
+          el("span", {}, warning ? `${question} ${warning}` : question),
+          confirm,
+          keep,
+        );
+      }
+
+      // ---------- Rename and delete ----------
+
+      function startRename(item) {
+        state.editingId = item.id;
+        state.draft = item.name;
+        state.confirmingId = null;
+        state.focusKey = `${item.id}:name-input`;
+        render();
+      }
+
+      function cancelRename(item) {
+        state.editingId = null;
+        state.focusKey = `${item.id}:rename`;
+        render();
+      }
+
+      async function commitRename(item) {
+        if (state.saving) return;
+        const name = cleanName(state.draft);
+        if (!name) {
+          state.focusKey = `${item.id}:name-input`;
+          toast("A name can't be empty.", { error: true });
+          render();
+          return;
+        }
+        if (name === item.name) {
+          cancelRename(item);
+          return;
+        }
+        state.saving = true;
+        render();
+        try {
+          const updated = await api(`/api/media/${encodeURIComponent(item.id)}`, {
+            method: "PATCH",
+            json: { name },
+          });
+          state.items = state.items.map((m) => (m.id === item.id ? updated : m));
+          state.editingId = null;
+          state.focusKey = `${item.id}:rename`;
+        } catch (error) {
+          state.focusKey = `${item.id}:name-input`;
+          toast(`Couldn't rename ${item.name}. ${error.message}`, { error: true });
+        } finally {
+          state.saving = false;
+          render();
+        }
+      }
+
+      function askDelete(item) {
+        state.confirmingId = item.id;
+        state.editingId = null;
+        state.focusKey = `${item.id}:keep`;
+        render();
+      }
+
+      async function deleteItem(item) {
+        if (state.saving) return;
+        state.saving = true;
+        let removed = false;
+        try {
+          await api(`/api/media/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+          state.items = state.items.filter((m) => m.id !== item.id);
+          if (state.playingUrl === item.url) audio.pause();
+          removed = true;
+        } catch (error) {
+          toast(`Couldn't delete ${item.name}. ${error.message}`, { error: true });
+        } finally {
+          state.saving = false;
+          state.confirmingId = null;
+          render();
+          if (removed) content.focus();
+        }
+      }
+
+      // ---------- Upload and drop ----------
+
+      async function uploadFiles(files) {
+        let saved = 0;
+        let lastId = null;
+        for (const [index, file] of files.entries()) {
+          const problem = fileProblem(file);
+          if (problem) {
+            toast(problem, { error: true });
+            continue;
+          }
+          status.textContent = files.length > 1 ? `Uploading ${index + 1} of ${files.length}…` : "Uploading…";
+          try {
+            const item = await api("/api/media", {
+              method: "POST",
+              body: file,
+              headers: { "Content-Type": file.type, "X-File-Name": encodeURIComponent(file.name) },
+            });
+            state.items = [item, ...state.items.filter((m) => m.id !== item.id)];
+            saved += 1;
+            lastId = item.id;
+            render();
+          } catch (error) {
+            toast(`Couldn't upload ${file.name}. ${uploadErrorMessage(error)}`, { error: true });
+          }
+        }
+        status.textContent = "";
+        if (saved) {
+          toast(saved === 1 ? "Uploaded 1 file." : `Uploaded ${saved} files.`);
+          highlight(lastId);
+        }
+      }
+
+      let highlightTimer = 0;
+      function highlight(id) {
+        if (!id) return;
+        state.highlightId = id;
+        render();
+        const node = [...content.querySelectorAll("[data-id]")].find((n) => n.dataset.id === id);
+        node?.scrollIntoView({ block: "nearest", behavior: reduceMotion.matches ? "auto" : "smooth" });
+        clearTimeout(highlightTimer);
+        highlightTimer = setTimeout(() => {
+          state.highlightId = null;
+          render();
+        }, 2500);
+      }
+
+      function hasFiles(event) {
+        return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+      }
+      const dropOverlay = el(
+        "div",
+        { class: "drop-overlay", hidden: true, "aria-hidden": "true" },
+        el("div", { class: "drop-box" }, icon("upload", 28), el("span", {}, "Drop files to upload")),
+      );
+      document.body.append(dropOverlay);
+      let dragDepth = 0;
+      window.addEventListener("dragenter", (event) => {
+        if (!hasFiles(event) || rec.open) return;
+        event.preventDefault();
+        dragDepth += 1;
+        dropOverlay.hidden = false;
+      });
+      window.addEventListener("dragover", (event) => {
+        if (!hasFiles(event) || rec.open) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      });
+      window.addEventListener("dragleave", (event) => {
+        if (!hasFiles(event)) return;
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) dropOverlay.hidden = true;
+      });
+      window.addEventListener("drop", (event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        dragDepth = 0;
+        dropOverlay.hidden = true;
+        if (rec.open) return;
+        const files = Array.from(event.dataTransfer?.files ?? []);
+        if (files.length) uploadFiles(files);
+      });
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") dropOverlay.hidden = true;
+      });
+
+      // ---------- Recorder dialog ----------
+
+      const rec = {
+        open: false,
+        mode: "idle", // idle | starting | recording | decoding | edit
+        error: "",
+        recording: null,
+        buffer: null,
+        channels: null,
+        bins: null,
+        duration: 0,
+        selection: { start: 0, end: 0 },
+        name: "",
+        saving: false,
+        player: null,
+        playhead: null,
+        canvas: null,
+        trim: null,
+        info: null,
+        playButton: null,
+        timerText: null,
+        meterBar: null,
+      };
+
+      const recBody = el("div", { class: "rec-body" });
+      const closeX = el(
+        "button",
+        { type: "button", class: "icon-btn", "aria-label": "Close" },
+        icon("close", 18),
+      );
+      closeX.onclick = () => dialog.close();
+      const dialog = el(
+        "dialog",
+        { class: "recorder", "aria-labelledby": "rec-title" },
+        el("div", { class: "rec-head" }, el("h2", { id: "rec-title" }, "New sound"), closeX),
+        recBody,
+      );
+      dialog.addEventListener("close", closeRecorder);
+      document.body.append(dialog);
+      window.addEventListener("resize", drawEdit);
+
+      function openRecorder() {
+        if (dialog.open) return;
+        rec.open = true;
+        rec.mode = "idle";
+        rec.error = "";
+        renderRecorder();
+        dialog.showModal();
+      }
+
+      function closeRecorder() {
+        rec.open = false;
+        rec.recording?.cancel();
+        rec.recording = null;
+        stopPreview();
+        rec.buffer = null;
+        rec.channels = null;
+        rec.bins = null;
+        rec.canvas = null;
+        rec.saving = false;
+        rec.mode = "idle";
+        rec.error = "";
+      }
+
+      function renderRecorder() {
+        rec.canvas = null;
+        rec.timerText = null;
+        rec.meterBar = null;
+        rec.trim = null;
+        rec.info = null;
+        rec.playButton = null;
+        let view;
+        if (rec.mode === "idle" || rec.mode === "starting") view = idleView();
+        else if (rec.mode === "recording") view = recordingView();
+        else if (rec.mode === "decoding")
+          view = el("p", { class: "hint rec-pad" }, "Preparing the recording…");
+        else view = editView();
+        recBody.replaceChildren(view);
+        recBody.querySelector("[data-autofocus]")?.focus();
+        if (rec.mode === "edit") requestAnimationFrame(drawEdit);
+      }
+
+      function idleView() {
+        const start = el(
+          "button",
+          {
+            type: "button",
+            class: "rec-big",
+            "aria-label": "Start recording",
+            disabled: rec.mode === "starting",
+            "data-autofocus": true,
+          },
+          icon("mic", 36),
+        );
+        start.onclick = startRecordingFlow;
+        return el(
+          "div",
+          { class: "rec-idle" },
+          start,
+          el("p", { class: "hint" }, "Up to 30 seconds."),
+          rec.error ? el("p", { class: "error-text", role: "alert" }, rec.error) : null,
+        );
+      }
+
+      function micMessage(error) {
+        if (error?.name === "NotAllowedError" || error?.name === "SecurityError") return MIC_DENIED;
+        if (error?.name === "NotFoundError" || error?.name === "OverconstrainedError") return MIC_MISSING;
+        return `Couldn't start the microphone. ${error?.message ?? ""}`.trim();
+      }
+
+      function stopStream(stream) {
+        for (const track of stream.getTracks()) track.stop();
+      }
+
+      async function startRecordingFlow() {
+        if (rec.mode !== "idle") return;
+        rec.mode = "starting";
+        rec.error = "";
+        renderRecorder();
+        audio.pause();
+
+        const fail = (message) => {
+          rec.mode = "idle";
+          rec.error = message;
+          if (dialog.open) renderRecorder();
+        };
+        // In the desktop app the OS may need its own prompt first.
+        let granted = true;
+        if (window.tikliveDesktop?.requestMicrophone) {
+          granted = await window.tikliveDesktop.requestMicrophone().catch(() => false);
+        }
+        if (!dialog.open) return;
+        if (!granted) return fail(MIC_DENIED);
+
+        let stream;
+        try {
+          stream = await openMicrophone();
+        } catch (error) {
+          if (dialog.open) fail(micMessage(error));
+          return;
+        }
+        if (!dialog.open) {
+          stopStream(stream);
+          return;
+        }
+        try {
+          rec.recording = startRecording(stream, {
+            maxSeconds: MAX_RECORD_SECONDS,
+            onTick: (seconds) => {
+              if (rec.timerText)
+                rec.timerText.textContent = `${formatClock(seconds)} / ${formatClock(MAX_RECORD_SECONDS)}`;
+            },
+            onLevel: (level) => {
+              if (rec.meterBar) rec.meterBar.style.width = `${Math.round(level * 100)}%`;
+            },
+          });
+        } catch (error) {
+          stopStream(stream);
+          fail(`Couldn't start recording. ${error?.message ?? ""}`.trim());
+          return;
+        }
+        rec.mode = "recording";
+        renderRecorder();
+        rec.recording.done.then(onRecorded);
+      }
+
+      function recordingView() {
+        rec.timerText = el("span", { class: "rec-time mono" }, `0:00 / ${formatClock(MAX_RECORD_SECONDS)}`);
+        rec.meterBar = el("span", { class: "meter-bar" });
+        const stop = el(
+          "button",
+          { type: "button", class: "btn btn-primary", "data-autofocus": true },
+          icon("stop", 16),
+          "Stop",
+        );
+        stop.onclick = () => rec.recording?.stop();
+        return el(
+          "div",
+          { class: "rec-recording" },
+          el(
+            "span",
+            { class: "rec-status" },
+            el("span", { class: "rec-dot", "aria-hidden": "true" }),
+            "Recording",
+          ),
+          rec.timerText,
+          el("div", { class: "meter", "aria-hidden": "true" }, rec.meterBar),
+          stop,
+          el("p", { class: "hint" }, `Stops by itself at ${formatClock(MAX_RECORD_SECONDS)}.`),
+        );
+      }
+
+      async function onRecorded(blob) {
+        rec.recording = null;
+        if (!blob || !dialog.open) return;
+        rec.mode = "decoding";
+        renderRecorder();
+        let buffer;
+        try {
+          buffer = await decodeRecording(blob);
+        } catch {
+          if (!dialog.open) return;
+          rec.mode = "idle";
+          rec.error = "Couldn't read the recording. Try again.";
+          renderRecorder();
+          return;
+        }
+        if (!dialog.open) return;
+        rec.buffer = buffer;
+        rec.channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
+        rec.duration = buffer.duration;
+        rec.bins = peaks(downmix(rec.channels), WAVE_BINS);
+        rec.selection = { start: 0, end: buffer.duration };
+        rec.name = nextRecordingName(state.items);
+        rec.mode = "edit";
+        rec.error = "";
+        renderRecorder();
+      }
+
+      function waveColors() {
+        const style = getComputedStyle(document.documentElement);
+        const read = (name, fallback) => style.getPropertyValue(name).trim() || fallback;
+        return {
+          accent: read("--accent", "#d62d6b"),
+          faint: read("--faint", "#9d9da8"),
+          text: read("--text", "#1c1c21"),
+        };
+      }
+
+      function drawEdit() {
+        if (!rec.canvas || !rec.bins || !dialog.open) return;
+        drawWaveform(rec.canvas, rec.bins, {
+          start: rec.selection.start,
+          end: rec.selection.end,
+          duration: rec.duration,
+          playhead: rec.playhead,
+          ...waveColors(),
+        });
+      }
+
+      function trimControl(label, edge, value) {
+        const input = el("input", {
+          type: "range",
+          class: "range",
+          min: "0",
+          max: String(rec.duration),
+          step: "0.01",
+          value: String(value),
+          "aria-label": `${label} of the trim`,
+        });
+        const out = el("span", { class: "trim-out" }, formatPrecise(value));
+        input.addEventListener("input", () => {
+          stopPreview();
+          rec.selection = setSelectionEdge(rec.selection, edge, Number(input.value), rec.duration);
+          syncEdit();
+        });
+        rec.trim ??= {};
+        rec.trim[edge] = { input, out };
+        return el("label", { class: "trim-row" }, el("span", {}, label), input, out);
+      }
+
+      function syncEdit() {
+        const { start, end } = rec.selection;
+        for (const [edge, value] of [
+          ["start", start],
+          ["end", end],
+        ]) {
+          rec.trim[edge].input.value = String(value);
+          rec.trim[edge].out.textContent = formatPrecise(value);
+        }
+        rec.info.textContent = `${formatPrecise(start)} – ${formatPrecise(end)} (${(end - start).toFixed(1)} s)`;
+        drawEdit();
+      }
+
+      function editView() {
+        rec.canvas = el("canvas", { class: "wave", "aria-hidden": "true" });
+        rec.trim = {};
+        rec.info = el("span", { class: "rec-range mono", "aria-live": "polite" });
+        rec.playButton = el("button", { type: "button", class: "play-btn", "data-autofocus": true });
+        rec.playButton.onclick = togglePreview;
+        syncPlayButton();
+        const again = el(
+          "button",
+          { type: "button", class: "btn btn-ghost" },
+          icon("mic", 16),
+          "Record again",
+        );
+        again.onclick = () => {
+          stopPreview();
+          rec.mode = "idle";
+          rec.error = "";
+          renderRecorder();
+        };
+
+        const nameInput = el("input", {
+          class: "input",
+          type: "text",
+          maxlength: "100",
+          value: rec.name,
+          "aria-label": "Name",
+        });
+        nameInput.addEventListener("input", () => {
+          rec.name = nameInput.value;
+        });
+        const save = el(
+          "button",
+          { type: "button", class: "btn btn-primary", disabled: rec.saving },
+          rec.saving ? "Saving…" : "Save",
+        );
+        save.onclick = saveRecording;
+        const cancel = el("button", { type: "button", class: "btn btn-ghost" }, "Cancel");
+        cancel.onclick = () => dialog.close();
+
+        const view = el(
+          "div",
+          { class: "rec-edit" },
+          el("div", { class: "wave-wrap" }, rec.canvas),
+          el("div", { class: "rec-row" }, rec.playButton, rec.info, again),
+          trimControl("Start", "start", rec.selection.start),
+          trimControl("End", "end", rec.selection.end),
+          el("label", { class: "rec-field" }, el("span", {}, "Name"), nameInput),
+          rec.error ? el("p", { class: "error-text", role: "alert" }, rec.error) : null,
+          el("div", { class: "rec-foot" }, cancel, save),
+        );
+        queueMicrotask(syncEdit);
+        return view;
+      }
+
+      function syncPlayButton() {
+        if (!rec.playButton) return;
+        const playing = Boolean(rec.player);
+        rec.playButton.setAttribute("aria-label", playing ? "Stop preview" : "Play selection");
+        rec.playButton.replaceChildren(icon(playing ? "stop" : "play", 16));
+      }
+
+      function togglePreview() {
+        if (rec.player) {
+          stopPreview();
+          return;
+        }
+        audio.pause();
+        const { start, end } = rec.selection;
+        rec.player = playRange(rec.buffer, start, end, {
+          onTime: (seconds) => {
+            rec.playhead = seconds;
+            drawEdit();
+          },
+          onEnd: () => {
+            rec.player = null;
+            rec.playhead = null;
+            syncPlayButton();
+            drawEdit();
+          },
+        });
+        syncPlayButton();
+      }
+
+      function stopPreview() {
+        const player = rec.player;
+        rec.player = null;
+        rec.playhead = null;
+        player?.stop();
+        syncPlayButton();
+        drawEdit();
+      }
+
+      async function saveRecording() {
+        if (rec.saving || !rec.buffer) return;
+        const base =
+          cleanName(rec.name)
+            .replace(/\.wav$/i, "")
+            .trim() || nextRecordingName(state.items);
+        const fileName = `${base}.wav`;
+        stopPreview();
+        rec.saving = true;
+        rec.error = "";
+        renderRecorder();
+        const { sampleRate } = rec.buffer;
+        const { start, end } = rec.selection;
+        const wav = encodeWav(trimRange(rec.channels, sampleRate, start, end), sampleRate);
+        try {
+          const item = await api("/api/media", {
+            method: "POST",
+            body: new Blob([wav], { type: "audio/wav" }),
+            headers: { "Content-Type": "audio/wav", "X-File-Name": encodeURIComponent(fileName) },
+          });
+          state.items = [item, ...state.items.filter((m) => m.id !== item.id)];
+          state.filter = "all";
+          state.query = "";
+          document.querySelector('input[name="kind"][value="all"]').checked = true;
+          search.value = "";
+          rec.saving = false;
+          dialog.close();
+          highlight(item.id);
+          toast("Saved. Pick it in Actions as a sound.");
+        } catch (error) {
+          rec.saving = false;
+          rec.error = `Couldn't save. ${uploadErrorMessage(error)}`;
+          if (dialog.open) renderRecorder();
+        }
+      }
+
+      // Start with the loading message, then fetch.
+      render();
+      load();
+    </script>
+  </body>
+</html>

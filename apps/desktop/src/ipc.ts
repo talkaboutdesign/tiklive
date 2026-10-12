@@ -14,10 +14,16 @@ export const IPC = {
   updateDownload: "tiklive:update-download",
   updateInstall: "tiklive:update-install",
   updateSetChannel: "tiklive:update-set-channel",
+  requestMicrophone: "tiklive:request-microphone",
 } as const;
 
 export interface DesktopBridge {
   readonly platform: string;
+  /**
+   * Asks the OS for microphone access (macOS shows its prompt the first time). Resolves false when
+   * the user has denied it, so the page can explain where to turn it on.
+   */
+  readonly requestMicrophone: () => Promise<boolean>;
   readonly updates: {
     readonly getState: () => Promise<UpdateState>;
     readonly check: () => Promise<void>;

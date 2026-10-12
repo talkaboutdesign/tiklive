@@ -8,6 +8,7 @@ this folder at http://127.0.0.1:8080/. Build the client first with `bun run buil
 
 - `index.html`: the dashboard, at `/`. It's the live view of your room: chat with filters, gifts, subscriptions, an optional video preview, and per-view silencing
 - `overlays/chat.html`, `overlays/alerts.html`, `overlays/goal.html`: the OBS overlays
+- `media.html`: the Media Library, at `/media.html`. Record a sound, upload images, videos and sounds, and rename or delete them. It shows which actions use each file
 
 The URL parameters, the OBS setup, and how to write your own overlay are in
 [docs/user/overlays.md](../../docs/user/overlays.md). The client API is in

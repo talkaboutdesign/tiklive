@@ -38,6 +38,10 @@ export class MediaStore extends Context.Service<
       contentType: string,
       bytes: Uint8Array,
     ) => Effect.Effect<MediaItem, MediaError>;
+    /**
+     * Changes the display name. The file and its URL stay the same. None when no item has this id.
+     */
+    readonly rename: (id: string, name: string) => Effect.Effect<Option.Option<MediaItem>, MediaError>;
     /** Deletes the file. Returns false when no item has this id. */
     readonly remove: (id: string) => Effect.Effect<boolean>;
     /**
@@ -122,6 +126,7 @@ export const layerDisabled: Layer.Layer<MediaStore> = Layer.succeed(MediaStore)(
           message: "Uploads need a data directory. Start tiklive with --data-dir <dir>.",
         }),
       ),
+    rename: () => Effect.succeed(Option.none()),
     remove: () => Effect.succeed(false),
     resolve: () => Effect.succeed(Option.none()),
   }),
@@ -218,6 +223,20 @@ export const layerFile = (dir: string): Layer.Layer<MediaStore> => {
           );
         });
 
+      const renameItem = (id: string, name: string) =>
+        lock.withPermit(
+          Effect.gen(function* () {
+            const current = yield* Ref.get(items);
+            const item = current.find((candidate) => candidate.id === id);
+            if (!item) return Option.none<MediaItem>();
+            const renamed: MediaItem = { ...item, name: cleanName(name) };
+            const next = current.map((candidate) => (candidate.id === id ? renamed : candidate));
+            yield* writeIndex(next);
+            yield* Ref.set(items, next);
+            return Option.some(renamed);
+          }),
+        );
+
       const remove = (id: string) =>
         lock.withPermit(
           Effect.gen(function* () {
@@ -242,6 +261,7 @@ export const layerFile = (dir: string): Layer.Layer<MediaStore> => {
           [...current].reverse().sort((a, b) => b.createdAt - a.createdAt),
         ),
         add,
+        rename: renameItem,
         remove,
         resolve: (file) =>
           Effect.map(Ref.get(items), (current) => {
