@@ -747,9 +747,14 @@ export const routes = (options: HttpOptions = {}) => {
                   const session = yield* manager.acquire(username);
                   const updates = yield* session.subscribe;
                   yield* send({ type: "status", username, status: yield* session.status });
+                  // An event published after `subscribe` but before `recentEvents` is in both the replay
+                  // and the queue, so live events whose msgId was already replayed are skipped.
+                  const replayed = new Set<string>();
                   if (replay) {
                     for (const event of yield* session.recentEvents) {
-                      if (wants(event)) yield* send({ type: "event", username, event, replay: true });
+                      if (!wants(event)) continue;
+                      yield* send({ type: "event", username, event, replay: true });
+                      if (event.msgId && event.msgId !== "0") replayed.add(event.msgId);
                     }
                   }
                   while (true) {
@@ -759,7 +764,7 @@ export const routes = (options: HttpOptions = {}) => {
                         yield* send({ type: "status", username, status: message.status });
                         break;
                       case "Event":
-                        if (wants(message.event))
+                        if (wants(message.event) && !replayed.has(message.event.msgId ?? ""))
                           yield* send({ type: "event", username, event: message.event });
                         break;
                       // Actions skip the `events` filter and are never replayed.

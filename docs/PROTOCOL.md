@@ -89,6 +89,9 @@ With `replay: true`, the server sends its last **50** events for that streamer (
 history size). Likes and viewer-count updates are never kept in history, because they're too
 frequent to be useful when replayed.
 
+The server never sends an event twice on one subscription. An event that arrives while the subscription
+is being set up is sent once, as a replay, and not again as live.
+
 The browser client (`TikLive`) re-sends `replay: true` on every reconnect, so events missed during
 the gap arrive. It skips a **replayed** event (`replay: true`) whose `msgId` it has already delivered,
 so a reconnect doesn't show old events twice. Live events are never filtered. Events without a `msgId`,

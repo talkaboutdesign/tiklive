@@ -4,10 +4,12 @@
  * platform) with fake TikTok connectivity, then talks to it with fetch, raw
  * node:http requests and the global WebSocket.
  */
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { afterAll, describe, expect, it, vi } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServer from "effect/http/HttpServer";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -21,10 +23,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TikTokRequestError, TikTokWeb } from "@tiklive/core";
 import { fakeTikTokWebLayer, fakeWebSocketLayer } from "@tiklive/core/testing";
-import type { SoundSearchResponse } from "@tiklive/contracts";
+import type { LiveEvent, SoundSearchResponse } from "@tiklive/contracts";
 import * as Server from "./server.ts";
 import type { ServerOptions } from "./server.ts";
-import { SoundSearch, SoundSearchError } from "./rules/SoundSearch.ts";
+import { routes } from "./http.ts";
+import * as MediaStore from "./rules/MediaStore.ts";
+import * as PointsStore from "./points/PointsStore.ts";
+import * as RuleEngine from "./rules/RuleEngine.ts";
+import * as RulesStore from "./rules/RulesStore.ts";
+import { layer as soundSearchLayer, SoundSearch, SoundSearchError } from "./rules/SoundSearch.ts";
+import { make as makeSessionManager, SessionManager } from "./SessionManager.ts";
 
 const USER = { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" };
 
@@ -55,16 +63,71 @@ interface Base {
   readonly port: number;
 }
 
+/**
+ * Like `serverLayer`, but the first `/ws` subscription to `demo` gets `raced` published right after it
+ * subscribes, before the route reads the replay snapshot. The event is then both in the replay and in the
+ * subscriber's queue. `Server.layer` builds its own SessionManager, so the routes are composed here.
+ */
+const racingServerLayer = (httpServer: HttpNodeServer, raced: LiveEvent) => {
+  const tiktok = fakeTikTok();
+  const rules = RulesStore.layerMemory();
+  const points = PointsStore.layerMemory;
+  const engine = RuleEngine.layer.pipe(Layer.provide(Layer.mergeAll(rules, FetchHttpClient.layer)));
+  let racedOnce = false;
+  const sessions = Layer.effect(
+    SessionManager,
+    Effect.gen(function* () {
+      const manager = yield* makeSessionManager({});
+      return SessionManager.of({
+        ...manager,
+        acquire: (username) =>
+          manager.acquire(username).pipe(
+            Effect.map((session) => ({
+              ...session,
+              subscribe: session.subscribe.pipe(
+                Effect.tap(() =>
+                  Effect.suspend(() => {
+                    if (racedOnce) return Effect.void;
+                    racedOnce = true;
+                    return session.inject(raced);
+                  }),
+                ),
+              ),
+            })),
+          ),
+      });
+    }),
+  ).pipe(Layer.provide(Layer.mergeAll(tiktok, engine, points)));
+
+  return HttpRouter.serve(routes({ serverVersion: "test" }), { disableLogger: true }).pipe(
+    Layer.provide(
+      Layer.mergeAll(sessions, engine, rules, MediaStore.layerDisabled, points, tiktok, soundSearchLayer()),
+    ),
+    Layer.provideMerge(
+      NodeHttpServer.layer(() => httpServer, {
+        port: 0,
+        host: "127.0.0.1",
+        websocket: { maxPayload: 64 * 1024 },
+      }),
+    ),
+  );
+};
+
 /** Runs `body` against a freshly started server; the server stops when the body finishes. */
 const serve = (
   options: ServerOptions,
   body: (base: Base) => Promise<void>,
   sounds?: Layer.Layer<SoundSearch>,
+) => serveWith((httpServer) => serverLayer(httpServer, options, sounds), body);
+
+const serveWith = (
+  build: (httpServer: HttpNodeServer) => ReturnType<typeof serverLayer>,
+  body: (base: Base) => Promise<void>,
 ) => {
   const httpServer = createServer();
   return Effect.scoped(
     Effect.gen(function* () {
-      const ctx = yield* Layer.build(serverLayer(httpServer, options, sounds));
+      const ctx = yield* Layer.build(build(httpServer));
       // Finalizers run last-in-first-out, so this runs before the server is asked to close. Keep-alive
       // connections left open by fetch would otherwise make shutdown wait (Bun's node:http doesn't
       // close idle sockets on server.close()).
@@ -481,12 +544,18 @@ describe("POST /api/sessions/:username/simulate", () => {
         client.send({ action: "subscribe", username: "demo" });
         await client.waitFor((m) => m.type === "status" && m.username === "demo", "status");
 
+        // Freeze the clock so all three events share a millisecond, the case the counter exists for.
+        const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
         const ids: string[] = [];
-        for (let i = 0; i < 3; i++) {
-          const res = await post(base, "/api/sessions/demo/simulate", { type: "follow", user: USER });
-          expect(res.status).toBe(200);
-          const body = (await res.json()) as { event: { msgId: string } };
-          ids.push(body.event.msgId);
+        try {
+          for (let i = 0; i < 3; i++) {
+            const res = await post(base, "/api/sessions/demo/simulate", { type: "follow", user: USER });
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { event: { msgId: string } };
+            ids.push(body.event.msgId);
+          }
+        } finally {
+          now.mockRestore();
         }
 
         expect(new Set(ids).size).toBe(3);
@@ -679,6 +748,39 @@ describe("WebSocket protocol", () => {
       }
     }),
   );
+
+  it.live("never sends an event as both replay and live when it lands during subscribe", () => {
+    const raced: LiveEvent = {
+      type: "follow",
+      timestamp: Date.now(),
+      msgId: "raced-follow",
+      user: USER,
+    };
+    return serveWith(
+      (httpServer) => racingServerLayer(httpServer, raced),
+      async (base) => {
+        await post(base, "/api/sessions/demo");
+        const open: Array<Client> = [];
+        try {
+          const client = await connect(`${base.ws}/ws?username=demo&replay=1`, open);
+          await client.waitFor((m) => m.type === "event" && m.event.msgId === "raced-follow", "raced follow");
+
+          await simulateFollow(base, "after-race");
+          const live = await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "after-race",
+            "live follow",
+          );
+          // Messages arrive in order, so a second copy of the raced event would already be here.
+          expect(live.replay).toBeUndefined();
+          const copies = eventMessages(client).filter((m) => m.event.msgId === "raced-follow");
+          expect(copies).toHaveLength(1);
+          expect(copies[0]).toMatchObject({ replay: true });
+        } finally {
+          closeAll(open);
+        }
+      },
+    );
+  });
 
   it.live("does not replay when replay is not requested", () =>
     serve({}, async (base) => {
