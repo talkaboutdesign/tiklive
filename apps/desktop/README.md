@@ -20,6 +20,9 @@ bun run --filter @tiklive/desktop dist:mac
 
 Output goes to `apps/desktop/release/`: a DMG and a ZIP per architecture, plus `latest-mac.yml`. `dist:win` and `dist` (current platform) also exist.
 
+The app icon is `build/icon.png` (1024×1024, transparent corners, the shape at 824 px like Apple's icon grid).
+electron-builder generates the macOS `.icns` and Windows `.ico` from it.
+
 `dist:mac` builds unsigned. To sign and notarize locally, copy `signing.env.example` to `.env.signing`
 (gitignored), fill it in, and run `dist:mac:signed`. It signs with the Developer ID Application certificate
 in your keychain and notarizes with an App Store Connect API key. Windows builds are unsigned.
