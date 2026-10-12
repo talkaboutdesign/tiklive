@@ -4,11 +4,15 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseCli } from "./cli.ts";
 
-let clientBundle: string | undefined;
-try {
-  clientBundle = fileURLToPath(import.meta.resolve("@tiklive/client/tiklive.js"));
-} catch {
-  clientBundle = undefined;
+// The browser client: copied next to the built bin (dist/tiklive.js) by the package build,
+// or resolved from the workspace when running from src/.
+let clientBundle: string | undefined = fileURLToPath(new URL("./tiklive.js", import.meta.url));
+if (!existsSync(clientBundle)) {
+  try {
+    clientBundle = fileURLToPath(import.meta.resolve("@tiklive/client/tiklive.js"));
+  } catch {
+    clientBundle = undefined;
+  }
 }
 
 // The dashboard and example overlays, copied next to the built bin (dist/overlays) by the package build.

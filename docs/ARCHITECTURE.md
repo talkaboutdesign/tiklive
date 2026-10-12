@@ -6,33 +6,37 @@ JSON protocol. The connector is a library you can use alone. The server is built
 
 ## Packages
 
+`tiklive` is one npm package. It is built from `packages/server`, and it bundles three private workspace
+packages: `contracts`, `core` and `client`. They're exposed as subpaths (`tiklive/contracts`, `tiklive/core`,
+`tiklive/client`), so the workspace names below are for development only.
+
 ```
-                ┌───────────────────┐
-                │ @tiklive/contracts │  event + protocol schemas, PROTOCOL_VERSION
-                └─────────┬─────────┘
-          ┌──────────────┼───────────────┐
-          ▼              ▼               ▼
-  ┌──────────────┐ ┌────────────┐  ┌──────────────┐
-  │ @tiklive/core│ │@tiklive/   │  │ tiklive client│  (dist/tiklive.js, no deps)
-  │ TikTok side  │ │  client    │  └──────▲───────┘
-  └──────┬───────┘ └─────┬──────┘         │ /tiklive.js
-         │               │                │
-         ▼               ▼                │
-  ┌──────────────────────────────────────┐ │
-  │ @tiklive/server                      │─┘  serves bundle, static overlays
+                ┌────────────────────┐
+                │ contracts          │  event + protocol schemas, PROTOCOL_VERSION
+                └─────────┬──────────┘
+          ┌───────────────┼────────────────┐
+          ▼               ▼                ▼
+  ┌───────────────┐ ┌─────────────┐ ┌────────────────┐
+  │ core          │ │ client      │ │ tiklive client │ (dist/tiklive.js, no deps)
+  │ TikTok side   │ │             │ └───────▲────────┘
+  └───────┬───────┘ └──────┬──────┘         │ /tiklive.js
+          │                │                │
+          ▼                ▼                │
+  ┌──────────────────────────────────────┐  │
+  │ tiklive (packages/server)            │──┘  serves bundle, static overlays
   │ SessionManager → Session → HTTP/WS   │
   └──────────────────────────────────────┘
           ▲                    ▲
      overlays, dashboards   OBS, apps
 ```
 
-| Package              | Depends on                                         | Role                                                                                                                |
-| -------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `@tiklive/contracts` | `effect` (Schema only)                             | Event and protocol schemas. Types come from here.                                                                   |
-| `@tiklive/core`      | contracts, `effect`                                | Talks to TikTok. Exposes the `LiveConnection` stream, the `TikTokWeb` service, errors, decoders, and a demo stream. |
-| `@tiklive/server`    | core, contracts, client (for the bundle), `effect` | Shares sessions over HTTP and WebSocket. Ships the `tiklive` CLI.                                                   |
-| `@tiklive/client`    | contracts (types only)                             | Browser and Node client. Built into one file with no runtime dependencies.                                          |
-| `examples/overlays`  | none at runtime                                    | Static HTML dashboard and OBS overlays. Served by the server with `--static`.                                       |
+| Workspace package    | Published as        | Depends on                                         | Role                                                                                                                |
+| -------------------- | ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `packages/contracts` | `tiklive/contracts` | `effect` (Schema only)                             | Event and protocol schemas. Types come from here.                                                                   |
+| `packages/core`      | `tiklive/core`      | contracts, `effect`                                | Talks to TikTok. Exposes the `LiveConnection` stream, the `TikTokWeb` service, errors, decoders, and a demo stream. |
+| `packages/server`    | `tiklive`           | core, contracts, client (for the bundle), `effect` | Shares sessions over HTTP and WebSocket. Ships the `tiklive` CLI.                                                   |
+| `packages/client`    | `tiklive/client`    | contracts (types only)                             | Browser and Node client. Built into one file with no runtime dependencies.                                          |
+| `examples/overlays`  | (not published)     | none at runtime                                    | Static HTML dashboard and OBS overlays. Served by the server with `--static`.                                       |
 
 The client's only import from contracts is types, so `dist/tiklive.js` contains no Effect code.
 
@@ -72,6 +76,22 @@ Two details matter for correctness:
 - **Slow subscribers.** Each subscriber's PubSub is sliding. A slow socket loses its oldest
   undelivered messages instead of making the server buffer without limit. Library users who
   consume `LiveConnection` directly get backpressure instead (see below).
+
+## How it reaches TikTok
+
+1. **Room lookup.** `GET tiktok.com/api-live/user/room/?uniqueId=…` returns the current room ID and whether the
+   user is live. It needs no signature.
+2. **Device cookie.** A plain `GET tiktok.com/` issues an anonymous `ttwid` cookie.
+3. **WebSocket.** Connects to `wss://webcast-ws.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/` (falls back
+   to `webcast-ws.us.tiktok.com`) with that cookie. It sends an `im_enter_room` frame, a heartbeat every 10
+   seconds, and an ack for each batch.
+4. **Decoding.** Frames are protobuf envelopes holding gzipped batches of webcast messages (`WebcastChatMessage`,
+   `WebcastGiftMessage`, and so on). A small hand-written decoder in [`packages/core/src/proto`](../packages/core/src/proto)
+   reads only the fields overlays need, so new fields from TikTok don't break it.
+
+TikTok's website adds a signed HTTP request (`X-Bogus` / `X-Gnarly`) before it opens the socket. Libraries
+normally need a signing service or a browser for that. The socket doesn't depend on the request, so tiklive
+skips it. That request also provides the resume cursor, which is why tiklive has none (see Known gaps).
 
 ## Connection lifecycle (`LiveConnection`)
 

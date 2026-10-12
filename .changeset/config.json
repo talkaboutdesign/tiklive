@@ -1,11 +1,19 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
-  "changelog": ["@changesets/changelog-github", { "repo": "talkaboutdesign/tiklive" }],
+  "changelog": [
+    "@changesets/changelog-github",
+    {
+      "repo": "talkaboutdesign/tiklive"
+    }
+  ],
   "commit": false,
-  "fixed": [["@tiklive/contracts", "@tiklive/core", "@tiklive/server", "@tiklive/client"]],
   "linked": [],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@tiklive/example-overlays"]
+  "ignore": ["@tiklive/example-overlays"],
+  "privatePackages": {
+    "version": false,
+    "tag": false
+  }
 }

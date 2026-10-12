@@ -1,7 +1,7 @@
 {
-  "name": "@tiklive/server",
+  "name": "tiklive",
   "version": "0.3.0",
-  "description": "Self-hosted TikTok LIVE event server for overlays and apps",
+  "description": "TikTok LIVE connector and self-hosted event server for overlays and apps",
   "keywords": [
     "livestream",
     "obs",
@@ -24,9 +24,7 @@
     "tiklive": "./dist/bin.mjs"
   },
   "files": [
-    "dist",
-    "src",
-    "!src/**/*.test.ts"
+    "dist"
   ],
   "type": "module",
   "sideEffects": [
@@ -39,6 +37,26 @@
       "types": "./dist/index.d.mts",
       "default": "./dist/index.mjs"
     },
+    "./core": {
+      "@tiklive/source": "./src/core.ts",
+      "types": "./dist/core.d.mts",
+      "default": "./dist/core.mjs"
+    },
+    "./contracts": {
+      "@tiklive/source": "./src/contracts.ts",
+      "types": "./dist/contracts.d.mts",
+      "default": "./dist/contracts.mjs"
+    },
+    "./client": {
+      "@tiklive/source": "./src/client.ts",
+      "types": "./dist/client.d.mts",
+      "default": "./dist/client.mjs"
+    },
+    "./testing": {
+      "@tiklive/source": "./src/testing.ts",
+      "types": "./dist/testing.d.mts",
+      "default": "./dist/testing.mjs"
+    },
     "./bun": {
       "@tiklive/source": "./src/platform/bun.ts",
       "types": "./dist/platform/bun.d.mts",
@@ -48,7 +66,8 @@
       "@tiklive/source": "./src/platform/node.ts",
       "types": "./dist/platform/node.d.mts",
       "default": "./dist/platform/node.mjs"
-    }
+    },
+    "./tiklive.js": "./dist/tiklive.js"
   },
   "publishConfig": {
     "access": "public"
@@ -57,18 +76,18 @@
     "typecheck": "bun ../../scripts/embed-assets.ts --ensure && tsc --noEmit -p .",
     "test": "vp test run",
     "dev": "bun --conditions=@tiklive/source --watch src/bin.ts",
-    "build": "vp pack && rm -rf dist/overlays && cp -R ../../examples/overlays dist/overlays && rm dist/overlays/package.json",
+    "build": "test -f ../client/dist/tiklive.js || { echo 'Build @tiklive/client first (bun run build at the repo root)'; exit 1; }; vp pack && cp ../client/dist/tiklive.js dist/tiklive.js && rm -rf dist/overlays && cp -R ../../examples/overlays dist/overlays && rm dist/overlays/package.json",
     "prepack": "cp ../../LICENSE LICENSE"
   },
   "dependencies": {
     "@effect/platform-bun": "^4.0.2",
-    "@effect/platform-node": "^4.0.2",
-    "@tiklive/client": "workspace:*",
-    "@tiklive/contracts": "workspace:*",
-    "@tiklive/core": "workspace:*"
+    "@effect/platform-node": "^4.0.2"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@tiklive/client": "workspace:*",
+    "@tiklive/contracts": "workspace:*",
+    "@tiklive/core": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "effect": "catalog:"

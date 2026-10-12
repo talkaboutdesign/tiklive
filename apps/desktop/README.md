@@ -1,6 +1,6 @@
 # @tiklive/desktop
 
-Electron desktop shell for tiklive. It runs the tiklive server in-process on `127.0.0.1:8080`, so OBS browser sources keep working while the app is open, and shows the dashboard in a window.
+Electron desktop shell for tiklive. It runs the tiklive server in-process on `127.0.0.1:8080`, so OBS browser sources keep working while the app is open, and shows the dashboard in a window. For users, see [docs/user/desktop.md](../../docs/user/desktop.md).
 
 ## Development
 
@@ -24,25 +24,10 @@ Output goes to `apps/desktop/release/`: a DMG and a ZIP per architecture, plus `
 (gitignored), fill it in, and run `dist:mac:signed`. It signs with the Developer ID Application certificate
 in your keychain and notarizes with an App Store Connect API key. Windows builds are unsigned.
 
-## Releases (CI)
+## Releases and updates
 
-`.github/workflows/release-desktop.yml` builds macOS (arm64 + x64, signed and notarized) and Windows x64.
-The Release workflow calls it whenever it publishes a new version, and attaches the installers and
-`latest*.yml` files to the `vX.Y.Z` GitHub Release. The app's version is `packages/server`'s version.
-Run "Desktop build" by hand in Actions to test a build without releasing; installers are uploaded as
-workflow artifacts.
-
-Repository secrets (without them the mac build is unsigned):
-
-| Secret             | Value                                         |
-| ------------------ | --------------------------------------------- |
-| `CSC_LINK`         | `base64 -i DeveloperID.p12` output            |
-| `CSC_KEY_PASSWORD` | the .p12 password                             |
-| `APPLE_API_KEY`    | contents of `AuthKey_XXXXXXXXXX.p8`           |
-| `APPLE_API_KEY_ID` | the API key ID                                |
-| `APPLE_API_ISSUER` | the issuer ID from App Store Connect (a UUID) |
-
-## Updates
-
-Release builds check GitHub Releases (`talkaboutdesign/tiklive`) through `electron-updater`, which needs the
-repo to be public. Update checks are off in dev builds. macOS only installs updates for signed builds.
+The release workflow builds the signed macOS DMGs and the Windows installer, and attaches them to the `vX.Y.Z`
+GitHub Release with the `latest*.yml` files the updater reads. The app's version is the `tiklive` package version.
+The signing secrets, the `release` environment and the release steps are in
+[docs/operations/release.md](../../docs/operations/release.md). How updates behave for users is in
+[docs/user/desktop.md](../../docs/user/desktop.md#updates).
