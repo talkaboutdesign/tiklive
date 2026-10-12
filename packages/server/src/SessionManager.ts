@@ -66,13 +66,14 @@ export const make = (options: SessionManagerOptions = {}) =>
           yield* points.value.record(username, event);
           if (Option.isNone(engine)) return [];
           const userId = "user" in event ? event.user.userId : undefined;
-          const viewer = userId ? yield* points.value.get(username, userId) : Option.none();
-          return yield* engine.value.fire(
-            username,
-            event,
-            Option.isSome(viewer) ? { points: String(viewer.value.points) } : {},
-            roomId,
-          );
+          const extra = () =>
+            Effect.map(
+              userId ? points.value.get(username, userId) : Effect.succeed(Option.none()),
+              (viewer) => (Option.isSome(viewer) ? { points: String(viewer.value.points) } : {}),
+            );
+          return yield* engine.value.fireWithExtras
+            ? engine.value.fireWithExtras(username, event, extra, roomId)
+            : engine.value.fire(username, event, yield* extra(), roomId);
         });
       return { ...options.session, actions };
     };

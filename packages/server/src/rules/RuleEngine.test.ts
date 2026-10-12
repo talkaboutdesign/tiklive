@@ -121,6 +121,50 @@ const sentBodies = (template: string, event: LiveEvent) => {
 };
 
 describe("RuleEngine.fire", () => {
+  it.effect("skips lazy extras while rules are empty and uses edits on the next event", () => {
+    const storeLayer = RulesStore.layerMemory();
+    const engineLayer = ruleEngineLayer.pipe(Layer.provide(Layer.mergeAll(storeLayer, fakeHttp())));
+    return Effect.gen(function* () {
+      const engine = yield* RuleEngine;
+      const store = yield* RulesStore.RulesStore;
+      const unused = () => Effect.die("Empty rules must not resolve extras");
+      expect(yield* engine.fireWithExtras!("someone", gift(), unused)).toEqual([]);
+      yield* store.replace(0, [giftRule({ steps: [{ kind: "speak", text: "{points} points" }] })]);
+      const fired = yield* engine.fireWithExtras!("someone", gift(), () => Effect.succeed({ points: "51" }));
+      expect(fired[0]?.steps).toEqual([{ kind: "speak", text: "51 points" }]);
+      yield* store.replace(1, []);
+      expect(yield* engine.fireWithExtras!("someone", gift(), unused)).toEqual([]);
+    }).pipe(Effect.provide(Layer.mergeAll(storeLayer, engineLayer)));
+  });
+
+  it.effect("keeps likes and stream resets current while no rules exist", () => {
+    const storeLayer = RulesStore.layerMemory();
+    const engineLayer = ruleEngineLayer.pipe(Layer.provide(Layer.mergeAll(storeLayer, fakeHttp())));
+    const likes: LiveEvent = { type: "like", timestamp: 0, user: USER, likeCount: 15, totalLikeCount: 15 };
+    const rule = giftRule({
+      trigger: { type: "likes", every: 10 },
+      steps: [{ kind: "speak", text: "{likes}" }],
+    });
+    return Effect.gen(function* () {
+      const engine = yield* RuleEngine;
+      const store = yield* RulesStore.RulesStore;
+      yield* engine.fire("someone", likes, {}, "room-a");
+      yield* store.replace(0, [rule]);
+      const fired = yield* engine.fire("someone", { ...likes, likeCount: 1 }, {}, "room-a");
+      expect(fired[0]?.steps).toEqual([{ kind: "speak", text: "10" }]);
+      yield* store.replace(1, []);
+      yield* engine.fire("someone", { type: "streamEnd", reason: "ended", timestamp: 0 });
+      yield* store.replace(2, [rule]);
+      expect(yield* engine.fire("someone", { ...likes, likeCount: 1 }, {}, "room-a")).toEqual([]);
+      yield* store.replace(3, []);
+      yield* engine.fire("someone", likes, {}, "room-a");
+      // A different room clears the previous stream's likes, even before any rules are added.
+      yield* engine.fire("someone", { ...likes, likeCount: 1 }, {}, "room-b");
+      yield* store.replace(4, [rule]);
+      expect(yield* engine.fire("someone", { ...likes, likeCount: 1 }, {}, "room-b")).toEqual([]);
+    }).pipe(Effect.provide(Layer.mergeAll(storeLayer, engineLayer)));
+  });
+
   it.effect("returns an action per firing, with the steps rendered and the viewer attached", () =>
     Effect.gen(function* () {
       const engine = yield* RuleEngine;
