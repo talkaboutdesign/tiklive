@@ -1186,6 +1186,7 @@
         onStatus,
         pill,
         avatar,
+        profileLink,
         img,
         icon,
         el,
@@ -1825,7 +1826,12 @@
         return el(
           "div",
           { class: "feed-row follow-row" },
-          el("span", { class: "follow-text" }, el("span", { class: "follow-name" }, name), " followed you"),
+          el(
+            "span",
+            { class: "follow-text" },
+            profileLink(user.uniqueId, { class: "follow-name" }, name),
+            " followed you",
+          ),
           silenceButton(user),
         );
       }
@@ -1881,7 +1887,7 @@
             el(
               "div",
               { class: "row-head" },
-              el("span", { class: "row-name" }, name),
+              profileLink(u.uniqueId, { class: "row-name" }, name),
               ...badges,
               typeof u.followerCount === "number"
                 ? el("span", { class: "row-count" }, `${compact.format(u.followerCount)} followers`)
@@ -1945,7 +1951,7 @@
           el(
             "div",
             { class: "lane-text" },
-            el("span", { class: "lane-name" }, u.nickname || u.uniqueId),
+            profileLink(u.uniqueId, { class: "lane-name" }, u.nickname || u.uniqueId),
             el("span", { class: "lane-what muted" }, `${e.giftName ?? ""} ×${num(e.repeatCount)}`),
           ),
           el("span", { class: "lane-coins tabular" }, coins(total)),
@@ -1976,7 +1982,7 @@
               el(
                 "div",
                 { class: "top-text" },
-                el("span", { class: "top-name" }, name),
+                profileLink(user.uniqueId, { class: "top-name" }, name),
                 el("span", { class: "top-coins muted tabular" }, coins(num(coinCount))),
               ),
             );
@@ -2293,7 +2299,7 @@
         const stats = s.stats ?? {};
         $("status-avatar").replaceChildren(avatar(owner?.profilePictureUrl, s.username));
         $("status-pill").replaceChildren(pill(s.state));
-        $("owner-name").textContent = owner?.nickname || s.username;
+        $("owner-name").replaceChildren(profileLink(s.username, {}, owner?.nickname || s.username));
         $("owner-handle").textContent = `@${s.username}`;
         renderStatusLine(s);
         for (const [key, node] of statValues) node.textContent = statText(num(stats[key]));

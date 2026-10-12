@@ -69,6 +69,12 @@
         gap: 10px;
         min-width: 0;
       }
+      a.who:hover {
+        text-decoration: none;
+      }
+      a.who:hover .who-name {
+        text-decoration: underline;
+      }
       .who-text {
         display: flex;
         flex-direction: column;
@@ -223,7 +229,17 @@
     </div>
 
     <script type="module">
-      import { api, avatar, el, getUsername, icon, mountShell, onUsernameChange, toast } from "/app/shell.js";
+      import {
+        api,
+        avatar,
+        el,
+        getUsername,
+        icon,
+        mountShell,
+        onUsernameChange,
+        profileLink,
+        toast,
+      } from "/app/shell.js";
 
       const PAGE = 50;
       const REFRESH_MS = 10_000;
@@ -356,8 +372,8 @@
           "li",
           { class: "viewer" },
           el("span", { class: "rank" }, String(index + 1)),
-          el(
-            "div",
+          profileLink(
+            viewer.uniqueId,
             { class: "who" },
             avatar(viewer.profilePictureUrl, name, "sm"),
             el(

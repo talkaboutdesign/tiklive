@@ -318,6 +318,13 @@ button {
 .account:hover {
   background: var(--hover);
 }
+.profile-link {
+  color: inherit;
+  text-decoration: none;
+}
+a.profile-link:hover {
+  text-decoration: underline;
+}
 .account-text {
   display: flex;
   flex-direction: column;
