@@ -1,50 +1,49 @@
-import { EventEmitter } from 'node:events';
-import type { LiveEvent } from '../events.js';
-import { TikTokLiveConnection, UserOfflineError } from '../tiktok/connection.js';
-import { UserNotFoundError, type RoomStatus } from '../tiktok/web.js';
-import { DemoSource } from './demo.js';
+/**
+ * One streamer's session: keeps a TikTok connection alive across stream
+ * restarts, tracks running stats, and fans events out to subscribers.
+ */
+import type { LiveEvent, SessionState, SessionStats, SessionStatus } from "@tiklive/contracts";
+import { demoEvents, LiveConnection, type RoomStatus } from "@tiklive/core";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as PubSub from "effect/PubSub";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 
-export const DEMO_USERNAME = 'demo';
+export const DEMO_USERNAME = "demo";
 
-export type SessionState =
-  /** Not connected and not trying to. */
-  | 'idle'
-  /** User is offline; polling until they go live. */
-  | 'waiting'
-  | 'connecting'
-  | 'live'
-  | 'error';
+export type SessionMessage =
+  | { readonly _tag: "Event"; readonly event: LiveEvent }
+  | { readonly _tag: "Status"; readonly status: SessionStatus };
 
-export interface SessionStats {
-  likes: number;
-  diamonds: number;
-  follows: number;
-  shares: number;
-  joins: number;
-  chats: number;
-  viewers: number;
-  peakViewers: number;
-}
-
-export interface SessionStatus {
-  username: string;
-  state: SessionState;
-  roomId?: string;
-  title?: string;
-  owner?: RoomStatus['owner'];
-  liveSince?: number;
-  error?: string;
-  stats: SessionStats;
+export interface Session {
+  readonly username: string;
+  readonly status: Effect.Effect<SessionStatus>;
+  /** Recent events for replay, oldest first. Excludes likes and viewer counts. */
+  readonly recentEvents: Effect.Effect<ReadonlyArray<LiveEvent>>;
+  /**
+   * Live events and status changes. Subscribe before reading `status` or
+   * `recentEvents` to avoid missing anything in between. Slow subscribers
+   * lose their oldest undelivered messages rather than buffering forever.
+   */
+  readonly subscribe: Effect.Effect<PubSub.Subscription<SessionMessage>, never, Scope.Scope>;
+  /** Handles an event as if it came from TikTok (test buttons, automations). */
+  readonly inject: (event: LiveEvent) => Effect.Effect<void>;
 }
 
 export interface SessionOptions {
-  /** How often to check whether an offline user has gone live. */
-  pollIntervalMs?: number;
-  /** Number of recent events replayed to newly connected overlays. */
-  historySize?: number;
+  /** How often to check whether an offline streamer has gone live. Default 30 seconds. */
+  readonly pollInterval?: Duration.Input;
+  /** Events kept for replay. Default 50. */
+  readonly historySize?: number;
+  /** Per-subscriber buffer before old messages are dropped. Default 512. */
+  readonly subscriberBuffer?: number;
+  readonly connection?: LiveConnection.ConnectOptions;
 }
 
-const emptyStats = (): SessionStats => ({
+type MutableStats = { -readonly [K in keyof SessionStats]: SessionStats[K] };
+
+const emptyStats = (): MutableStats => ({
   likes: 0,
   diamonds: 0,
   follows: 0,
@@ -55,189 +54,151 @@ const emptyStats = (): SessionStats => ({
   peakViewers: 0,
 });
 
-/**
- * Owns the TikTok connection for one streamer and keeps it alive across
- * stream restarts, tracking running stats for overlays like goal bars.
- */
-export class Session extends EventEmitter<{ event: [LiveEvent]; status: [SessionStatus] }> {
-  private conn: TikTokLiveConnection | undefined;
-  private demo: DemoSource | undefined;
-  private pollTimer: NodeJS.Timeout | undefined;
-  private statsTimer: NodeJS.Timeout | undefined;
-  private running = false;
-  private _state: SessionState = 'idle';
-  private error: string | undefined;
-  private room: RoomStatus | undefined;
-  private liveSince: number | undefined;
-  private stats = emptyStats();
-  private readonly history: LiveEvent[] = [];
-  private readonly pollIntervalMs: number;
-  private readonly historySize: number;
+/** Starts a session that runs until the surrounding scope closes. */
+export const make = (username: string, options: SessionOptions = {}) =>
+  Effect.gen(function* () {
+    const pollInterval = Duration.fromInputUnsafe(options.pollInterval ?? "30 seconds");
+    const historySize = options.historySize ?? 50;
+    const pubsub = yield* PubSub.sliding<SessionMessage>(options.subscriberBuffer ?? 512);
 
-  constructor(
-    readonly username: string,
-    options: SessionOptions = {},
-  ) {
-    super();
-    this.pollIntervalMs = options.pollIntervalMs ?? 30_000;
-    this.historySize = options.historySize ?? 50;
-  }
+    // Mutated only inside Effect.sync blocks; fibers never interleave within one.
+    // Start in the state the runner will enter first, so early snapshots are accurate.
+    let state: SessionState = username === DEMO_USERNAME ? "live" : "connecting";
+    let error: string | undefined;
+    let room: RoomStatus | undefined;
+    let roomId: string | undefined;
+    let liveSince: number | undefined;
+    let stats = emptyStats();
+    let statsDirty = false;
+    const history: Array<LiveEvent> = [];
 
-  get isDemo(): boolean {
-    return this.username === DEMO_USERNAME;
-  }
+    const snapshot = (): SessionStatus => ({
+      username,
+      state,
+      ...(roomId ? { roomId } : {}),
+      ...(room ? { title: room.title, owner: room.owner } : {}),
+      ...(liveSince ? { liveSince } : {}),
+      ...(error ? { error } : {}),
+      stats: { ...stats },
+    });
 
-  get status(): SessionStatus {
-    return {
-      username: this.username,
-      state: this._state,
-      ...(this.room ? { roomId: this.room.roomId, title: this.room.title, owner: this.room.owner } : {}),
-      ...(this.liveSince ? { liveSince: this.liveSince } : {}),
-      ...(this.error ? { error: this.error } : {}),
-      stats: { ...this.stats },
+    const publishStatus = Effect.suspend(() => {
+      statsDirty = false;
+      return PubSub.publish(pubsub, { _tag: "Status", status: snapshot() });
+    });
+
+    const setState = (next: SessionState, nextError?: string) =>
+      Effect.suspend(() => {
+        state = next;
+        error = nextError;
+        return publishStatus;
+      });
+
+    const handleEvent = (event: LiveEvent) =>
+      Effect.suspend(() => {
+        switch (event.type) {
+          case "like":
+            stats.likes = Math.max(stats.likes + event.likeCount, event.totalLikeCount);
+            break;
+          case "gift":
+            if (!event.streaking) stats.diamonds += event.totalDiamonds;
+            break;
+          case "follow":
+            stats.follows++;
+            break;
+          case "share":
+            stats.shares++;
+            break;
+          case "join":
+            stats.joins++;
+            break;
+          case "chat":
+            stats.chats++;
+            break;
+          case "viewers":
+            stats.viewers = event.viewerCount;
+            stats.peakViewers = Math.max(stats.peakViewers, event.viewerCount);
+            break;
+        }
+        statsDirty = true;
+        // Likes and viewer counts are too noisy to be useful as replayed history.
+        if (event.type !== "like" && event.type !== "viewers") {
+          history.push(event);
+          if (history.length > historySize) history.shift();
+        }
+        return PubSub.publish(pubsub, { _tag: "Event", event });
+      });
+
+    const onConnection = (event: LiveConnection.ConnectionEvent) => {
+      switch (event._tag) {
+        case "Connected":
+          return Effect.suspend(() => {
+            room = event.room ?? room;
+            // A new room means a new stream; reconnects to the same room keep running totals.
+            if (event.roomId !== roomId) {
+              roomId = event.roomId;
+              liveSince = Date.now();
+              stats = emptyStats();
+              stats.viewers = event.room?.viewerCount ?? 0;
+              stats.peakViewers = stats.viewers;
+            }
+            liveSince ??= Date.now();
+            return setState("live");
+          });
+        case "Event":
+          return handleEvent(event.event);
+        case "Disconnected":
+          return event.willReconnect ? setState("connecting") : Effect.void;
+        case "Raw":
+          return Effect.void;
+      }
     };
-  }
 
-  recentEvents(): LiveEvent[] {
-    return [...this.history];
-  }
-
-  start(): void {
-    if (this.running) return;
-    this.running = true;
-    if (this.isDemo) {
-      this.demo = new DemoSource();
-      this.demo.on('event', (e) => this.handleEvent(e));
-      this.demo.start();
-      this.liveSince = Date.now();
-      this.setState('live');
-      return;
-    }
-    void this.tryConnect();
-  }
-
-  stop(): void {
-    this.running = false;
-    clearTimeout(this.pollTimer);
-    this.pollTimer = undefined;
-    clearTimeout(this.statsTimer);
-    this.statsTimer = undefined;
-    this.demo?.stop();
-    this.demo = undefined;
-    const conn = this.conn;
-    this.conn = undefined;
-    conn?.removeAllListeners();
-    conn?.on('error', () => {});
-    conn?.disconnect();
-    this.setState('idle');
-  }
-
-  /** Injects an event as if it came from TikTok; used by the dashboard's test buttons. */
-  inject(event: LiveEvent): void {
-    this.handleEvent(event);
-  }
-
-  private async tryConnect(): Promise<void> {
-    if (!this.running) return;
-    this.setState('connecting');
-    const conn = new TikTokLiveConnection(this.username);
-    this.conn = conn;
-
-    conn.on('event', (e) => this.handleEvent(e));
-    conn.on('error', () => {
-      // Transient errors are retried by the connection; terminal ones surface via 'disconnected'.
-    });
-    conn.on('connected', () => this.setState('live'));
-    conn.on('disconnected', ({ willReconnect, reason }) => {
-      if (conn !== this.conn) return;
-      if (willReconnect) {
-        this.setState('connecting');
-        return;
-      }
-      this.conn = undefined;
-      this.liveSince = undefined;
-      if (this.running) {
-        if (reason === 'reconnect failed') this.error = 'Lost connection to TikTok';
-        this.schedulePoll();
+    const runLive = Effect.gen(function* () {
+      while (true) {
+        yield* setState("connecting", error);
+        const result = yield* LiveConnection.connect(username, options.connection).pipe(
+          Stream.runForEach(onConnection),
+          Effect.result,
+        );
+        if (result._tag === "Success") {
+          liveSince = undefined;
+          yield* setState("waiting");
+        } else {
+          const failure = result.failure;
+          if (failure._tag === "UserOffline") {
+            yield* setState("waiting");
+          } else if (failure._tag === "UserNotFound") {
+            yield* setState("error", failure.message);
+            return;
+          } else {
+            yield* setState("error", failure.message);
+          }
+        }
+        yield* Effect.sleep(pollInterval);
       }
     });
 
-    try {
-      await conn.connect();
-      if (conn !== this.conn) return;
-      this.room = conn.room;
-      this.error = undefined;
-      this.liveSince = Date.now();
-      this.stats = emptyStats();
-      this.stats.viewers = this.room?.viewerCount ?? 0;
-      this.stats.peakViewers = this.stats.viewers;
-      this.setState('live');
-    } catch (err) {
-      if (conn !== this.conn) return;
-      this.conn = undefined;
-      if (err instanceof UserOfflineError) {
-        this.error = undefined;
-        this.schedulePoll();
-      } else if (err instanceof UserNotFoundError) {
-        this.error = err.message;
-        this.running = false;
-        this.setState('error');
-      } else {
-        this.error = (err as Error).message;
-        this.schedulePoll();
-      }
-    }
-  }
+    if (username === DEMO_USERNAME) liveSince = Date.now();
+    const runDemo = Effect.gen(function* () {
+      yield* setState("live");
+      yield* Stream.runForEach(demoEvents, handleEvent);
+    });
 
-  private schedulePoll(): void {
-    this.setState(this.error ? 'error' : 'waiting');
-    clearTimeout(this.pollTimer);
-    this.pollTimer = setTimeout(() => void this.tryConnect(), this.pollIntervalMs);
-  }
+    yield* (username === DEMO_USERNAME ? runDemo : runLive).pipe(Effect.forkScoped);
 
-  private handleEvent(event: LiveEvent): void {
-    const s = this.stats;
-    switch (event.type) {
-      case 'like':
-        s.likes = Math.max(s.likes + event.likeCount, event.totalLikeCount);
-        break;
-      case 'gift':
-        if (!event.streaking) s.diamonds += event.totalDiamonds;
-        break;
-      case 'follow':
-        s.follows++;
-        break;
-      case 'share':
-        s.shares++;
-        break;
-      case 'join':
-        s.joins++;
-        break;
-      case 'chat':
-        s.chats++;
-        break;
-      case 'viewers':
-        s.viewers = event.viewerCount;
-        s.peakViewers = Math.max(s.peakViewers, event.viewerCount);
-        break;
-    }
+    // Push stat changes (goal bars etc.) at most once per second.
+    yield* Effect.suspend(() => (statsDirty ? publishStatus : Effect.void)).pipe(
+      Effect.delay("1 second"),
+      Effect.forever,
+      Effect.forkScoped,
+    );
 
-    // Likes and viewer counts are too noisy to be useful as replayed history.
-    if (event.type !== 'like' && event.type !== 'viewers') {
-      this.history.push(event);
-      if (this.history.length > this.historySize) this.history.shift();
-    }
-    this.emit('event', event);
-
-    // Push stat changes to overlays (goal bars etc.) at most once per second.
-    this.statsTimer ??= setTimeout(() => {
-      this.statsTimer = undefined;
-      this.emit('status', this.status);
-    }, 1000);
-  }
-
-  private setState(state: SessionState): void {
-    this._state = state;
-    this.emit('status', this.status);
-  }
-}
+    return {
+      username,
+      status: Effect.sync(snapshot),
+      recentEvents: Effect.sync(() => [...history]),
+      subscribe: PubSub.subscribe(pubsub),
+      inject: (event) => Effect.asVoid(handleEvent(event)),
+    } satisfies Session;
+  });

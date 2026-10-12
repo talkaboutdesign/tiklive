@@ -1,6 +1,6 @@
-import { gunzip } from 'node:zlib';
-import { promisify } from 'node:util';
-import { decode, ProtoWriter } from './wire.ts';
+import { gunzip } from "node:zlib";
+import { promisify } from "node:util";
+import { decode, ProtoWriter } from "./wire.ts";
 
 const gunzipAsync = promisify(gunzip);
 const textEncoder = new TextEncoder();
@@ -64,7 +64,7 @@ export function encodePushFrame(frame: {
 }): Uint8Array {
   return new ProtoWriter()
     .varint(2, frame.logId)
-    .string(6, frame.payloadEncoding ?? 'pb')
+    .string(6, frame.payloadEncoding ?? "pb")
     .string(7, frame.payloadType)
     .bytes(8, frame.payload)
     .finish();
@@ -102,7 +102,7 @@ export async function decodeSocketFrame(
   buf: Uint8Array,
 ): Promise<{ frame: PushFrame; result?: FetchResult }> {
   const frame = decodePushFrame(buf);
-  if (frame.payloadType !== 'msg' || frame.payloadEncoding !== 'pb' || frame.payload.length === 0) {
+  if (frame.payloadType !== "msg" || frame.payloadEncoding !== "pb" || frame.payload.length === 0) {
     return { frame };
   }
   const payload = isGzip(frame.payload) ? new Uint8Array(await gunzipAsync(frame.payload)) : frame.payload;
@@ -111,7 +111,7 @@ export async function decodeSocketFrame(
 
 export function encodeHeartbeat(roomId: string): Uint8Array {
   const hb = new ProtoWriter().varint(1, roomId).finish();
-  return encodePushFrame({ payloadType: 'hb', payload: hb });
+  return encodePushFrame({ payloadType: "hb", payload: hb });
 }
 
 /** Joins the room on an open socket. Mirrors the frame TikTok's web client sends. */
@@ -119,13 +119,13 @@ export function encodeEnterRoom(roomId: string, cursor?: string): Uint8Array {
   const enter = new ProtoWriter()
     .varint(1, roomId)
     .varint(4, 12) // live_id: constant for TikTok LIVE
-    .string(5, 'audience')
+    .string(5, "audience")
     .string(6, cursor)
     .finish();
-  return encodePushFrame({ payloadType: 'im_enter_room', payload: enter });
+  return encodePushFrame({ payloadType: "im_enter_room", payload: enter });
 }
 
 /** Acknowledges a message batch. The web client sends '-' as the payload. */
-export function encodeAck(logId: string, payload = '-'): Uint8Array {
-  return encodePushFrame({ logId, payloadType: 'ack', payload: textEncoder.encode(payload) });
+export function encodeAck(logId: string, payload = "-"): Uint8Array {
+  return encodePushFrame({ logId, payloadType: "ack", payload: textEncoder.encode(payload) });
 }

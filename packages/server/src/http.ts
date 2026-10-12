@@ -1,338 +1,411 @@
-import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { extname, join, normalize, resolve } from 'node:path';
-import { timingSafeEqual } from 'node:crypto';
-import { WebSocketServer, type WebSocket } from 'ws';
-import { LIVE_EVENT_TYPES, type LiveEvent, type LiveEventType } from '../events.js';
-import { normalizeUsername } from '../tiktok/web.js';
-import { Session, type SessionOptions, type SessionStatus } from './session.js';
+/**
+ * HTTP + WebSocket surface of the tiklive server: the overlay WebSocket
+ * (`/ws`), the REST API (`/api/*`), the client bundle (`/tiklive.js`) and
+ * optional static files. See docs/PROTOCOL.md.
+ */
+import {
+  ClientMessage,
+  LIVE_EVENT_TYPES,
+  LiveEvent,
+  LiveEventType,
+  normalizeUsername,
+  PROTOCOL_VERSION,
+  Username,
+  type ErrorCode,
+  type LiveEventType as LiveEventTypeT,
+  type ServerMessage,
+} from "@tiklive/contracts";
+import { timingSafeEqual } from "node:crypto";
+import { existsSync, statSync } from "node:fs";
+import { extname, join, resolve, sep } from "node:path";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { SessionManager } from "./SessionManager.ts";
 
-export interface ServerOptions extends SessionOptions {
-  port?: number;
-  host?: string;
-  /** When set, required as `?token=` (WebSocket) or `Authorization: Bearer` (REST). */
-  token?: string;
-  /** Static files (overlays, dashboard). Set to false to disable. */
-  publicDir?: string | false;
-  /** Usernames to watch permanently, connecting whenever they go live. */
-  watch?: string[];
-  /** How long a session with no overlays attached stays connected. */
-  idleTimeoutMs?: number;
+export interface HttpOptions {
+  /** Require this token as `Authorization: Bearer` or `?token=` for the API and WebSocket. */
+  readonly token?: string;
+  /**
+   * Custom authorization; overrides `token`. Return true to allow the request.
+   * Runs for `/api/*` (except health) and `/ws`.
+   */
+  readonly authorize?: (request: HttpServerRequest.HttpServerRequest) => Effect.Effect<boolean>;
+  /**
+   * Hostnames the server accepts in the `Host` header, which blocks DNS-rebinding
+   * attacks against a server on localhost. Default: localhost, 127.0.0.1, [::1].
+   * `"any"` disables the check (use with a token when exposing the server).
+   */
+  readonly allowedHosts?: ReadonlyArray<string> | "any";
+  /**
+   * Extra origins allowed to call the API and WebSocket from a browser, e.g.
+   * `https://my-overlay-app.example`. Same-origin pages and non-browser clients
+   * (OBS, curl, Node) are always allowed.
+   */
+  readonly allowedOrigins?: ReadonlyArray<string>;
+  /** Serve this directory (dashboard, overlays). */
+  readonly staticDir?: string;
+  /** Path to the built browser client, served at `/tiklive.js`. */
+  readonly clientBundle?: string;
+  /** Max streamers one WebSocket may follow. Default 20. */
+  readonly maxSubscriptionsPerSocket?: number;
+  readonly serverVersion?: string;
 }
 
-/** Messages sent to overlay clients. */
-export type ServerMessage =
-  | { type: 'event'; username: string; event: LiveEvent; replay?: boolean }
-  | { type: 'status'; username: string; status: SessionStatus }
-  | { type: 'error'; message: string };
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]", "::1"];
 
-/** Messages overlay clients may send. */
-export type ClientMessage =
-  | { action: 'subscribe'; username: string; events?: LiveEventType[]; replay?: boolean }
-  | { action: 'unsubscribe'; username: string };
-
-interface Subscription {
-  events: Set<LiveEventType> | null;
-}
-
-interface Client {
-  ws: WebSocket;
-  subs: Map<string, Subscription>;
-}
-
-const MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-  '.mp3': 'audio/mpeg',
-  '.wav': 'audio/wav',
+const SECURITY_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
 };
 
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+const STATIC_HEADERS = {
+  ...SECURITY_HEADERS,
+  "cache-control": "no-cache",
+  // Overlays are plain HTML with inline scripts/styles; remote images (avatars, gifts) are allowed.
+  "content-security-policy":
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src * data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'none'",
+};
 
-export class LiveServer {
-  readonly http: Server;
-  private readonly wss: WebSocketServer;
-  private readonly sessions = new Map<string, Session>();
-  private readonly pinned = new Set<string>();
-  private readonly idleTimers = new Map<string, NodeJS.Timeout>();
-  private readonly clients = new Set<Client>();
-  private readonly options: ServerOptions;
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".woff2": "font/woff2",
+};
 
-  constructor(options: ServerOptions = {}) {
-    this.options = options;
-    this.http = createHttpServer((req, res) => {
-      this.handleHttp(req, res).catch((err) => {
-        const status = err instanceof HttpError ? err.status : 500;
-        if (status === 500) console.error(err);
-        sendJson(res, status, { error: (err as Error).message });
-      });
-    });
-    this.wss = new WebSocketServer({ noServer: true });
-    this.http.on('upgrade', (req, socket, head) => {
-      const url = new URL(req.url ?? '/', 'http://localhost');
-      if (url.pathname !== '/ws' || !this.authorized(req, url)) {
-        socket.end('HTTP/1.1 401 Unauthorized\r\n\r\n');
-        return;
-      }
-      this.wss.handleUpgrade(req, socket, head, (ws) => this.handleClient(ws, url));
-    });
-    for (const name of options.watch ?? []) this.watch(name);
-  }
+const json = (body: unknown, status = 200) =>
+  HttpServerResponse.jsonUnsafe(body, { status, headers: SECURITY_HEADERS });
+const jsonError = (status: number, message: string) => json({ error: message }, status);
 
-  listen(): Promise<{ port: number; host: string }> {
-    const port = this.options.port ?? 8080;
-    const host = this.options.host ?? '127.0.0.1';
-    return new Promise((resolvePromise, reject) => {
-      this.http.once('error', reject);
-      this.http.listen(port, host, () => {
-        const addr = this.http.address();
-        resolvePromise({ port: typeof addr === 'object' && addr ? addr.port : port, host });
-      });
-    });
-  }
+export const routes = (options: HttpOptions = {}) => {
+  const maxSubscriptions = options.maxSubscriptionsPerSocket ?? 20;
+  const allowedHosts = options.allowedHosts ?? LOOPBACK_HOSTS;
+  const allowedOrigins = new Set(options.allowedOrigins ?? []);
+  const staticRoot = options.staticDir ? resolve(options.staticDir) : undefined;
 
-  async close(): Promise<void> {
-    for (const session of this.sessions.values()) session.stop();
-    for (const timer of this.idleTimers.values()) clearTimeout(timer);
-    for (const client of this.clients) client.ws.terminate();
-    this.wss.close();
-    await new Promise<void>((r) => this.http.close(() => r()));
-  }
-
-  /** Keeps a session running regardless of attached overlays. */
-  watch(username: string): Session {
-    const name = normalizeUsername(username);
-    this.pinned.add(name);
-    return this.getSession(name);
-  }
-
-  unwatch(username: string): void {
-    const name = normalizeUsername(username);
-    this.pinned.delete(name);
-    this.maybeStop(name);
-  }
-
-  private getSession(name: string): Session {
-    let session = this.sessions.get(name);
-    if (!session) {
-      session = new Session(name, this.options);
-      session.on('event', (event) => this.broadcastEvent(name, event));
-      session.on('status', (status) => this.broadcast(name, { type: 'status', username: name, status }));
-      this.sessions.set(name, session);
-      session.start();
+  /** Host/Origin checks. Returns an error response, or undefined when the request may proceed. */
+  const checkRequest = (request: HttpServerRequest.HttpServerRequest, url: URL) => {
+    const host = request.headers.host ?? "";
+    if (allowedHosts !== "any") {
+      const hostname = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0]!;
+      if (!allowedHosts.includes(hostname.toLowerCase())) return jsonError(403, "Host not allowed");
     }
-    clearTimeout(this.idleTimers.get(name));
-    this.idleTimers.delete(name);
-    return session;
-  }
-
-  private subscriberCount(name: string): number {
-    let n = 0;
-    for (const c of this.clients) if (c.subs.has(name)) n++;
-    return n;
-  }
-
-  private maybeStop(name: string): void {
-    if (this.pinned.has(name) || this.subscriberCount(name) > 0 || this.idleTimers.has(name)) return;
-    const timer = setTimeout(() => {
-      this.idleTimers.delete(name);
-      if (this.pinned.has(name) || this.subscriberCount(name) > 0) return;
-      this.sessions.get(name)?.stop();
-      this.sessions.delete(name);
-    }, this.options.idleTimeoutMs ?? 60_000);
-    this.idleTimers.set(name, timer);
-  }
-
-  private broadcastEvent(name: string, event: LiveEvent): void {
-    const payload = JSON.stringify({ type: 'event', username: name, event } satisfies ServerMessage);
-    for (const client of this.clients) {
-      const sub = client.subs.get(name);
-      if (sub && (!sub.events || sub.events.has(event.type))) client.ws.send(payload);
+    const origin = request.headers.origin;
+    if (origin && origin !== `${url.protocol}//${host}` && !allowedOrigins.has(origin)) {
+      return jsonError(403, "Origin not allowed");
     }
-  }
+    return undefined;
+  };
 
-  private broadcast(name: string, message: ServerMessage): void {
-    const payload = JSON.stringify(message);
-    for (const client of this.clients) if (client.subs.has(name)) client.ws.send(payload);
-  }
+  const authorized = (request: HttpServerRequest.HttpServerRequest, url: URL): Effect.Effect<boolean> => {
+    if (options.authorize) return options.authorize(request);
+    const expected = options.token;
+    if (!expected) return Effect.succeed(true);
+    const header = request.headers.authorization?.replace(/^Bearer\s+/i, "");
+    const given = Buffer.from(header ?? url.searchParams.get("token") ?? "");
+    const wanted = Buffer.from(expected);
+    return Effect.succeed(given.length === wanted.length && timingSafeEqual(given, wanted));
+  };
 
-  // ---- WebSocket clients ----
+  const requestUrl = (request: HttpServerRequest.HttpServerRequest) =>
+    Option.getOrElse(HttpServerRequest.toURL(request), () => new URL(request.url, "http://localhost"));
 
-  private handleClient(ws: WebSocket, url: URL): void {
-    const client: Client = { ws, subs: new Map() };
-    this.clients.add(client);
+  /** Wraps a handler with Host/Origin checks and authorization. */
+  const guarded =
+    <E, R>(
+      handler: (
+        request: HttpServerRequest.HttpServerRequest,
+        url: URL,
+      ) => Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+    ) =>
+    (request: HttpServerRequest.HttpServerRequest) =>
+      Effect.gen(function* () {
+        const url = requestUrl(request);
+        const rejected = checkRequest(request, url);
+        if (rejected) return rejected;
+        if (!(yield* authorized(request, url))) return jsonError(401, "Unauthorized");
+        return yield* handler(request, url);
+      });
 
-    const send = (msg: ServerMessage) => ws.send(JSON.stringify(msg));
+  const parseUsername = (raw: string) => {
+    const name = normalizeUsername(decodeURIComponent(raw));
+    return Schema.is(Username)(name) ? name : undefined;
+  };
 
-    const subscribe = (raw: string, events?: string[] | null, replay = false) => {
-      const name = normalizeUsername(raw);
-      if (!/^[a-z0-9._]{1,32}$/.test(name)) {
-        send({ type: 'error', message: `Invalid username: ${raw}` });
-        return;
-      }
-      // null = all events; an empty list = status updates only.
-      const filter = Array.isArray(events)
-        ? new Set(events.filter((e): e is LiveEventType => (LIVE_EVENT_TYPES as string[]).includes(e)))
-        : null;
-      client.subs.set(name, { events: filter });
-      const session = this.getSession(name);
-      send({ type: 'status', username: name, status: session.status });
-      if (replay) {
-        for (const event of session.recentEvents()) {
-          if (!filter || filter.has(event.type)) send({ type: 'event', username: name, event, replay: true });
+  // ---- REST ----
+
+  const health = HttpRouter.add("GET", "/api/health", json({ ok: true, protocolVersion: PROTOCOL_VERSION }));
+
+  const listSessions = HttpRouter.add(
+    "GET",
+    "/api/sessions",
+    guarded(() =>
+      Effect.gen(function* () {
+        const manager = yield* SessionManager;
+        return json({ sessions: yield* manager.list });
+      }),
+    ),
+  );
+
+  const sessionRoute = HttpRouter.add(
+    "*",
+    "/api/sessions/:username",
+    guarded((request) =>
+      Effect.gen(function* () {
+        const manager = yield* SessionManager;
+        const params = yield* HttpRouter.params;
+        const username = parseUsername(params.username ?? "");
+        if (!username) return jsonError(400, "Invalid username");
+        switch (request.method) {
+          case "GET": {
+            const session = yield* manager.get(username);
+            if (Option.isNone(session)) return jsonError(404, `No session for @${username}`);
+            return json(yield* session.value.status);
+          }
+          case "PUT":
+          case "POST": {
+            const session = yield* manager.watch(username);
+            return json({ ...(yield* session.status), watching: true });
+          }
+          case "DELETE":
+            yield* manager.unwatch(username);
+            return json({ ok: true });
+          default:
+            return jsonError(405, "Method not allowed");
         }
-      }
-    };
+      }),
+    ),
+  );
 
-    ws.on('message', (data) => {
-      let msg: ClientMessage;
-      try {
-        msg = JSON.parse(data.toString());
-      } catch {
-        send({ type: 'error', message: 'Messages must be JSON' });
-        return;
-      }
-      if (msg.action === 'subscribe' && typeof msg.username === 'string') {
-        subscribe(msg.username, msg.events, msg.replay);
-      } else if (msg.action === 'unsubscribe' && typeof msg.username === 'string') {
-        const name = normalizeUsername(msg.username);
-        client.subs.delete(name);
-        this.maybeStop(name);
-      } else {
-        send({ type: 'error', message: 'Unknown action' });
-      }
-    });
+  const simulateRoute = HttpRouter.add(
+    "POST",
+    "/api/sessions/:username/simulate",
+    guarded((request) =>
+      Effect.gen(function* () {
+        const manager = yield* SessionManager;
+        const params = yield* HttpRouter.params;
+        const username = parseUsername(params.username ?? "");
+        if (!username) return jsonError(400, "Invalid username");
+        if (!request.headers["content-type"]?.toLowerCase().startsWith("application/json")) {
+          return jsonError(415, "Content-Type must be application/json");
+        }
+        const session = yield* manager.get(username);
+        if (Option.isNone(session)) return jsonError(404, `No session for @${username}`);
+        const text = yield* request.text.pipe(Effect.orElseSucceed(() => ""));
+        if (text.length > 64 * 1024) return jsonError(413, "Body too large");
+        let body: unknown;
+        try {
+          body = JSON.parse(text || "{}");
+        } catch {
+          return jsonError(400, "Body must be JSON");
+        }
+        const now = Date.now();
+        const candidate =
+          body && typeof body === "object" ? { timestamp: now, msgId: `sim-${now}`, ...body } : body;
+        const decoded = Schema.decodeUnknownExit(LiveEvent)(candidate);
+        if (decoded._tag === "Failure") {
+          return jsonError(
+            400,
+            `Invalid event. "type" must be one of: ${LIVE_EVENT_TYPES.join(", ")}, with that event's fields`,
+          );
+        }
+        yield* session.value.inject(decoded.value);
+        return json({ ok: true, event: decoded.value });
+      }),
+    ),
+  );
 
-    ws.on('close', () => {
-      this.clients.delete(client);
-      for (const name of client.subs.keys()) this.maybeStop(name);
-    });
+  // ---- WebSocket ----
 
-    // Shortcut for overlays: /ws?username=foo&events=chat,gift&replay=1
-    const username = url.searchParams.get('username');
-    if (username) {
-      const events = url.searchParams.get('events');
-      subscribe(username, events === null ? null : events.split(','), url.searchParams.get('replay') === '1');
+  const wsRoute = HttpRouter.add(
+    "GET",
+    "/ws",
+    guarded((request, url) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const manager = yield* SessionManager;
+          const socket = yield* request.upgrade;
+          const writer = yield* socket.writer;
+          const reader = yield* socket.reader;
+          const scope = yield* Scope.Scope;
+          const send = (message: ServerMessage) => writer.write(JSON.stringify(message)).pipe(Effect.ignore);
+          const sendError = (code: ErrorCode, message: string) => send({ type: "error", code, message });
+          const subscriptions = new Map<string, Fiber.Fiber<unknown>>();
+
+          const subscribe = (
+            raw: string,
+            events: ReadonlyArray<LiveEventTypeT> | undefined,
+            replay: boolean,
+          ) =>
+            Effect.gen(function* () {
+              const username = normalizeUsername(raw);
+              if (!Schema.is(Username)(username))
+                return yield* sendError("invalid_username", `Invalid username: ${raw}`);
+              if (!subscriptions.has(username) && subscriptions.size >= maxSubscriptions) {
+                return yield* sendError(
+                  "too_many_subscriptions",
+                  `At most ${maxSubscriptions} streamers per connection`,
+                );
+              }
+              const previous = subscriptions.get(username);
+              if (previous) yield* Fiber.interrupt(previous);
+              const filter = events ? new Set(events) : undefined;
+              const wants = (event: LiveEvent) => !filter || filter.has(event.type);
+
+              const fiber = yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const session = yield* manager.acquire(username);
+                  const updates = yield* session.subscribe;
+                  yield* send({ type: "status", username, status: yield* session.status });
+                  if (replay) {
+                    for (const event of yield* session.recentEvents) {
+                      if (wants(event)) yield* send({ type: "event", username, event, replay: true });
+                    }
+                  }
+                  while (true) {
+                    const message = yield* PubSub.take(updates);
+                    if (message._tag === "Status")
+                      yield* send({ type: "status", username, status: message.status });
+                    else if (wants(message.event))
+                      yield* send({ type: "event", username, event: message.event });
+                  }
+                }),
+              ).pipe(Effect.forkIn(scope));
+              subscriptions.set(username, fiber);
+            });
+
+          const unsubscribe = (raw: string) =>
+            Effect.suspend(() => {
+              const username = normalizeUsername(raw);
+              const fiber = subscriptions.get(username);
+              subscriptions.delete(username);
+              return fiber ? Fiber.interrupt(fiber) : Effect.void;
+            });
+
+          const handleText = (text: string) =>
+            Effect.gen(function* () {
+              let parsed: unknown;
+              try {
+                parsed = JSON.parse(text);
+              } catch {
+                return yield* sendError("invalid_message", "Messages must be JSON");
+              }
+              const decoded = Schema.decodeUnknownExit(ClientMessage)(parsed);
+              if (decoded._tag === "Failure") {
+                return yield* sendError("invalid_message", "Unknown or malformed message");
+              }
+              const message = decoded.value;
+              if (message.action === "subscribe") {
+                yield* subscribe(message.username, message.events, message.replay ?? false);
+              } else {
+                yield* unsubscribe(message.username);
+              }
+            });
+
+          yield* send({
+            type: "hello",
+            protocolVersion: PROTOCOL_VERSION,
+            serverVersion: options.serverVersion ?? "dev",
+          });
+
+          // Shortcut for overlays: /ws?username=foo&events=chat,gift&replay=1
+          const shortcut = url.searchParams.get("username");
+          if (shortcut) {
+            const eventsParam = url.searchParams.get("events");
+            const events =
+              eventsParam === null
+                ? undefined
+                : eventsParam.split(",").filter((e): e is LiveEventTypeT => Schema.is(LiveEventType)(e));
+            yield* subscribe(shortcut, events, url.searchParams.get("replay") === "1");
+          }
+
+          const decoder = new TextDecoder();
+          while (true) {
+            const chunks = yield* reader.pull.pipe(Effect.orElseSucceed(() => undefined));
+            if (!chunks) break;
+            for (const chunk of chunks) {
+              const text = typeof chunk === "string" ? chunk : decoder.decode(chunk);
+              if (text.length > 16 * 1024) {
+                yield* sendError("invalid_message", "Message too large");
+                continue;
+              }
+              yield* handleText(text);
+            }
+          }
+          return HttpServerResponse.empty();
+        }),
+      ),
+    ),
+  );
+
+  // ---- Static files ----
+
+  const clientBundle = HttpRouter.add("GET", "/tiklive.js", () => {
+    const path = options.clientBundle;
+    if (!path || !existsSync(path)) {
+      return Effect.succeed(
+        HttpServerResponse.text(
+          "// tiklive client bundle not built. Run: bun run --filter @tiklive/client build\n",
+          {
+            status: 404,
+            contentType: "text/javascript; charset=utf-8",
+            headers: STATIC_HEADERS,
+          },
+        ),
+      );
     }
-  }
+    return HttpServerResponse.file(path, { contentType: MIME[".js"]!, headers: STATIC_HEADERS }).pipe(
+      Effect.orElseSucceed(() => jsonError(500, "Failed to read client bundle")),
+    );
+  });
 
-  // ---- HTTP ----
-
-  private authorized(req: IncomingMessage, url: URL): boolean {
-    const expected = this.options.token;
-    if (!expected) return true;
-    const header = req.headers.authorization?.replace(/^Bearer\s+/i, '');
-    const given = header ?? url.searchParams.get('token') ?? '';
-    const a = Buffer.from(given);
-    const b = Buffer.from(expected);
-    return a.length === b.length && timingSafeEqual(a, b);
-  }
-
-  private async handleHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = new URL(req.url ?? '/', 'http://localhost');
-    const path = url.pathname;
-
-    if (path === '/api/health') return sendJson(res, 200, { ok: true });
-
-    if (path.startsWith('/api/')) {
-      if (!this.authorized(req, url)) throw new HttpError(401, 'Unauthorized');
-      return this.handleApi(req, res, path);
-    }
-
-    if (this.options.publicDir === false) throw new HttpError(404, 'Not found');
-    return this.serveStatic(res, path);
-  }
-
-  private async handleApi(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
-    if (path === '/api/sessions' && req.method === 'GET') {
-      return sendJson(res, 200, {
-        sessions: [...this.sessions.values()].map((s) => ({
-          ...s.status,
-          watching: this.pinned.has(s.username),
-          overlays: this.subscriberCount(s.username),
-        })),
-      });
-    }
-
-    const match = path.match(/^\/api\/sessions\/([^/]+)(\/simulate)?$/);
-    if (!match) throw new HttpError(404, 'Not found');
-    const name = normalizeUsername(decodeURIComponent(match[1]!));
-
-    if (match[2]) {
-      if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed');
-      const session = this.sessions.get(name);
-      if (!session) throw new HttpError(404, `No session for @${name}`);
-      const body = (await readJson(req)) as Partial<LiveEvent>;
-      if (!body.type || !(LIVE_EVENT_TYPES as string[]).includes(body.type)) {
-        throw new HttpError(400, `"type" must be one of: ${LIVE_EVENT_TYPES.join(', ')}`);
-      }
-      const event = { timestamp: Date.now(), msgId: `sim-${Date.now()}`, ...body } as LiveEvent;
-      session.inject(event);
-      return sendJson(res, 200, { ok: true, event });
-    }
-
-    switch (req.method) {
-      case 'GET': {
-        const session = this.sessions.get(name);
-        if (!session) throw new HttpError(404, `No session for @${name}`);
-        return sendJson(res, 200, { ...session.status, watching: this.pinned.has(name) });
-      }
-      case 'PUT':
-      case 'POST':
-        return sendJson(res, 200, { ...this.watch(name).status, watching: true });
-      case 'DELETE':
-        this.unwatch(name);
-        return sendJson(res, 200, { ok: true });
-      default:
-        throw new HttpError(405, 'Method not allowed');
-    }
-  }
-
-  private async serveStatic(res: ServerResponse, path: string): Promise<void> {
-    const root = resolve(this.options.publicDir || 'public');
-    let file = normalize(join(root, decodeURIComponent(path)));
-    if (!file.startsWith(root)) throw new HttpError(403, 'Forbidden');
+  const staticFiles = HttpRouter.add("GET", "/*", (request) => {
+    if (!staticRoot) return Effect.succeed(jsonError(404, "Not found"));
+    const url = requestUrl(request);
+    let path: string;
     try {
-      if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
-      const body = await readFile(file);
-      res.writeHead(200, { 'Content-Type': MIME[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
-      res.end(body);
+      path = resolve(join(staticRoot, decodeURIComponent(url.pathname)));
     } catch {
-      throw new HttpError(404, 'Not found');
+      return Effect.succeed(jsonError(400, "Bad path"));
     }
-  }
-}
+    if (path !== staticRoot && !path.startsWith(staticRoot + sep))
+      return Effect.succeed(jsonError(403, "Forbidden"));
+    try {
+      if (statSync(path).isDirectory()) path = join(path, "index.html");
+    } catch {
+      return Effect.succeed(jsonError(404, "Not found"));
+    }
+    if (!existsSync(path)) return Effect.succeed(jsonError(404, "Not found"));
+    return HttpServerResponse.file(path, {
+      contentType: MIME[extname(path)] ?? "application/octet-stream",
+      headers: STATIC_HEADERS,
+    }).pipe(Effect.orElseSucceed(() => jsonError(404, "Not found")));
+  });
 
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  if (res.headersSent) return;
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(body));
-}
-
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > 64 * 1024) throw new HttpError(413, 'Body too large');
-    chunks.push(chunk as Buffer);
-  }
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString() || '{}');
-  } catch {
-    throw new HttpError(400, 'Body must be JSON');
-  }
-}
+  return Layer.mergeAll(
+    health,
+    listSessions,
+    sessionRoute,
+    simulateRoute,
+    wsRoute,
+    clientBundle,
+    staticFiles,
+  );
+};

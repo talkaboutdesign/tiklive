@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
-import { gzipSync } from 'node:zlib';
-import { decode, ProtoWriter } from './wire.ts';
+import { gzipSync } from "node:zlib";
+import { decode, ProtoWriter } from "./wire.ts";
 import {
   decodeFetchResult,
   decodePushFrame,
@@ -8,8 +8,8 @@ import {
   encodeAck,
   encodeHeartbeat,
   encodePushFrame,
-} from './frames.ts';
-import { decodeLiveEvent } from './messages.ts';
+} from "./frames.ts";
+import { decodeLiveEvent } from "./messages.ts";
 
 const user = (id: string, handle: string, nickname: string) =>
   new ProtoWriter()
@@ -18,154 +18,204 @@ const user = (id: string, handle: string, nickname: string) =>
     .message(9, new ProtoWriter().string(1, `https://img/${handle}.webp`))
     .string(38, handle);
 
-const common = (msgId: string, createTime: number, displayKey = '') => {
+const common = (msgId: string, createTime: number, displayKey = "") => {
   const w = new ProtoWriter().varint(2, msgId).varint(4, createTime);
   if (displayKey) w.message(8, new ProtoWriter().string(1, displayKey));
   return w;
 };
 
-describe('wire codec', () => {
-  it('round-trips varints, 64-bit ids, strings and nested messages', () => {
+describe("wire codec", () => {
+  it("round-trips varints, 64-bit ids, strings and nested messages", () => {
     const buf = new ProtoWriter()
-      .varint(1, '7693676830666705678')
+      .varint(1, "7693676830666705678")
       .varint(2, 42)
       .varint(3, true)
-      .string(4, 'héllo 👋')
-      .message(5, new ProtoWriter().string(1, 'nested'))
-      .message(6, new ProtoWriter().string(1, 'a'))
-      .message(6, new ProtoWriter().string(1, 'b'))
+      .string(4, "héllo 👋")
+      .message(5, new ProtoWriter().string(1, "nested"))
+      .message(6, new ProtoWriter().string(1, "a"))
+      .message(6, new ProtoWriter().string(1, "b"))
       .finish();
 
     const m = decode(buf);
-    expect(m.id(1)).toBe('7693676830666705678');
+    expect(m.id(1)).toBe("7693676830666705678");
     expect(m.num(2)).toBe(42);
     expect(m.bool(3)).toBe(true);
-    expect(m.str(4)).toBe('héllo 👋');
-    expect(m.msg(5)?.str(1)).toBe('nested');
-    expect(m.msgs(6).map((x) => x.str(1))).toEqual(['a', 'b']);
+    expect(m.str(4)).toBe("héllo 👋");
+    expect(m.msg(5)?.str(1)).toBe("nested");
+    expect(m.msgs(6).map((x) => x.str(1))).toEqual(["a", "b"]);
     expect(m.num(99)).toBe(0);
-    expect(m.str(99)).toBe('');
+    expect(m.str(99)).toBe("");
   });
 
-  it('decodes negative int32 values encoded as 10-byte varints', () => {
+  it("decodes negative int32 values encoded as 10-byte varints", () => {
     const m = decode(new ProtoWriter().varint(1, -5).finish());
     expect(m.num(1)).toBe(-5);
   });
 
-  it('rejects truncated input', () => {
-    const buf = new ProtoWriter().string(1, 'hello').finish();
+  it("rejects truncated input", () => {
+    const buf = new ProtoWriter().string(1, "hello").finish();
     expect(() => decode(buf.subarray(0, 3))).toThrow();
   });
 });
 
-describe('frames', () => {
-  it('round-trips push frames', () => {
-    const encoded = encodePushFrame({ logId: '123', payloadType: 'msg', payload: Uint8Array.of(1, 2, 3) });
+describe("frames", () => {
+  it("round-trips push frames", () => {
+    const encoded = encodePushFrame({ logId: "123", payloadType: "msg", payload: Uint8Array.of(1, 2, 3) });
     const frame = decodePushFrame(encoded);
-    expect(frame).toMatchObject({ logId: '123', payloadType: 'msg', payloadEncoding: 'pb' });
+    expect(frame).toMatchObject({ logId: "123", payloadType: "msg", payloadEncoding: "pb" });
     expect([...frame.payload]).toEqual([1, 2, 3]);
   });
 
-  it('encodes heartbeat and ack frames', () => {
-    const hb = decodePushFrame(encodeHeartbeat('999'));
-    expect(hb.payloadType).toBe('hb');
-    expect(decode(hb.payload).id(1)).toBe('999');
+  it("encodes heartbeat and ack frames", () => {
+    const hb = decodePushFrame(encodeHeartbeat("999"));
+    expect(hb.payloadType).toBe("hb");
+    expect(decode(hb.payload).id(1)).toBe("999");
 
-    const ack = decodePushFrame(encodeAck('55'));
-    expect(ack).toMatchObject({ logId: '55', payloadType: 'ack' });
-    expect(new TextDecoder().decode(ack.payload)).toBe('-');
+    const ack = decodePushFrame(encodeAck("55"));
+    expect(ack).toMatchObject({ logId: "55", payloadType: "ack" });
+    expect(new TextDecoder().decode(ack.payload)).toBe("-");
   });
 
-  it('decodes gzipped event batches from socket frames', async () => {
+  it("decodes gzipped event batches from socket frames", async () => {
     const batch = new ProtoWriter()
-      .message(1, new ProtoWriter().string(1, 'WebcastChatMessage').bytes(2, Uint8Array.of(9)).varint(3, '77'))
-      .string(2, 'cursor-1')
-      .string(5, 'internal-ext')
-      .message(7, new ProtoWriter().string(1, 'imprp').string(2, 'xyz'))
+      .message(
+        1,
+        new ProtoWriter().string(1, "WebcastChatMessage").bytes(2, Uint8Array.of(9)).varint(3, "77"),
+      )
+      .string(2, "cursor-1")
+      .string(5, "internal-ext")
+      .message(7, new ProtoWriter().string(1, "imprp").string(2, "xyz"))
       .varint(9, true)
-      .string(10, 'wss://push.example/ws')
+      .string(10, "wss://push.example/ws")
       .finish();
 
-    const frame = encodePushFrame({ logId: '1', payloadType: 'msg', payload: new Uint8Array(gzipSync(batch)) });
+    const frame = encodePushFrame({
+      logId: "1",
+      payloadType: "msg",
+      payload: new Uint8Array(gzipSync(batch)),
+    });
     const { result } = await decodeSocketFrame(frame);
     expect(result).toMatchObject({
-      cursor: 'cursor-1',
-      internalExt: 'internal-ext',
-      routeParams: { imprp: 'xyz' },
+      cursor: "cursor-1",
+      internalExt: "internal-ext",
+      routeParams: { imprp: "xyz" },
       needAck: true,
-      pushServer: 'wss://push.example/ws',
+      pushServer: "wss://push.example/ws",
     });
-    expect(result?.messages[0]).toMatchObject({ method: 'WebcastChatMessage', msgId: '77' });
+    expect(result?.messages[0]).toMatchObject({ method: "WebcastChatMessage", msgId: "77" });
     expect(decodeFetchResult(batch).messages).toHaveLength(1);
   });
 });
 
-describe('live event decoding', () => {
-  it('decodes chat messages with user identity', () => {
+describe("live event decoding", () => {
+  it("decodes chat messages with user identity", () => {
     const payload = new ProtoWriter()
-      .message(1, common('100', 1791744000123))
-      .message(2, user('1', 'alice', 'Alice'))
-      .string(3, 'hello stream')
+      .message(1, common("100", 1791744000123))
+      .message(2, user("1", "alice", "Alice"))
+      .string(3, "hello stream")
       .message(18, new ProtoWriter().varint(2, true).varint(5, true))
       .finish();
 
-    expect(decodeLiveEvent({ method: 'WebcastChatMessage', payload, msgId: '100', isHistory: false })).toEqual({
-      type: 'chat',
-      msgId: '100',
+    expect(
+      decodeLiveEvent({ method: "WebcastChatMessage", payload, msgId: "100", isHistory: false }),
+    ).toEqual({
+      type: "chat",
+      msgId: "100",
       timestamp: 1791744000123,
       user: {
-        userId: '1',
-        uniqueId: 'alice',
-        nickname: 'Alice',
-        profilePictureUrl: 'https://img/alice.webp',
+        userId: "1",
+        uniqueId: "alice",
+        nickname: "Alice",
+        profilePictureUrl: "https://img/alice.webp",
         isGifter: false,
         isSubscriber: true,
         isFollower: false,
         isModerator: true,
       },
-      comment: 'hello stream',
+      comment: "hello stream",
       emotes: [],
     });
   });
 
-  it('tracks gift streaks', () => {
+  it("tracks gift streaks", () => {
     const gift = (repeatCount: number, repeatEnd: boolean) =>
       new ProtoWriter()
-        .message(1, common('200', 1791744000000))
+        .message(1, common("200", 1791744000000))
         .varint(2, 5655)
         .varint(5, repeatCount)
-        .message(7, user('2', 'bob', 'Bob'))
+        .message(7, user("2", "bob", "Bob"))
         .varint(9, repeatEnd)
         .message(
           15,
           new ProtoWriter()
-            .message(1, new ProtoWriter().string(1, 'https://img/rose.webp'))
+            .message(1, new ProtoWriter().string(1, "https://img/rose.webp"))
             .varint(11, 1)
             .varint(12, 1)
-            .string(16, 'Rose'),
+            .string(16, "Rose"),
         )
         .finish();
 
-    const mid = decodeLiveEvent({ method: 'WebcastGiftMessage', payload: gift(3, false), msgId: '', isHistory: false });
-    expect(mid).toMatchObject({ type: 'gift', giftName: 'Rose', repeatCount: 3, streaking: true, totalDiamonds: 3 });
+    const mid = decodeLiveEvent({
+      method: "WebcastGiftMessage",
+      payload: gift(3, false),
+      msgId: "",
+      isHistory: false,
+    });
+    expect(mid).toMatchObject({
+      type: "gift",
+      giftName: "Rose",
+      repeatCount: 3,
+      streaking: true,
+      totalDiamonds: 3,
+    });
 
-    const end = decodeLiveEvent({ method: 'WebcastGiftMessage', payload: gift(5, true), msgId: '', isHistory: false });
-    expect(end).toMatchObject({ streaking: false, repeatCount: 5, totalDiamonds: 5, giftImageUrl: 'https://img/rose.webp' });
+    const end = decodeLiveEvent({
+      method: "WebcastGiftMessage",
+      payload: gift(5, true),
+      msgId: "",
+      isHistory: false,
+    });
+    expect(end).toMatchObject({
+      streaking: false,
+      repeatCount: 5,
+      totalDiamonds: 5,
+      giftImageUrl: "https://img/rose.webp",
+    });
   });
 
-  it('splits social messages into follow and share', () => {
+  it("splits social messages into follow and share", () => {
     const social = (key: string) =>
-      new ProtoWriter().message(1, common('300', 1, key)).message(2, user('3', 'cat', 'Cat')).finish();
+      new ProtoWriter()
+        .message(1, common("300", 1, key))
+        .message(2, user("3", "cat", "Cat"))
+        .finish();
 
     expect(
-      decodeLiveEvent({ method: 'WebcastSocialMessage', payload: social('pm_main_follow_message_viewer_2'), msgId: '', isHistory: false })?.type,
-    ).toBe('follow');
+      decodeLiveEvent({
+        method: "WebcastSocialMessage",
+        payload: social("pm_main_follow_message_viewer_2"),
+        msgId: "",
+        isHistory: false,
+      })?.type,
+    ).toBe("follow");
     expect(
-      decodeLiveEvent({ method: 'WebcastSocialMessage', payload: social('pm_mt_guidance_share'), msgId: '', isHistory: false })?.type,
-    ).toBe('share');
+      decodeLiveEvent({
+        method: "WebcastSocialMessage",
+        payload: social("pm_mt_guidance_share"),
+        msgId: "",
+        isHistory: false,
+      })?.type,
+    ).toBe("share");
   });
 
-  it('ignores unsupported methods', () => {
-    expect(decodeLiveEvent({ method: 'WebcastUnknownThing', payload: new Uint8Array(), msgId: '', isHistory: false })).toBeUndefined();
+  it("ignores unsupported methods", () => {
+    expect(
+      decodeLiveEvent({
+        method: "WebcastUnknownThing",
+        payload: new Uint8Array(),
+        msgId: "",
+        isHistory: false,
+      }),
+    ).toBeUndefined();
   });
 });

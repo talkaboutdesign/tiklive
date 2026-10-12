@@ -22,7 +22,13 @@ import {
   UserNotFound,
   UserOffline,
 } from "./errors.ts";
-import { decodeSocketFrame, encodeAck, encodeEnterRoom, encodeHeartbeat, type RawMessage } from "./proto/frames.ts";
+import {
+  decodeSocketFrame,
+  encodeAck,
+  encodeEnterRoom,
+  encodeHeartbeat,
+  type RawMessage,
+} from "./proto/frames.ts";
 import { decodeLiveEvent } from "./proto/messages.ts";
 import * as TikTokWebModule from "./TikTokWeb.ts";
 import { type RoomStatus, TikTokWeb } from "./TikTokWeb.ts";
@@ -115,7 +121,10 @@ export const layerWebSocketGlobal: Layer.Layer<Socket.WebSocketConstructor> = La
   Socket.WebSocketConstructor,
 )((url, options) => new (globalThis.WebSocket as unknown as GlobalWebSocket)(url, options));
 
-type GlobalWebSocket = new (url: string, options?: Socket.WebSocketConstructorOptions) => Socket.WebSocketLike;
+type GlobalWebSocket = new (
+  url: string,
+  options?: Socket.WebSocketConstructorOptions,
+) => Socket.WebSocketLike;
 
 /** Everything `connect` needs, using the runtime's global `fetch` and `WebSocket` (Bun, Node 22+). */
 export const layer = (
@@ -133,7 +142,7 @@ const run = (
     const hosts = options.wsHosts ?? DEFAULT_WS_HOSTS;
     const heartbeatInterval = Duration.fromInputUnsafe(options.heartbeatInterval ?? "10 seconds");
     const connectTimeout = Duration.fromInputUnsafe(options.connectTimeout ?? "15 seconds");
-    const reconnect = options.reconnect === false ? undefined : options.reconnect ?? {};
+    const reconnect = options.reconnect === false ? undefined : (options.reconnect ?? {});
     const maxAttempts = reconnect?.maxAttempts ?? 10;
     const maxDelay = Duration.toMillis(Duration.fromInputUnsafe(reconnect?.maxDelay ?? "30 seconds"));
     const seen = new RecentIds(5000);
@@ -148,7 +157,14 @@ const run = (
     const runSocket = (roomId: string, room: RoomStatus | undefined, ttwid: string) =>
       Effect.scoped(
         Effect.gen(function* () {
-          const opened = yield* openFirstHost(hosts, roomId, ttwid, web.userAgent, heartbeatInterval, connectTimeout);
+          const opened = yield* openFirstHost(
+            hosts,
+            roomId,
+            ttwid,
+            web.userAgent,
+            heartbeatInterval,
+            connectTimeout,
+          );
           const { reader, writer, host } = opened;
           yield* writer
             .write(encodeEnterRoom(roomId))
@@ -218,9 +234,13 @@ const run = (
       return yield* runSocket(roomId, room, ttwid).pipe(
         Effect.catchTag("SocketOpenFailed", (error) =>
           // A stale device cookie is the most common cause; retry once with a fresh one.
-          web.getTtwid({ refresh: true }).pipe(
-            Effect.flatMap((fresh) => (fresh === ttwid ? Effect.fail(error) : runSocket(roomId, room, fresh))),
-          ),
+          web
+            .getTtwid({ refresh: true })
+            .pipe(
+              Effect.flatMap((fresh) =>
+                fresh === ttwid ? Effect.fail(error) : runSocket(roomId, room, fresh),
+              ),
+            ),
         ),
       );
     });
@@ -271,12 +291,17 @@ function openFirstHost(
       const url = socketUrl(host, roomId, userAgent, heartbeatInterval);
       const opened = yield* Effect.gen(function* () {
         const makeWs = yield* Socket.WebSocketConstructor;
-        const headers = { "User-Agent": userAgent, Cookie: `ttwid=${ttwid}`, Origin: "https://www.tiktok.com" };
+        const headers = {
+          "User-Agent": userAgent,
+          Cookie: `ttwid=${ttwid}`,
+          Origin: "https://www.tiktok.com",
+        };
         const socket = yield* Socket.fromWebSocket(
           Effect.acquireRelease(
             Effect.try({
               try: () => makeWs(url, { headers }),
-              catch: (cause) => new Socket.SocketError({ reason: new Socket.SocketOpenError({ kind: "Unknown", cause }) }),
+              catch: (cause) =>
+                new Socket.SocketError({ reason: new Socket.SocketOpenError({ kind: "Unknown", cause }) }),
             }),
             (ws) => Effect.sync(() => ws.close(1000)),
           ),
@@ -289,11 +314,19 @@ function openFirstHost(
       if (opened._tag === "Success") return opened.success;
       errors.push(`${host}: ${describeSocketError(opened.failure)}`);
     }
-    return yield* new SocketOpenFailed({ message: `Could not open the TikTok socket (${errors.join("; ")})`, hosts });
+    return yield* new SocketOpenFailed({
+      message: `Could not open the TikTok socket (${errors.join("; ")})`,
+      hosts,
+    });
   });
 }
 
-function socketUrl(host: string, roomId: string, userAgent: string, heartbeatInterval: Duration.Duration): string {
+function socketUrl(
+  host: string,
+  roomId: string,
+  userAgent: string,
+  heartbeatInterval: Duration.Duration,
+): string {
   const params = new URLSearchParams({
     version_code: "180800",
     device_platform: "web",
@@ -329,7 +362,8 @@ function socketUrl(host: string, roomId: string, userAgent: string, heartbeatInt
 
 function describeSocketError(error: Socket.SocketError): string {
   const reason = error.reason;
-  if (reason._tag === "SocketCloseError") return `closed with code ${reason.code}${reason.closeReason ? `: ${reason.closeReason}` : ""}`;
+  if (reason._tag === "SocketCloseError")
+    return `closed with code ${reason.code}${reason.closeReason ? `: ${reason.closeReason}` : ""}`;
   return reason.message;
 }
 

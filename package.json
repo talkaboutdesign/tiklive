@@ -1,11 +1,6 @@
 {
   "name": "@tiklive/monorepo",
   "private": true,
-  "type": "module",
-  "packageManager": "bun@1.4.3",
-  "engines": {
-    "bun": ">=1.4.0"
-  },
   "workspaces": {
     "packages": [
       "packages/*",
@@ -22,9 +17,10 @@
       "vite-plus": "1.1.0"
     }
   },
+  "type": "module",
   "scripts": {
-    "dev": "bun --watch packages/server/src/bin.ts --static examples/overlays",
-    "start": "bun packages/server/src/bin.ts --static examples/overlays",
+    "dev": "bun run --filter @tiklive/client build && bun --watch packages/server/src/bin.ts --static examples/overlays",
+    "start": "bun run --filter @tiklive/client build && bun packages/server/src/bin.ts --static examples/overlays",
     "build": "bun run --filter './packages/*' build",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun --bun vp test run",
@@ -40,6 +36,10 @@
     "typescript": "catalog:",
     "vite-plus": "catalog:"
   },
+  "engines": {
+    "bun": ">=1.4.0"
+  },
+  "packageManager": "bun@1.4.3",
   "patchedDependencies": {
     "@effect/vitest@4.0.2": "patches/@effect%2Fvitest@4.0.2.patch"
   }

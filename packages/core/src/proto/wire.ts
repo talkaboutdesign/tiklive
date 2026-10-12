@@ -35,17 +35,17 @@ export class ProtoMessage {
       let result = 0n;
       let shift = 0n;
       for (;;) {
-        if (pos >= buf.length) throw new ProtoDecodeError('Truncated varint');
+        if (pos >= buf.length) throw new ProtoDecodeError("Truncated varint");
         const byte = buf[pos++]!;
         result |= BigInt(byte & 0x7f) << shift;
         if ((byte & 0x80) === 0) return result;
         shift += 7n;
-        if (shift > 70n) throw new ProtoDecodeError('Varint too long');
+        if (shift > 70n) throw new ProtoDecodeError("Varint too long");
       }
     };
 
     const readFixed = (bytes: number): bigint => {
-      if (pos + bytes > buf.length) throw new ProtoDecodeError('Truncated fixed field');
+      if (pos + bytes > buf.length) throw new ProtoDecodeError("Truncated fixed field");
       let value = 0n;
       for (let i = bytes - 1; i >= 0; i--) value = (value << 8n) | BigInt(buf[pos + i]!);
       pos += bytes;
@@ -56,7 +56,7 @@ export class ProtoMessage {
       const tag = Number(readVarint());
       const field = tag >>> 3;
       const wire = tag & 7;
-      if (field === 0) throw new ProtoDecodeError('Invalid field number 0');
+      if (field === 0) throw new ProtoDecodeError("Invalid field number 0");
 
       let value: FieldValue;
       switch (wire) {
@@ -68,7 +68,7 @@ export class ProtoMessage {
           break;
         case WireType.LengthDelimited: {
           const len = Number(readVarint());
-          if (pos + len > buf.length) throw new ProtoDecodeError('Truncated length-delimited field');
+          if (pos + len > buf.length) throw new ProtoDecodeError("Truncated length-delimited field");
           value = buf.subarray(pos, pos + len);
           pos += len;
           break;
@@ -97,7 +97,7 @@ export class ProtoMessage {
 
   private asVarint(field: number): bigint | undefined {
     const v = this.last(field);
-    return typeof v === 'bigint' ? v : undefined;
+    return typeof v === "bigint" ? v : undefined;
   }
 
   /** int32/int64/uint/enum as a JS number. Use {@link id} for 64-bit identifiers. */
@@ -109,7 +109,7 @@ export class ProtoMessage {
   /** 64-bit integer as a decimal string (safe for IDs that exceed 2^53). */
   id(field: number): string {
     const v = this.asVarint(field);
-    return v === undefined ? '' : BigInt.asIntN(64, v).toString();
+    return v === undefined ? "" : BigInt.asIntN(64, v).toString();
   }
 
   bool(field: number): boolean {
@@ -124,7 +124,7 @@ export class ProtoMessage {
 
   str(field: number): string {
     const v = this.last(field);
-    return v instanceof Uint8Array ? textDecoder.decode(v) : '';
+    return v instanceof Uint8Array ? textDecoder.decode(v) : "";
   }
 
   strs(field: number): string[] {
@@ -169,8 +169,8 @@ export class ProtoWriter {
   }
 
   varint(field: number, value: number | bigint | string | boolean | undefined): this {
-    if (value === undefined || value === '' ) return this;
-    const big = typeof value === 'boolean' ? (value ? 1n : 0n) : BigInt(value);
+    if (value === undefined || value === "") return this;
+    const big = typeof value === "boolean" ? (value ? 1n : 0n) : BigInt(value);
     if (big === 0n) return this;
     this.tag(field, WireType.Varint);
     this.pushVarint(big);
