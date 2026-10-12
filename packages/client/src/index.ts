@@ -34,6 +34,8 @@ export const PROTOCOL_VERSION = 1;
 
 const BASE_RETRY_MS = 500;
 const MAX_RETRY_MS = 10_000;
+/** How many delivered msgIds to remember for skipping repeats after a reconnect. */
+const RECENT_LIMIT = 1000;
 
 /** Extra fields that accompany every event delivered to a handler. */
 export interface EventMeta {
@@ -66,7 +68,10 @@ export interface TikLiveOptions {
    * receive status updates only (no events).
    */
   events?: readonly LiveEventType[] | undefined;
-  /** Ask the server to replay recent events (excluding likes and viewer counts) on connect. */
+  /**
+   * Ask the server to replay recent events (excluding likes and viewer counts) on connect and on
+   * every reconnect. Replayed events the client already delivered are skipped.
+   */
   replay?: boolean | undefined;
   /**
    * Also receive the actions fired by the server's rules (see the Actions page), as `"action"` events.
@@ -131,6 +136,8 @@ export class TikLive {
   status: SessionStatus | null = null;
 
   readonly #handlers = new Map<string, Set<AnyHandler>>();
+  /** msgIds of recently delivered events. Kept across reconnects so replays don't show twice. */
+  readonly #delivered = new Set<string>();
   readonly #WebSocketCtor: typeof WebSocket;
   readonly #reconnect: boolean;
   #socket: WebSocket | undefined;
@@ -278,6 +285,7 @@ export class TikLive {
         return;
       case "event": {
         const event = msg.event;
+        if (this.#isRepeat(event.msgId)) return;
         const meta: EventMeta = { replay: msg.replay === true, username: msg.username };
         this.#emit(event.type, event, meta);
         this.#emit("*", event, meta);
@@ -299,6 +307,21 @@ export class TikLive {
         // Unknown message type from a newer server: ignore it.
         return;
     }
+  }
+
+  /**
+   * True if this msgId was delivered before. Records new msgIds as a side effect, dropping the
+   * oldest once there are more than {@link RECENT_LIMIT}. Events without a msgId are never repeats.
+   */
+  #isRepeat(msgId: string | undefined): boolean {
+    if (!msgId) return false;
+    if (this.#delivered.has(msgId)) return true;
+    this.#delivered.add(msgId);
+    if (this.#delivered.size > RECENT_LIMIT) {
+      const oldest = this.#delivered.values().next().value;
+      if (oldest !== undefined) this.#delivered.delete(oldest);
+    }
+    return false;
   }
 
   #emit(type: string, ...args: unknown[]): void {
