@@ -23,14 +23,58 @@ const COMMENTS = [
   "GG",
   "😂😂😂",
 ];
+// Real gift art from TikTok's CDN (same URLs the gift catalog returns), so demo overlays look like a live stream.
+const CDN = "https://p16-webcast.tiktokcdn.com/img/maliva/webcast-va/";
 const GIFTS = [
-  { giftId: 5655, giftName: "Rose", diamondCount: 1, streakable: true },
-  { giftId: 5269, giftName: "TikTok", diamondCount: 1, streakable: true },
-  { giftId: 5827, giftName: "Ice Cream Cone", diamondCount: 1, streakable: true },
-  { giftId: 6064, giftName: "GG", diamondCount: 1, streakable: true },
-  { giftId: 5487, giftName: "Finger Heart", diamondCount: 5, streakable: true },
-  { giftId: 6267, giftName: "Corgi", diamondCount: 299, streakable: false },
-  { giftId: 7934, giftName: "Galaxy", diamondCount: 1000, streakable: false },
+  {
+    giftId: 5655,
+    giftName: "Rose",
+    giftImageUrl: `${CDN}eba3a9bb85c33e017f3648eaf88d7189~tplv-obj.webp`,
+    diamondCount: 1,
+    streakable: true,
+  },
+  {
+    giftId: 5269,
+    giftName: "TikTok",
+    giftImageUrl: `${CDN}802a21ae29f9fae5abe3693de9f874bd~tplv-obj.webp`,
+    diamondCount: 1,
+    streakable: true,
+  },
+  {
+    giftId: 5827,
+    giftName: "Ice Cream Cone",
+    giftImageUrl: `${CDN}968820bc85e274713c795a6aef3f7c67~tplv-obj.webp`,
+    diamondCount: 1,
+    streakable: true,
+  },
+  {
+    giftId: 6064,
+    giftName: "GG",
+    giftImageUrl: `${CDN}3f02fa9594bd1495ff4e8aa5ae265eef~tplv-obj.webp`,
+    diamondCount: 1,
+    streakable: true,
+  },
+  {
+    giftId: 5487,
+    giftName: "Finger Heart",
+    giftImageUrl: `${CDN}a4c4dc437fd3a6632aba149769491f49.png~tplv-obj.webp`,
+    diamondCount: 5,
+    streakable: true,
+  },
+  {
+    giftId: 6267,
+    giftName: "Corgi",
+    giftImageUrl: `${CDN}148eef0884fdb12058d1c6897d1e02b9~tplv-obj.webp`,
+    diamondCount: 299,
+    streakable: false,
+  },
+  {
+    giftId: 11046,
+    giftName: "Galaxy",
+    giftImageUrl: `${CDN}resource/79a02148079526539f7599150da9fd28.png~tplv-obj.webp`,
+    diamondCount: 1000,
+    streakable: false,
+  },
 ];
 
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
@@ -48,7 +92,6 @@ function fakeUser(): LiveUser {
 interface GiftStreak {
   gift: (typeof GIFTS)[number];
   user: LiveUser;
-  giftImageUrl: string;
   groupId: string;
   total: number;
   sent: number;
@@ -79,7 +122,7 @@ export const demoEvents: Stream.Stream<LiveEvent> = Stream.suspend(() => {
       user: s.user,
       giftId: s.gift.giftId,
       giftName: s.gift.giftName,
-      giftImageUrl: s.giftImageUrl,
+      giftImageUrl: s.gift.giftImageUrl,
       diamondCount: s.gift.diamondCount,
       repeatCount: s.sent,
       streaking,
@@ -129,7 +172,6 @@ export const demoEvents: Stream.Stream<LiveEvent> = Stream.suspend(() => {
       streak = {
         gift,
         user: fakeUser(),
-        giftImageUrl: `https://api.dicebear.com/9.x/icons/svg?seed=${encodeURIComponent(gift.giftName)}`,
         groupId: String(Date.now()),
         total,
         sent: 0,
