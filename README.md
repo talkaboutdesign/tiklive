@@ -113,7 +113,8 @@ Each subpath is covered in [docs/user/library.md](docs/user/library.md). Embeddi
 - tiklive is read-only, and it has no resume cursor. Events can be missed while a connection reconnects.
   Duplicates are removed by message ID.
 - Behind a VPN or a datacenter IP, TikTok may refuse the connection.
-- Keep the server on `127.0.0.1` (the default), or set `--token` before you expose it.
+- Keep the server on `127.0.0.1` (the default), or set `--token` before you expose it. The server refuses to
+  listen beyond localhost without a token, unless you pass `--allow-no-token`.
 
 ## Documentation
 

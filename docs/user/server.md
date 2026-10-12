@@ -19,11 +19,12 @@ Usage: tiklive [options]
 
   -p, --port <n>           Port (env PORT, default 8080)
       --host <addr>        Interface to bind (env HOST, default 127.0.0.1)
-      --token <secret>     Require this token for the API and WebSocket (env TIKLIVE_TOKEN)
+      --token <secret>     Require this token for the API and WebSocket (env TIKLIVE_TOKEN; required beyond localhost)
   -w, --watch <user>       Stay connected to a streamer; repeatable (env TIKLIVE_WATCH, comma-separated)
       --static <dir>       Serve a directory of overlays/pages
       --allow-origin <url> Allow browser pages from this origin to use the API; repeatable
       --allow-host <name>  Accept this Host header (default: localhost names only); repeatable
+      --allow-no-token     Allow listening beyond localhost without --token (not recommended)
       --data-dir <dir>     Where action rules and uploads are kept (env TIKLIVE_DATA_DIR, default ~/.tiklive)
       --log-requests       Log every HTTP request
   -h, --help               Show this help
@@ -60,7 +61,11 @@ the streamer goes live.
 - `--token` (or `TIKLIVE_TOKEN`) requires a secret for the API and the WebSocket. Send it as
   `Authorization: Bearer <token>` or as `?token=` on the URL. Overlays take it as `&token=`.
 - The server binds to `127.0.0.1` by default. To reach it from another machine, pass `--host 0.0.0.0`
-  (or another interface). Without a token, that prints a warning. Set a token before you expose the port.
+  (or another interface). A token is required for that: without `--token` (or `TIKLIVE_TOKEN`), the server
+  refuses to start on a non-loopback `--host` and exits with an error.
+- `--allow-no-token` lets the server listen beyond localhost without a token. It prints a warning and is not
+  recommended: anyone who can reach the port can edit rules (including webhooks to LAN addresses), upload and
+  delete media, and reset points.
 - When you bind beyond localhost and don't pass `--allow-host`, the Host check is off. Any Host header is
   accepted, so the token is the only guard.
 
@@ -70,7 +75,7 @@ the streamer goes live.
 - A **Host allowlist** (localhost names by default) blocks DNS-rebinding attacks against a local server.
 - An **Origin check** stops other websites from driving your server from a browser. Same-origin pages and
   non-browser clients (OBS, curl) are allowed. Add `--allow-origin` for other origins.
-- **`--token`** requires a secret for the API and WebSocket.
+- **`--token`** requires a secret for the API and WebSocket. It is required when `--host` is not localhost.
 - Inputs are validated against the schemas. The simulate endpoint requires JSON, with a 64 KB body limit.
 - Each WebSocket can follow at most 20 streamers by default (`maxSubscriptionsPerSocket`). Slow subscribers
   lose their oldest messages rather than making the server buffer without limit.
