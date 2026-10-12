@@ -332,6 +332,9 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
             const board = yield* boardFor(username);
             const now = yield* Clock.currentTimeMillis;
             let viewer = board.viewers.get(user.userId);
+            // Joins are most of a big stream's events. When they earn nothing, they don't add viewers,
+            // so the board (and its file) only holds people who engaged.
+            if (!viewer && event.type === "join" && board.settings.perJoin === 0) return;
             if (!viewer) {
               viewer = {
                 userId: user.userId,

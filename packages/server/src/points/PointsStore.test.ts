@@ -171,6 +171,22 @@ describe("PointsStore: what events are worth", () => {
     }).pipe(Effect.provide(layerMemory)),
   );
 
+  it.effect("doesn't add viewers who only joined while joins earn nothing", () =>
+    Effect.gen(function* () {
+      const store = yield* PointsStore;
+      yield* store.record(USER, joinEvent("1"));
+      expect(yield* pointsOf(store, "1")).toBeUndefined();
+      // Someone already on the board still counts as seen.
+      yield* store.record(USER, chat("2"));
+      yield* store.record(USER, joinEvent("2"));
+      expect(yield* pointsOf(store, "2")).toBe(1);
+      // When joins are worth points, a join adds the viewer.
+      yield* store.updateSettings(USER, settingsWith({ perJoin: 5 }));
+      yield* store.record(USER, joinEvent("3"));
+      expect(yield* pointsOf(store, "3")).toBe(5);
+    }).pipe(Effect.provide(layerMemory)),
+  );
+
   it.effect("follows the latest nickname and picture", () =>
     Effect.gen(function* () {
       const store = yield* PointsStore;

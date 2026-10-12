@@ -11,15 +11,15 @@ see the leaderboard and change how many points each action is worth.
 
 Every number below is a setting you can change on the Viewers page. Defaults are in brackets.
 
-| Action            | Points                                                                                      |
-| ----------------- | ------------------------------------------------------------------------------------------- |
-| Chat message      | Per message [1]. A viewer earns chat points at most once per cooldown [60 seconds].         |
-| Coins from a gift | Per coin [10]. A gift combo counts once, when it ends, with its total coins.                |
-| Likes             | One point per [20] likes. Likes add up across batches, so 20 likes are one point.           |
-| Follow            | Per follow [50].                                                                            |
-| Share             | Per share [20].                                                                             |
-| Subscribe         | Per subscription [200].                                                                     |
-| Join              | Per join [0]. Joins are listed on the leaderboard, but don't earn points unless you say so. |
+| Action            | Points                                                                                        |
+| ----------------- | --------------------------------------------------------------------------------------------- |
+| Chat message      | Per message [1]. A viewer earns chat points at most once per cooldown [60 seconds].           |
+| Coins from a gift | Per coin [10]. A gift combo counts once, when it ends, with its total coins.                  |
+| Likes             | One point per [20] likes. Likes add up across batches, so 20 likes are one point.             |
+| Follow            | Per follow [50].                                                                              |
+| Share             | Per share [20].                                                                               |
+| Subscribe         | Per subscription [200].                                                                       |
+| Join              | Per join [0]. While a join is worth 0, joining alone doesn't add a viewer to the leaderboard. |
 
 Notes:
 
