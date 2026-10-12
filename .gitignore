@@ -49,3 +49,6 @@ Thumbs.db
 
 # Copied from the repo root when packing
 packages/*/LICENSE
+.release/
+dist/bin/
+packages/server/src/generated/

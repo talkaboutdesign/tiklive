@@ -649,4 +649,60 @@ describe("static files and client bundle", () => {
       expect(await res.text()).toBe("window.tiklive = {};");
     });
   });
+
+  const encoder = new TextEncoder();
+  const embedded = new Map<string, Uint8Array>([
+    ["/index.html", encoder.encode("<h1>embedded dashboard</h1>")],
+    ["/overlays/chat.html", encoder.encode("<p>chat overlay</p>")],
+    ["/tiklive.js", encoder.encode("window.tiklive = { embedded: true };")],
+  ]);
+
+  it.live("serves in-memory assets with the content type and hardening headers", () =>
+    serve({ assets: embedded }, async (base) => {
+      const res = await fetch(`${base.http}/overlays/chat.html`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("text/html");
+      expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
+      expect(await res.text()).toBe("<p>chat overlay</p>");
+    }),
+  );
+
+  it.live("serves index.html for / and for directory URLs", () =>
+    serve({ assets: embedded }, async (base) => {
+      for (const path of ["/", "/index.html"]) {
+        const res = await fetch(`${base.http}${path}`);
+        expect(res.status).toBe(200);
+        expect(await res.text()).toBe("<h1>embedded dashboard</h1>");
+      }
+    }),
+  );
+
+  it.live("returns 404 for unknown asset paths", () =>
+    serve({ assets: embedded }, async (base) => {
+      const res = await fetch(`${base.http}/overlays/missing.html`);
+      expect(res.status).toBe(404);
+      expect(await res.text()).not.toContain("chat overlay");
+    }),
+  );
+
+  it.live("serves /tiklive.js from assets when no bundle file is configured", () =>
+    serve({ assets: embedded }, async (base) => {
+      const res = await fetch(`${base.http}/tiklive.js`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("javascript");
+      expect(await res.text()).toBe("window.tiklive = { embedded: true };");
+    }),
+  );
+
+  it.live("prefers the staticDir over in-memory assets", () => {
+    const { site } = makeSite();
+    return serve({ staticDir: site, assets: embedded }, async (base) => {
+      const res = await fetch(`${base.http}/`);
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("<h1>overlay</h1>");
+      const chat = await fetch(`${base.http}/overlays/chat.html`);
+      expect(chat.status).toBe(404);
+    });
+  });
 });

@@ -54,6 +54,12 @@ export interface HttpOptions {
   readonly staticDir?: string;
   /** Path to the built browser client, served at `/tiklive.js`. */
   readonly clientBundle?: string;
+  /**
+   * Files held in memory, keyed by URL path (e.g. "/index.html", "/overlays/chat.html", "/tiklive.js").
+   * Used when `staticDir` is not set; `/tiklive.js` falls back to it when `clientBundle` is missing.
+   * Directory URLs map to their `index.html`. The filesystem is never read for these.
+   */
+  readonly assets?: ReadonlyMap<string, Uint8Array>;
   /** Max streamers one WebSocket may follow. Default 20. */
   readonly maxSubscriptionsPerSocket?: number;
   readonly serverVersion?: string;
@@ -99,6 +105,7 @@ export const routes = (options: HttpOptions = {}) => {
   const allowedHosts = options.allowedHosts ?? LOOPBACK_HOSTS;
   const allowedOrigins = new Set(options.allowedOrigins ?? []);
   const staticRoot = options.staticDir ? resolve(options.staticDir) : undefined;
+  const assets = options.assets;
 
   /** Host/Origin checks. Returns an error response, or undefined when the request may proceed. */
   const checkRequest = (request: HttpServerRequest.HttpServerRequest, url: URL) => {
@@ -360,6 +367,12 @@ export const routes = (options: HttpOptions = {}) => {
   const clientBundle = HttpRouter.add("GET", "/tiklive.js", () => {
     const path = options.clientBundle;
     if (!path || !existsSync(path)) {
+      const bundled = assets?.get("/tiklive.js");
+      if (bundled) {
+        return Effect.succeed(
+          HttpServerResponse.uint8Array(bundled, { contentType: MIME[".js"]!, headers: STATIC_HEADERS }),
+        );
+      }
       return Effect.succeed(
         HttpServerResponse.text(
           "// tiklive client bundle not built. Run: bun run --filter @tiklive/client build\n",
@@ -376,8 +389,31 @@ export const routes = (options: HttpOptions = {}) => {
     );
   });
 
+  /** Serves an in-memory asset. Only used when no `staticDir` is configured. */
+  const assetFile = (pathname: string): Effect.Effect<HttpServerResponse.HttpServerResponse> => {
+    if (!assets) return Effect.succeed(jsonError(404, "Not found"));
+    const dirIndex = `${pathname.endsWith("/") ? pathname : pathname + "/"}index.html`;
+    const key = [pathname, dirIndex].find((candidate) => assets.has(candidate));
+    const bytes = key === undefined ? undefined : assets.get(key);
+    if (key === undefined || !bytes) return Effect.succeed(jsonError(404, "Not found"));
+    return Effect.succeed(
+      HttpServerResponse.uint8Array(bytes, {
+        contentType: MIME[extname(key)] ?? "application/octet-stream",
+        headers: STATIC_HEADERS,
+      }),
+    );
+  };
+
   const staticFiles = HttpRouter.add("GET", "/*", (request) => {
-    if (!staticRoot) return Effect.succeed(jsonError(404, "Not found"));
+    if (!staticRoot) {
+      let pathname: string;
+      try {
+        pathname = decodeURIComponent(requestUrl(request).pathname);
+      } catch {
+        return Effect.succeed(jsonError(400, "Bad path"));
+      }
+      return assetFile(pathname);
+    }
     const url = requestUrl(request);
     let path: string;
     try {
