@@ -38,7 +38,12 @@ export const webhookPayload = (
   timestamp: action.timestamp,
 });
 
+/**
+ * Whether a rendered body is JSON. It must start like JSON as well as parse: a text body that happens
+ * to be a number, such as `123`, is sent as text.
+ */
 const isJson = (text: string): boolean => {
+  if (!/^\s*[{["]/.test(text)) return false;
   try {
     JSON.parse(text);
     return true;

@@ -160,11 +160,11 @@ Streamer.bot, a Minecraft plugin, Home Assistant or Zapier.
 - **Method.** `POST` (the default), `PUT` or `GET`.
 - **Body.** For `POST` and `PUT` only. Leave it empty to send a JSON description of the action: the rule's
   `id` and `name`, the event type, the viewer (`userId`, `uniqueId`, `nickname`), every placeholder's value under
-  `vars`, and a `timestamp`. If you type a body, it's sent as you wrote it. It's sent as JSON when it parses as
-  JSON, and as plain text otherwise. A body is up to 4,000 characters, and placeholders work in it too.
-  When the body is JSON, placeholder values are escaped, so a viewer's name or comment can't change the
-  JSON's structure. A placeholder inside quotes stays a string. One outside quotes becomes a number when its
-  value is a number, and a quoted string otherwise.
+  `vars`, and a `timestamp`. If you type a body, it's sent with its placeholders filled in, up to 4,000
+  characters. A body that starts with `{`, `[` or `"` is treated as JSON: placeholder values are escaped, so a
+  viewer's name or comment can't change the JSON's structure. A placeholder outside quotes becomes a number
+  when its value is one, and a quoted string otherwise. Placeholders in key names are not filled. Any other
+  body is plain text.
 
 The request comes from the computer running tiklive, not from OBS or the browser. So a LAN address such as
 `http://192.168.1.20:8080/...` works, and `127.0.0.1` means the computer running tiklive. A webhook step can

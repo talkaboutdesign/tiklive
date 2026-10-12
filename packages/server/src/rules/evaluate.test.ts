@@ -5,7 +5,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { LiveEvent, type LiveUser, type Rule, type RuleStep, type RuleTrigger } from "@tiklive/contracts";
 import * as Schema from "effect/Schema";
-import { emptyState, evaluate, renderTemplate, sampleEvent } from "./evaluate.ts";
+import { emptyState, evaluate, renderTemplate, sampleEvent, type Vars } from "./evaluate.ts";
 
 const NOW = 1_700_000_000_000;
 const USER: LiveUser = { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" };
@@ -827,20 +827,72 @@ describe("evaluate: webhook steps", () => {
     expect(JSON.parse(bodyOf(injected[0]) ?? "")).toEqual({ said: '1, "evil": 2' });
   });
 
-  it("fills a text body as typed, because it isn't JSON", () => {
-    const firings = evaluate(
-      [
-        rule(
-          "w",
-          { type: "chat", match: "any" },
-          { steps: [hook("https://h.example/", '{nickname} said "{comment}"')] },
-        ),
-      ],
-      emptyState(),
-      chat('a "b" \\ c'),
-      NOW,
+  /** The body of the first webhook firing, for a chat rule whose body is `template`. */
+  const chatBody = (template: string, event: LiveEvent, extra: Vars = {}): string | undefined =>
+    bodyOf(
+      evaluate(
+        [rule("w", { type: "chat", match: "any" }, { steps: [hook("https://h.example/", template)] })],
+        emptyState(),
+        event,
+        NOW,
+        extra,
+      )[0],
     );
-    expect(bodyOf(firings[0])).toBe('Viewer said "a "b" \\ c"');
+
+  it("fills a text body as typed, because it isn't JSON", () => {
+    expect(chatBody('Said by {nickname}: "{comment}"', chat('a "b" \\ c'))).toBe(
+      'Said by Viewer: "a "b" \\ c"',
+    );
+  });
+
+  it("keeps a text body raw when it starts with a letter, even if the value has quotes", () => {
+    expect(chatBody("viewer={nickname}", chat('"x"'))).toBe("viewer=Viewer");
+  });
+
+  it("fills a body that is just a placeholder as a JSON string", () => {
+    const comment = 'a "quoted" \\ line';
+    expect(JSON.parse(chatBody("{comment}", chat(comment)) ?? "")).toBe(comment);
+  });
+
+  it("never fills a placeholder in a key, so a viewer's name can't override a fixed key", () => {
+    expect(
+      chatBody('{"action":"safe","{nickname}":"{comment}"}', chat("hi", { ...USER, nickname: "action" })),
+    ).toBe('{"action":"safe","{nickname}":"hi"}');
+  });
+
+  it("keeps a placeholder after a backslash as typed, so the value can't merge with the escape", () => {
+    const template = '{"said": "\\{comment}"}';
+    expect(chatBody(template, chat('"x'))).toBe(template);
+  });
+
+  it("quotes a bare placeholder unless its value is a JSON number", () => {
+    const body = (points: string) => chatBody('{"v": {points}}', chat("hi"), { points });
+    expect(body("01")).toBe('{"v": "01"}');
+    expect(body("1e5")).toBe('{"v": 1e5}');
+    expect(body("-0.5")).toBe('{"v": -0.5}');
+    expect(body("1.")).toBe('{"v": "1."}');
+  });
+
+  it("keeps a viewer's text inside its string when the template's own JSON is valid", () => {
+    const body = chatBody(
+      '{"count":{count},"action":"safe","said":"{comment}"}',
+      chat('x","action":"evil","pad":"'),
+      { count: "2" },
+    );
+    expect(JSON.parse(body ?? "")).toEqual({
+      count: 2,
+      action: "safe",
+      said: 'x","action":"evil","pad":"',
+    });
+  });
+
+  it("doesn't let a viewer's text add keys when the template isn't valid JSON either", () => {
+    // `0{count}` is `0""` on a chat event, so this body doesn't parse. It's sent as text, not JSON.
+    const body = chatBody(
+      '{"count":0{count},"action":"safe","said":"{comment}"}',
+      chat('x","action":"evil","pad":"'),
+    );
+    expect(() => JSON.parse(body ?? "")).toThrow();
   });
 
   it("keeps unknown placeholders as typed, and keeps the webhook even when its values are empty", () => {

@@ -90,31 +90,31 @@ const fill = (text: string, vars: Vars, encode: (value: string) => string = (val
     return value === undefined ? placeholder : encode(value);
   });
 
+const JSON_NUMBER = /^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/;
+const escapeInString = (value: string): string => JSON.stringify(value).slice(1, -1);
+const asJsonValue = (value: string): string => (JSON_NUMBER.test(value) ? value : JSON.stringify(value));
+
 /**
- * Fills a webhook body. A JSON template gets its values escaped for where they land, so a viewer's
- * text can't close a string and add keys: inside a string it's JSON-escaped, and a bare placeholder
- * becomes a number or a quoted string. Text templates are filled as typed.
+ * Fills a webhook body. A body that starts with `{`, `[` or `"` is JSON: its values are escaped for
+ * where they land, so a viewer's text can't close a string or add keys. Inside a string it's
+ * JSON-escaped. A bare placeholder becomes a number or a quoted string. A placeholder in a key
+ * (followed by `:`) is never filled. Any other body is text and is filled as typed.
  */
 const fillBody = (template: string, vars: Vars): string => {
-  const probe = template.replace(/\{(\w+)\}/g, (placeholder: string, name: string) =>
-    isTemplateVariable(name) ? "0" : placeholder,
+  if (!/^\s*[{["]/.test(template)) return fill(template, vars);
+  return template.replace(
+    /("(?:[^"\\]|\\.)*"|\{\w+\})(\s*:)?/g,
+    (token: string, part: string, colon: string | undefined) => {
+      if (colon !== undefined) return token;
+      // An escape pair is skipped, so a `{` after a backslash stays as typed rather than merging with it.
+      if (part.startsWith('"')) {
+        return part.replace(/\\[\s\S]|\{\w+\}/g, (piece: string) =>
+          piece.startsWith("\\") ? piece : fill(piece, vars, escapeInString),
+        );
+      }
+      return fill(part, vars, asJsonValue);
+    },
   );
-  try {
-    JSON.parse(probe);
-  } catch {
-    return fill(template, vars);
-  }
-  let inString = false;
-  return template.replace(/\\[\s\S]|"|\{(\w+)\}/g, (token: string, name: string | undefined) => {
-    if (token === '"') {
-      inString = !inString;
-      return token;
-    }
-    const value = name !== undefined && isTemplateVariable(name) ? vars[name] : undefined;
-    if (value === undefined) return token;
-    if (inString) return JSON.stringify(value).slice(1, -1);
-    return /^-?\d+(\.\d+)?$/.test(value) ? value : JSON.stringify(value);
-  });
 };
 
 export const renderTemplate = (text: string, vars: Vars): string => truncate(fill(text, vars));

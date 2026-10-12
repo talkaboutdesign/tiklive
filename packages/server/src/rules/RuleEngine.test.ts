@@ -292,14 +292,58 @@ describe("RuleEngine webhook steps", () => {
       yield* settle;
       expect(sent.map((request) => [request.contentType, request.body])).toEqual([
         ["application/json", '{"text":"Viewer sent 1x Rose"}'],
-        ["text/plain", "Viewer sent a gift"],
+        ["text/plain", "Gift from Viewer"],
       ]);
     }).pipe(
       Effect.provide(
         engineWith(
           [
             hookRule({ body: '{"text":"{nickname} sent {count}x {giftName}"}' }),
-            giftRule({ id: "text", steps: [{ kind: "webhook", url: HOOK, body: "{nickname} sent a gift" }] }),
+            giftRule({ id: "text", steps: [{ kind: "webhook", url: HOOK, body: "Gift from {nickname}" }] }),
+          ],
+          fakeHttp(sent),
+        ),
+      ),
+    );
+  });
+
+  it.effect("sends a body as JSON only when it starts like JSON and parses, so text stays text", () => {
+    const sent: Array<Sent> = [];
+    const chatEvent: LiveEvent = {
+      type: "chat",
+      timestamp: 0,
+      user: USER,
+      comment: 'x","action":"evil"',
+      emotes: [],
+    };
+    const chatRule = (id: string, body: string): Rule => ({
+      id,
+      name: id,
+      enabled: true,
+      trigger: { type: "chat", match: "any" },
+      steps: [{ kind: "webhook", url: HOOK, body }],
+    });
+    return Effect.gen(function* () {
+      const engine = yield* RuleEngine;
+      yield* engine.fire("someone", chatEvent);
+      yield* settle;
+      expect(sent.map((request) => [request.contentType, request.body])).toEqual([
+        // Finding 1: `0""` doesn't parse, so the viewer's text never reaches a key.
+        ["text/plain", '{"count":0"","action":"safe","said":"x\\",\\"action\\":\\"evil\\""}'],
+        // A text body that is a number parses as JSON, but it doesn't start like JSON.
+        ["text/plain", "123"],
+        // A stray backslash makes the body invalid, so it's kept as typed and sent as text.
+        ["text/plain", '{"said": "\\{comment}"}'],
+        ["application/json", JSON.stringify('x","action":"evil"')],
+      ]);
+    }).pipe(
+      Effect.provide(
+        engineWith(
+          [
+            chatRule("blocker", '{"count":0{count},"action":"safe","said":"{comment}"}'),
+            chatRule("number", "123"),
+            chatRule("stray", '{"said": "\\{comment}"}'),
+            chatRule("lone", "{comment}"),
           ],
           fakeHttp(sent),
         ),

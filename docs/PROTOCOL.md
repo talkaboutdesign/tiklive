@@ -304,7 +304,8 @@ The schemas are in [`packages/contracts/src/rules.ts`](../packages/contracts/src
 - **`webhook` step**: `{kind: "webhook", url, method?, body?}`. `url` is an `http://` or `https://` URL that
   parses, at most 2048 characters. Placeholders are allowed in its path and query, and the values are
   percent-encoded. `method` is `POST` (the default), `PUT` or `GET`. `body` is at most 4000 characters, is
-  sent as-is for `POST` and `PUT` (as `application/json` if it parses as JSON, else `text/plain`), and is
+  sent as-is for `POST` and `PUT` (as `application/json` if it starts with `{`, `[` or `"` and parses as JSON,
+  else `text/plain`), and is
   ignored for `GET`. Without a `body`, `POST` and `PUT` send a JSON description of the action:
   `{rule: {id, name}, event, user: {userId, uniqueId, nickname} | null, vars, timestamp}`, where `event` is
   the event type (`like` for likes milestones) and `vars` holds every template variable. The server sends
