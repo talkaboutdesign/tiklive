@@ -3,20 +3,25 @@
   "version": "0.1.0",
   "description": "Self-hosted TikTok LIVE event server for overlays and apps",
   "license": "MIT",
-  "type": "module",
   "repository": {
     "type": "git",
     "url": "https://github.com/talkaboutdesign/tiklive",
     "directory": "packages/server"
   },
-  "exports": {
-    ".": "./src/index.ts"
+  "bin": {
+    "tiklive": "./src/bin.ts"
   },
   "files": [
     "dist",
     "src",
     "!src/**/*.test.ts"
   ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bun": "./src/platform/bun.ts",
+    "./node": "./src/platform/node.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "test": "vp test run",
@@ -34,8 +39,5 @@
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
-  },
-  "bin": {
-    "tiklive": "./src/bin.ts"
   }
 }

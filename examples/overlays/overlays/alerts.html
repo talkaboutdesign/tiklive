@@ -4,78 +4,208 @@
     http://localhost:8080/overlays/alerts.html?username=YOURNAME
   Options: &min=1 (minimum coins for a gift alert)  &duration=5 (seconds per alert)
            &follows=0 / &shares=0 / &subs=0 to turn a type off
+           &token=… if the server requires one
 -->
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>tiklive alerts</title>
-  <style>
-    html, body { margin: 0; height: 100%; background: transparent; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; overflow: hidden; }
-    #stage { position: fixed; inset: 0; display: grid; place-items: center; }
-    .alert { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 40px;
-             border-radius: 24px; background: rgba(16, 16, 22, 0.8); color: #fff; text-align: center;
-             box-shadow: 0 10px 40px rgba(0,0,0,.4); animation: enter .5s cubic-bezier(.2,1.4,.4,1); }
-    .alert.leaving { animation: leave .4s ease-in forwards; }
-    .alert img.main { width: 120px; height: 120px; object-fit: contain; }
-    .alert img.avatar { width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--accent); }
-    .alert .title { font-size: 34px; font-weight: 800; }
-    .alert .title b { color: var(--accent); }
-    .alert .sub { font-size: 22px; color: #d0d0e0; }
-    @keyframes enter { from { transform: scale(.5) translateY(40px); opacity: 0; } }
-    @keyframes leave { to { transform: scale(.8) translateY(-30px); opacity: 0; } }
-  </style>
-</head>
-<body>
-  <div id="stage"></div>
-  <script type="module">
-    import { TikLive } from '/tiklive.js';
+  <head>
+    <meta charset="utf-8" />
+    <title>tiklive alerts</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        overflow: hidden;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+      }
+      .alert {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        padding: 24px 40px;
+        border-radius: 24px;
+        background: rgba(16, 16, 22, 0.8);
+        color: #fff;
+        text-align: center;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+        animation: enter 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+      }
+      .alert.leaving {
+        animation: leave 0.4s ease-in forwards;
+      }
+      .alert img.main {
+        width: 120px;
+        height: 120px;
+        object-fit: contain;
+      }
+      .alert img.avatar {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 4px solid var(--accent);
+      }
+      .alert .title {
+        font-size: 34px;
+        font-weight: 800;
+      }
+      .alert .title b {
+        color: var(--accent);
+      }
+      .alert .sub {
+        font-size: 22px;
+        color: #d0d0e0;
+      }
+      @keyframes enter {
+        from {
+          transform: scale(0.5) translateY(40px);
+          opacity: 0;
+        }
+      }
+      @keyframes leave {
+        to {
+          transform: scale(0.8) translateY(-30px);
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script type="module">
+      import { TikLive } from "/tiklive.js";
 
-    const params = new URLSearchParams(location.search);
-    const minCoins = Number(params.get('min') ?? 1);
-    const duration = Number(params.get('duration') ?? 5) * 1000;
-    const enabled = (k) => params.get(k) !== '0';
-    const stage = document.getElementById('stage');
-    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+      const params = new URLSearchParams(location.search);
+      // Numeric option with a default; a missing or non-numeric value falls back to `def`.
+      const numParam = (k, def) =>
+        params.has(k) && Number.isFinite(Number(params.get(k))) ? Number(params.get(k)) : def;
+      const minCoins = numParam("min", 1);
+      const duration = numParam("duration", 5) * 1000;
+      const enabled = (k) => params.get(k) !== "0";
+      const stage = document.getElementById("stage");
 
-    const queue = [];
-    let showing = false;
+      // Only http(s) URLs may reach an <img>; anything else renders as nothing.
+      const safeUrl = (u) => {
+        try {
+          const url = new URL(String(u ?? ""));
+          return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+        } catch {
+          return "";
+        }
+      };
 
-    function enqueue(alert) {
-      queue.push(alert);
-      if (!showing) next();
-    }
+      const queue = [];
+      let showing = false;
 
-    function next() {
-      const a = queue.shift();
-      if (!a) { showing = false; return; }
-      showing = true;
-      const el = document.createElement('div');
-      el.className = 'alert';
-      el.style.setProperty('--accent', a.accent);
-      el.innerHTML = `<img class="${a.image === a.user.profilePictureUrl ? 'avatar' : 'main'}" src="${esc(a.image)}">
-        <div class="title">${a.title}</div>${a.sub ? `<div class="sub">${a.sub}</div>` : ''}`;
-      stage.replaceChildren(el);
-      setTimeout(() => {
-        el.classList.add('leaving');
-        setTimeout(() => { el.remove(); next(); }, 400);
-      }, duration);
-    }
+      function enqueue(alert) {
+        queue.push(alert);
+        if (!showing) next();
+      }
 
-    const name = (u) => `<b>${esc(u.nickname || u.uniqueId)}</b>`;
-    const live = new TikLive({ events: ['gift', 'follow', 'subscribe', 'share'] });
+      // alert: { accent, image, avatar, title: (string|Node)[], sub?: string }
+      function next() {
+        const a = queue.shift();
+        if (!a) {
+          showing = false;
+          return;
+        }
+        showing = true;
+        const el = document.createElement("div");
+        el.className = "alert";
+        el.style.setProperty("--accent", a.accent);
+        const url = safeUrl(a.image);
+        if (url) {
+          const pic = document.createElement("img");
+          pic.className = a.avatar ? "avatar" : "main";
+          pic.referrerPolicy = "no-referrer";
+          pic.src = url;
+          pic.addEventListener("error", () => {
+            pic.style.visibility = "hidden";
+          });
+          el.append(pic);
+        }
+        const title = document.createElement("div");
+        title.className = "title";
+        title.append(...a.title);
+        el.append(title);
+        if (a.sub) {
+          const sub = document.createElement("div");
+          sub.className = "sub";
+          sub.textContent = a.sub;
+          el.append(sub);
+        }
+        stage.replaceChildren(el);
+        setTimeout(() => {
+          el.classList.add("leaving");
+          setTimeout(() => {
+            el.remove();
+            next();
+          }, 400);
+        }, duration);
+      }
 
-    live.on('gift', (e) => {
-      // Streakable gifts arrive repeatedly; alert once when the combo ends.
-      if (e.streaking || e.totalDiamonds < minCoins) return;
-      enqueue({
-        user: e.user, accent: '#ffd166', image: e.giftImageUrl || e.user.profilePictureUrl,
-        title: `${name(e.user)} sent ${e.repeatCount > 1 ? `${e.repeatCount}× ` : ''}${esc(e.giftName)}`,
-        sub: `${e.totalDiamonds.toLocaleString()} coins`,
+      const bold = (text) => {
+        const b = document.createElement("b");
+        b.textContent = text;
+        return b;
+      };
+      const nameOf = (u) => u.nickname || u.uniqueId || "";
+
+      const live = new TikLive({ events: ["gift", "follow", "subscribe", "share"] });
+
+      live.on("gift", (e) => {
+        // Streakable gifts arrive repeatedly; alert once when the combo ends.
+        const total = Number(e.totalDiamonds) || 0;
+        if (e.streaking || total < minCoins) return;
+        const count = Number(e.repeatCount) || 0;
+        enqueue({
+          avatar: !e.giftImageUrl,
+          accent: "#ffd166",
+          image: e.giftImageUrl || e.user.profilePictureUrl,
+          title: [bold(nameOf(e.user)), ` sent ${count > 1 ? `${count}× ` : ""}${e.giftName ?? ""}`],
+          sub: `${total.toLocaleString()} coins`,
+        });
       });
-    });
-    if (enabled('follows')) live.on('follow', (e) => enqueue({ user: e.user, accent: '#7fdcff', image: e.user.profilePictureUrl, title: `${name(e.user)} followed!` }));
-    if (enabled('subs')) live.on('subscribe', (e) => enqueue({ user: e.user, accent: '#ff7ad9', image: e.user.profilePictureUrl, title: `${name(e.user)} subscribed!`, sub: e.subMonth > 1 ? `${e.subMonth} months` : '' }));
-    if (enabled('shares')) live.on('share', (e) => enqueue({ user: e.user, accent: '#9dff9d', image: e.user.profilePictureUrl, title: `${name(e.user)} shared the stream` }));
-  </script>
-</body>
+      if (enabled("follows"))
+        live.on("follow", (e) =>
+          enqueue({
+            avatar: true,
+            accent: "#7fdcff",
+            image: e.user.profilePictureUrl,
+            title: [bold(nameOf(e.user)), " followed!"],
+          }),
+        );
+      if (enabled("subs"))
+        live.on("subscribe", (e) => {
+          const month = Number(e.subMonth) || 0;
+          enqueue({
+            avatar: true,
+            accent: "#ff7ad9",
+            image: e.user.profilePictureUrl,
+            title: [bold(nameOf(e.user)), " subscribed!"],
+            sub: month > 1 ? `${month} months` : "",
+          });
+        });
+      if (enabled("shares"))
+        live.on("share", (e) =>
+          enqueue({
+            avatar: true,
+            accent: "#9dff9d",
+            image: e.user.profilePictureUrl,
+            title: [bold(nameOf(e.user)), " shared the stream"],
+          }),
+        );
+    </script>
+  </body>
 </html>

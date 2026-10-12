@@ -134,6 +134,71 @@ export const StreamEndEvent = Schema.Struct({
 });
 export type StreamEndEvent = typeof StreamEndEvent.Type;
 
+export const BattleHost = Schema.Struct({
+  user: LiveUser,
+  /** Points at the end of the battle. Present on finished battles. */
+  score: Schema.optionalKey(Count),
+  result: Schema.optionalKey(Schema.Literals(["win", "lose", "draw"])),
+});
+export type BattleHost = typeof BattleHost.Type;
+
+/** A LIVE battle (PK) between hosts changed state: started, finished, etc. */
+export const BattleEvent = Schema.Struct({
+  type: Schema.tag("battle"),
+  ...base,
+  battleId: Schema.String,
+  status: Schema.Literals([
+    "notStarted",
+    "started",
+    "finished",
+    "punishStarted",
+    "punishFinished",
+    "unknown",
+  ]),
+  /** What triggered this update, e.g. "open" when it starts, "finish"/"cutShort" when it ends. */
+  action: Schema.Literals([
+    "invite",
+    "reject",
+    "cancel",
+    "open",
+    "finish",
+    "cutShort",
+    "accept",
+    "quitApply",
+    "declineQuit",
+    "declineOffQuit",
+    "leaveLinkMic",
+    "unknown",
+  ]),
+  /** Unix ms. */
+  startedAt: Schema.optionalKey(Count),
+  durationSeconds: Count,
+  hosts: Schema.Array(BattleHost),
+});
+export type BattleEvent = typeof BattleEvent.Type;
+
+export const BattleGifter = Schema.Struct({ user: LiveUser, score: Count });
+export type BattleGifter = typeof BattleGifter.Type;
+
+export const BattleTeam = Schema.Struct({
+  /** userId of the host this team supports. Matches `BattleEvent.hosts[].user.userId`. */
+  hostUserId: Schema.String,
+  score: Count,
+  /** Top supporters, highest first. */
+  topGifters: Schema.Array(BattleGifter),
+});
+export type BattleTeam = typeof BattleTeam.Type;
+
+/** Live battle scores. Sent whenever points change during a battle. */
+export const BattleScoreEvent = Schema.Struct({
+  type: Schema.tag("battleScore"),
+  ...base,
+  battleId: Schema.String,
+  reason: Schema.Literals(["scoreUpdate", "battleEnd", "other"]),
+  teams: Schema.Array(BattleTeam),
+});
+export type BattleScoreEvent = typeof BattleScoreEvent.Type;
+
 /** Any event that originates from TikTok. Use `LiveEvent.match` / `LiveEvent.guards` to branch on `type`. */
 export const LiveEvent = Schema.Union([
   ChatEvent,
@@ -147,6 +212,8 @@ export const LiveEvent = Schema.Union([
   EmoteEvent,
   ViewerCountEvent,
   StreamEndEvent,
+  BattleEvent,
+  BattleScoreEvent,
 ]).pipe(Schema.toTaggedUnion("type"));
 export type LiveEvent = typeof LiveEvent.Type;
 

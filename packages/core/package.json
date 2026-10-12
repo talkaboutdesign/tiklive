@@ -3,16 +3,31 @@
   "version": "0.1.0",
   "description": "Connect to TikTok LIVE and receive typed events. No signing service required.",
   "license": "MIT",
-  "type": "module",
-  "repository": { "type": "git", "url": "https://github.com/talkaboutdesign/tiklive", "directory": "packages/core" },
-  "exports": {
-    ".": "./src/index.ts"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/talkaboutdesign/tiklive",
+    "directory": "packages/core"
   },
-  "files": ["dist", "src", "!src/**/*.test.ts"],
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "test": "vp test run"
   },
-  "dependencies": { "@tiklive/contracts": "workspace:*", "effect": "catalog:" },
-  "devDependencies": { "@effect/vitest": "catalog:", "@types/node": "catalog:" }
+  "dependencies": {
+    "@tiklive/contracts": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:"
+  }
 }

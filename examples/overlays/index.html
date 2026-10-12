@@ -1,175 +1,512 @@
 <!doctype html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>tiklive</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    :root { color-scheme: dark; --bg: #0f1016; --panel: #181a24; --line: #2a2d3c; --muted: #8b8fa7; --accent: #ff4f8b; }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: #e9e9f1; font: 15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
-    header { display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--line); }
-    header h1 { margin: 0; font-size: 20px; } header h1 span { color: var(--accent); }
-    form { display: flex; gap: 8px; margin-left: auto; }
-    input, button { font: inherit; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: inherit; padding: 8px 12px; }
-    button { cursor: pointer; } button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-    main { display: grid; grid-template-columns: 1fr 360px; gap: 16px; padding: 16px 24px; }
-    section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
-    h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-    #status { display: flex; align-items: center; gap: 12px; }
-    #status img { width: 44px; height: 44px; border-radius: 50%; }
-    .pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #333; }
-    .pill.live { background: #e0245e; } .pill.waiting { background: #6b5b16; } .pill.connecting { background: #22517a; } .pill.error { background: #7a2222; }
-    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
-    .stat { background: var(--bg); border-radius: 10px; padding: 10px; } .stat b { display: block; font-size: 20px; } .stat span { color: var(--muted); font-size: 12px; }
-    #log { height: calc(100vh - 330px); min-height: 300px; overflow-y: auto; font-size: 14px; }
-    .row { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid #1f2230; }
-    .row img { width: 22px; height: 22px; border-radius: 50%; }
-    .tag { min-width: 64px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); }
-    .tag.gift { color: #ffd166; } .tag.chat { color: #7fdcff; } .tag.follow, .tag.subscribe { color: #ff7ad9; } .tag.share { color: #9dff9d; }
-    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; color: var(--muted); font-size: 13px; }
-    .side > section + section { margin-top: 16px; }
-    .overlay { margin-bottom: 12px; } .overlay b { display: block; margin-bottom: 4px; }
-    .copy { display: flex; gap: 6px; } .copy input { flex: 1; font-size: 12px; }
-    .tests { display: flex; flex-wrap: wrap; gap: 6px; }
-    .hint { color: var(--muted); font-size: 13px; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>tik<span>live</span></h1>
-    <form id="connect">
-      <input id="username" placeholder="TikTok username (or demo)" autocomplete="off" />
-      <button class="primary">Connect</button>
-    </form>
-  </header>
-  <main>
-    <div>
-      <section>
-        <div id="status"><span class="hint">Enter a username, or try <b>demo</b> for fake events.</span></div>
-        <div class="stats" id="stats"></div>
-      </section>
-      <section style="margin-top:16px">
-        <h2>Events</h2>
-        <div class="filters" id="filters"></div>
-        <div id="log"></div>
-      </section>
-    </div>
-    <div class="side">
-      <section>
-        <h2>Overlays (OBS browser source)</h2>
-        <div id="overlays" class="hint">Connect to get overlay URLs.</div>
-      </section>
-      <section>
-        <h2>Send test event</h2>
-        <div class="tests" id="tests"></div>
-        <p class="hint">Test events go to every overlay connected to this streamer.</p>
-      </section>
-    </div>
-  </main>
-  <script type="module">
-    import { TikLive } from '/tiklive.js';
-
-    const $ = (id) => document.getElementById(id);
-    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-    const params = new URLSearchParams(location.search);
-    const token = params.get('token') ?? '';
-    const TYPES = ['chat', 'gift', 'like', 'follow', 'share', 'join', 'subscribe', 'question', 'emote', 'viewers', 'streamEnd'];
-    const shown = new Set(TYPES.filter((t) => !['like', 'viewers', 'join'].includes(t)));
-    let live;
-
-    $('filters').innerHTML = TYPES.map((t) => `<label><input type="checkbox" data-t="${t}" ${shown.has(t) ? 'checked' : ''}> ${t}</label>`).join('');
-    $('filters').onchange = (e) => { const t = e.target.dataset.t; e.target.checked ? shown.add(t) : shown.delete(t); };
-
-    function describe(e) {
-      switch (e.type) {
-        case 'chat': return esc(e.comment);
-        case 'gift': return `${esc(e.giftName)} ×${e.repeatCount} (${e.totalDiamonds} coins)${e.streaking ? ' …' : ''}`;
-        case 'like': return `+${e.likeCount} likes (${e.totalLikeCount.toLocaleString()} total)`;
-        case 'viewers': return `${e.viewerCount.toLocaleString()} viewers`;
-        case 'subscribe': return `subscribed (month ${e.subMonth})`;
-        case 'question': return esc(e.question);
-        case 'emote': return e.emotes.map((m) => `<img src="${esc(m.imageUrl)}">`).join('');
-        case 'streamEnd': return `stream ${e.reason}`;
-        default: return e.type;
+  <head>
+    <meta charset="utf-8" />
+    <title>tiklive</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f1016;
+        --panel: #181a24;
+        --line: #2a2d3c;
+        --muted: #8b8fa7;
+        --accent: #ff4f8b;
       }
-    }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: #e9e9f1;
+        font:
+          15px/1.45 system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--line);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 20px;
+      }
+      header h1 span {
+        color: var(--accent);
+      }
+      form {
+        display: flex;
+        gap: 8px;
+        margin-left: auto;
+      }
+      input,
+      button {
+        font: inherit;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: inherit;
+        padding: 8px 12px;
+      }
+      button {
+        cursor: pointer;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+        font-weight: 600;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 1fr 360px;
+        gap: 16px;
+        padding: 16px 24px;
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+      }
+      #status {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      #status img {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+      }
+      .pill {
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        background: #333;
+      }
+      .pill.live {
+        background: #e0245e;
+      }
+      .pill.waiting {
+        background: #6b5b16;
+      }
+      .pill.connecting {
+        background: #22517a;
+      }
+      .pill.error {
+        background: #7a2222;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .stat {
+        background: var(--bg);
+        border-radius: 10px;
+        padding: 10px;
+      }
+      .stat b {
+        display: block;
+        font-size: 20px;
+      }
+      .stat span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      #log {
+        height: calc(100vh - 330px);
+        min-height: 300px;
+        overflow-y: auto;
+        font-size: 14px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 5px 0;
+        border-bottom: 1px solid #1f2230;
+      }
+      .row img {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+      }
+      .tag {
+        min-width: 64px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .tag.gift {
+        color: #ffd166;
+      }
+      .tag.chat {
+        color: #7fdcff;
+      }
+      .tag.follow,
+      .tag.subscribe {
+        color: #ff7ad9;
+      }
+      .tag.share {
+        color: #9dff9d;
+      }
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .side > section + section {
+        margin-top: 16px;
+      }
+      .overlay {
+        margin-bottom: 12px;
+      }
+      .overlay b {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .copy {
+        display: flex;
+        gap: 6px;
+      }
+      .copy input {
+        flex: 1;
+        font-size: 12px;
+      }
+      .tests {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      #notice {
+        color: #ff8a8a;
+        min-height: 1.45em;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>tik<span>live</span></h1>
+      <form id="connect">
+        <input id="username" placeholder="TikTok username (or demo)" autocomplete="off" />
+        <button class="primary">Connect</button>
+      </form>
+    </header>
+    <main>
+      <div>
+        <section>
+          <div id="status">
+            <span class="hint">Enter a username, or try <b>demo</b> for fake events.</span>
+          </div>
+          <div class="stats" id="stats"></div>
+          <p id="notice" role="alert"></p>
+        </section>
+        <section style="margin-top: 16px">
+          <h2>Events</h2>
+          <div class="filters" id="filters"></div>
+          <div id="log"></div>
+        </section>
+      </div>
+      <div class="side">
+        <section>
+          <h2>Overlays (OBS browser source)</h2>
+          <div id="overlays" class="hint">Connect to get overlay URLs.</div>
+        </section>
+        <section>
+          <h2>Send test event</h2>
+          <div class="tests" id="tests"></div>
+          <p class="hint">Test events go to every overlay connected to this streamer.</p>
+        </section>
+      </div>
+    </main>
+    <script type="module">
+      import { TikLive } from "/tiklive.js";
 
-    function log(e, meta) {
-      if (!shown.has(e.type)) return;
-      const row = document.createElement('div');
-      row.className = 'row';
-      const u = e.user;
-      row.innerHTML = `<span class="tag ${e.type}">${e.type}${meta?.replay ? '*' : ''}</span>` +
-        (u ? `<img src="${esc(u.profilePictureUrl)}" onerror="this.style.visibility='hidden'"><b>${esc(u.nickname || u.uniqueId)}</b>` : '') +
-        `<span>${describe(e)}</span>`;
-      const box = $('log');
-      const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-      box.append(row);
-      while (box.children.length > 500) box.firstElementChild.remove();
-      if (atBottom) box.scrollTop = box.scrollHeight;
-    }
-
-    function renderStatus(s) {
-      const labels = { live: 'LIVE', waiting: 'OFFLINE — waiting', connecting: 'CONNECTING', error: 'ERROR', idle: 'IDLE' };
-      $('status').innerHTML =
-        (s.owner?.profilePictureUrl ? `<img src="${esc(s.owner.profilePictureUrl)}">` : '') +
-        `<div><b>@${esc(s.username)}</b> <span class="pill ${s.state}">${labels[s.state] ?? s.state}</span>
-         <div class="hint">${esc(s.error ?? s.title ?? '')}</div></div>`;
-      const st = s.stats;
-      $('stats').innerHTML = [['viewers', st.viewers], ['likes', st.likes], ['coins', st.diamonds], ['follows', st.follows],
-        ['peak viewers', st.peakViewers], ['chats', st.chats], ['shares', st.shares], ['joins', st.joins]]
-        .map(([k, v]) => `<div class="stat"><b>${(v ?? 0).toLocaleString()}</b><span>${k}</span></div>`).join('');
-    }
-
-    function renderOverlays(username) {
-      const q = `username=${encodeURIComponent(username)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
-      const list = [
-        ['Chat', `/overlays/chat.html?${q}`],
-        ['Alerts', `/overlays/alerts.html?${q}`],
-        ['Like goal', `/overlays/goal.html?${q}&metric=likes&target=10000`],
+      const $ = (id) => document.getElementById(id);
+      const num = (x) => Number(x) || 0;
+      const params = new URLSearchParams(location.search);
+      const token = params.get("token") ?? "";
+      const TYPES = [
+        "chat",
+        "gift",
+        "like",
+        "follow",
+        "share",
+        "join",
+        "subscribe",
+        "question",
+        "emote",
+        "viewers",
+        "streamEnd",
       ];
-      $('overlays').innerHTML = list.map(([name, path]) => {
-        const url = location.origin + path;
-        return `<div class="overlay"><b>${name}</b><div class="copy"><input readonly value="${esc(url)}">
-          <button data-copy="${esc(url)}">Copy</button><a href="${esc(path)}" target="_blank"><button>Open</button></a></div></div>`;
-      }).join('');
-    }
-    $('overlays').onclick = (e) => { if (e.target.dataset.copy) navigator.clipboard.writeText(e.target.dataset.copy); };
+      const shown = new Set(TYPES.filter((t) => !["like", "viewers", "join"].includes(t)));
+      let live;
 
-    const sample = {
-      chat: { comment: 'This is a test message!' , emotes: [] },
-      gift: { giftId: 5655, giftName: 'Rose', giftImageUrl: '', diamondCount: 1, repeatCount: 5, streaking: false, totalDiamonds: 5, groupId: '0' },
-      follow: {}, share: {}, subscribe: { subMonth: 1 }, like: { likeCount: 10, totalLikeCount: 10 },
-    };
-    $('tests').innerHTML = Object.keys(sample).map((t) => `<button data-test="${t}">${t}</button>`).join('');
-    $('tests').onclick = async (e) => {
-      const type = e.target.dataset.test;
-      if (!type || !live) return;
-      const user = { userId: '0', uniqueId: 'test_user', nickname: 'Test User', profilePictureUrl: `https://api.dicebear.com/9.x/thumbs/svg?seed=test` };
-      await fetch(`/api/sessions/${encodeURIComponent(live.username)}/simulate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ type, user, ...sample[type] }),
-      });
-    };
+      // Only http(s) URLs may reach an <img>; anything else renders as nothing.
+      const safeUrl = (u) => {
+        try {
+          const url = new URL(String(u ?? ""));
+          return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+        } catch {
+          return "";
+        }
+      };
 
-    function connect(username) {
-      live?.close();
-      $('log').replaceChildren();
-      live = new TikLive({ username, token, replay: true });
-      live.on('*', log);
-      live.on('status', renderStatus);
-      renderOverlays(username);
-      history.replaceState(null, '', `?username=${encodeURIComponent(username)}${token ? `&token=${encodeURIComponent(token)}` : ''}`);
-    }
+      // Small DOM builder: strings become text nodes, so nothing is parsed as HTML.
+      function el(tag, props = {}, ...children) {
+        const node = document.createElement(tag);
+        for (const [key, value] of Object.entries(props)) {
+          if (value === undefined || value === null || value === false) continue;
+          if (key === "class") node.className = value;
+          else node.setAttribute(key, String(value));
+        }
+        node.append(...children.filter((c) => c !== undefined && c !== null && c !== false));
+        return node;
+      }
 
-    $('connect').onsubmit = (e) => {
-      e.preventDefault();
-      const u = $('username').value.trim().replace(/^@/, '');
-      if (u) connect(u);
-    };
-    if (params.get('username')) { $('username').value = params.get('username'); connect(params.get('username')); }
-  </script>
-</body>
+      function img(src, props = {}) {
+        const url = safeUrl(src);
+        if (!url) return null;
+        const node = el("img", { ...props, src: url, referrerpolicy: "no-referrer" });
+        node.addEventListener("error", () => {
+          node.style.visibility = "hidden";
+        });
+        return node;
+      }
+
+      function setNotice(message) {
+        $("notice").textContent = message;
+      }
+
+      $("filters").replaceChildren(
+        ...TYPES.map((t) =>
+          el("label", {}, el("input", { type: "checkbox", "data-t": t, checked: shown.has(t) }), ` ${t}`),
+        ),
+      );
+      $("filters").onchange = (e) => {
+        const t = e.target.dataset.t;
+        e.target.checked ? shown.add(t) : shown.delete(t);
+      };
+
+      function describe(e) {
+        switch (e.type) {
+          case "chat":
+            return [e.comment ?? ""];
+          case "gift":
+            return [
+              `${e.giftName ?? ""} ×${num(e.repeatCount)} (${num(e.totalDiamonds)} coins)${e.streaking ? " …" : ""}`,
+            ];
+          case "like":
+            return [`+${num(e.likeCount)} likes (${num(e.totalLikeCount).toLocaleString()} total)`];
+          case "viewers":
+            return [`${num(e.viewerCount).toLocaleString()} viewers`];
+          case "subscribe":
+            return [`subscribed (month ${num(e.subMonth)})`];
+          case "question":
+            return [e.question ?? ""];
+          case "emote":
+            return (e.emotes ?? []).map((m) => img(m.imageUrl, { height: 24 }));
+          case "streamEnd":
+            return [`stream ${e.reason}`];
+          default:
+            return [e.type];
+        }
+      }
+
+      function log(e, meta) {
+        if (!shown.has(e.type)) return;
+        const u = e.user;
+        const row = el(
+          "div",
+          { class: "row" },
+          el("span", { class: `tag ${e.type}` }, `${e.type}${meta?.replay ? "*" : ""}`),
+          ...(u ? [img(u.profilePictureUrl), el("b", {}, u.nickname || u.uniqueId || "")] : []),
+          el("span", {}, ...describe(e)),
+        );
+        const box = $("log");
+        const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+        box.append(row);
+        while (box.children.length > 500) box.firstElementChild.remove();
+        if (atBottom) box.scrollTop = box.scrollHeight;
+      }
+
+      function renderStatus(s) {
+        const labels = {
+          live: "LIVE",
+          waiting: "OFFLINE — waiting",
+          connecting: "CONNECTING",
+          error: "ERROR",
+          idle: "IDLE",
+        };
+        const state = labels[s.state] ? s.state : "idle";
+        const owner = s.owner ? img(s.owner.profilePictureUrl) : null;
+        $("status").replaceChildren(
+          ...(owner ? [owner] : []),
+          el(
+            "div",
+            {},
+            el("b", {}, `@${s.username ?? ""}`),
+            " ",
+            el("span", { class: `pill ${state}` }, labels[state]),
+            el("div", { class: "hint" }, s.error ?? s.title ?? ""),
+          ),
+        );
+        const st = s.stats ?? {};
+        $("stats").replaceChildren(
+          ...[
+            ["viewers", st.viewers],
+            ["likes", st.likes],
+            ["coins", st.diamonds],
+            ["follows", st.follows],
+            ["peak viewers", st.peakViewers],
+            ["chats", st.chats],
+            ["shares", st.shares],
+            ["joins", st.joins],
+          ].map(([k, v]) =>
+            el("div", { class: "stat" }, el("b", {}, num(v).toLocaleString()), el("span", {}, k)),
+          ),
+        );
+      }
+
+      function renderOverlays(username) {
+        const q = `username=${encodeURIComponent(username)}${token ? `&token=${encodeURIComponent(token)}` : ""}`;
+        const list = [
+          ["Chat", `/overlays/chat.html?${q}`],
+          ["Alerts", `/overlays/alerts.html?${q}`],
+          ["Like goal", `/overlays/goal.html?${q}&metric=likes&target=10000`],
+        ];
+        $("overlays").replaceChildren(
+          ...list.map(([name, path]) => {
+            const url = location.origin + path;
+            const copy = el("button", {}, "Copy");
+            copy.addEventListener("click", () => navigator.clipboard.writeText(url));
+            return el(
+              "div",
+              { class: "overlay" },
+              el("b", {}, name),
+              el(
+                "div",
+                { class: "copy" },
+                el("input", { readonly: true, value: url }),
+                copy,
+                el("a", { href: path, target: "_blank" }, el("button", {}, "Open")),
+              ),
+            );
+          }),
+        );
+      }
+
+      const testUser = {
+        userId: "0",
+        uniqueId: "test_user",
+        nickname: "Test User",
+        profilePictureUrl: "https://api.dicebear.com/9.x/thumbs/svg?seed=test",
+      };
+      // Bodies per events.ts. `timestamp` and `user` are added to every event on send.
+      const sample = {
+        chat: { comment: "This is a test message!", emotes: [] },
+        gift: {
+          giftId: 5655,
+          giftName: "Rose",
+          giftImageUrl: "",
+          diamondCount: 1,
+          repeatCount: 5,
+          streaking: false,
+          totalDiamonds: 5,
+          groupId: "0",
+        },
+        follow: {},
+        share: {},
+        subscribe: { subMonth: 1 },
+        like: { likeCount: 10, totalLikeCount: 10 },
+      };
+
+      async function errorMessage(res) {
+        const text = await res.text().catch(() => "");
+        try {
+          const body = JSON.parse(text);
+          return body?.message ?? body?.error ?? (text || `HTTP ${res.status}`);
+        } catch {
+          return text || `HTTP ${res.status}`;
+        }
+      }
+
+      async function simulate(type) {
+        if (!live) return;
+        setNotice("");
+        try {
+          const res = await fetch(`/api/sessions/${encodeURIComponent(live.username)}/simulate`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ ...sample[type], type, user: testUser, timestamp: Date.now() }),
+          });
+          if (!res.ok) setNotice(`Test event failed: ${await errorMessage(res)}`);
+        } catch (err) {
+          setNotice(`Test event failed: ${err.message}`);
+        }
+      }
+
+      $("tests").replaceChildren(
+        ...Object.keys(sample).map((t) => {
+          const button = el("button", {}, t);
+          button.addEventListener("click", () => simulate(t));
+          return button;
+        }),
+      );
+
+      function connect(username) {
+        live?.close();
+        $("log").replaceChildren();
+        setNotice("");
+        live = new TikLive({ username, token, replay: true });
+        live.on("*", log);
+        live.on("status", renderStatus);
+        live.on("error", (e) => setNotice(e.message));
+        renderOverlays(username);
+        history.replaceState(
+          null,
+          "",
+          `?username=${encodeURIComponent(username)}${token ? `&token=${encodeURIComponent(token)}` : ""}`,
+        );
+      }
+
+      $("connect").onsubmit = (e) => {
+        e.preventDefault();
+        const u = $("username").value.trim().replace(/^@/, "");
+        if (u) connect(u);
+      };
+      if (params.get("username")) {
+        $("username").value = params.get("username");
+        connect(params.get("username"));
+      }
+    </script>
+  </body>
 </html>

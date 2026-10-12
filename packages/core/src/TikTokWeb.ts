@@ -35,9 +35,13 @@ export class TikTokWeb extends Context.Service<
      * Anonymous `ttwid` device cookie the webcast WebSocket requires. TikTok
      * issues one on any plain page load. Cached; pass `refresh` to get a new one.
      */
-    readonly getTtwid: (options?: { readonly refresh?: boolean }) => Effect.Effect<string, TikTokRequestError>;
+    readonly getTtwid: (options?: {
+      readonly refresh?: boolean;
+    }) => Effect.Effect<string, TikTokRequestError>;
     /** Looks up the user's current room and whether it's live. */
-    readonly getRoomStatus: (username: string) => Effect.Effect<RoomStatus, UserNotFound | TikTokRequestError>;
+    readonly getRoomStatus: (
+      username: string,
+    ) => Effect.Effect<RoomStatus, UserNotFound | TikTokRequestError>;
   }
 >()("@tiklive/core/TikTokWeb") {}
 
@@ -141,8 +145,9 @@ export const make = (options: TikTokWebOptions = {}) =>
   });
 
 /** TikTokWeb backed by an `HttpClient` you provide (e.g. one routed through a proxy). */
-export const layerWith = (options: TikTokWebOptions = {}): Layer.Layer<TikTokWeb, never, HttpClient.HttpClient> =>
-  Layer.effect(TikTokWeb, make(options));
+export const layerWith = (
+  options: TikTokWebOptions = {},
+): Layer.Layer<TikTokWeb, never, HttpClient.HttpClient> => Layer.effect(TikTokWeb, make(options));
 
 /** TikTokWeb using the runtime's global `fetch`. */
 export const layer = (options: TikTokWebOptions = {}): Layer.Layer<TikTokWeb> =>

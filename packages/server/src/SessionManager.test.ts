@@ -1,0 +1,125 @@
+/**
+ * SessionManager lifecycle: sessions live while acquired or watched, and are
+ * stopped after the idle timeout once nothing needs them.
+ */
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { fakeTikTokWebLayer, fakeWebSocketLayer } from "@tiklive/core/testing";
+import * as SessionManager from "./SessionManager.ts";
+
+const managerLayer = (options: SessionManager.SessionManagerOptions = {}) =>
+  SessionManager.layer(options).pipe(
+    Layer.provide(Layer.mergeAll(fakeTikTokWebLayer({ live: true }), fakeWebSocketLayer().layer)),
+  );
+
+/** Polls `read` until `predicate` holds, failing after `timeoutMs`. */
+const waitUntil = <A>(
+  read: Effect.Effect<A>,
+  predicate: (value: A) => boolean,
+  label: string,
+  timeoutMs = 2000,
+) =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      const value = yield* read;
+      if (predicate(value)) return value;
+      if (Date.now() > deadline) return yield* Effect.die(new Error(`timed out waiting for ${label}`));
+      yield* Effect.sleep("10 millis");
+    }
+  });
+
+const listedUsernames = (manager: SessionManager.SessionManager["Service"]) =>
+  Effect.map(manager.list, (sessions) => sessions.map((s) => s.username));
+
+describe("SessionManager", () => {
+  it.live("keeps a session while it is acquired and stops it after the idle timeout", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        expect(Option.isNone(yield* manager.get("demo"))).toBe(true);
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            yield* manager.acquire("demo");
+            expect(Option.isSome(yield* manager.get("demo"))).toBe(true);
+            const [info] = yield* manager.list;
+            expect(info).toMatchObject({ username: "demo", subscribers: 1, watching: false });
+          }),
+        );
+
+        // The scope has closed; the session lingers for the idle timeout, then goes away.
+        yield* waitUntil(listedUsernames(manager), (names) => names.length === 0, "session to stop");
+        expect(Option.isNone(yield* manager.get("demo"))).toBe(true);
+      }).pipe(Effect.provide(managerLayer({ idleTimeout: "50 millis" }))),
+    ),
+  );
+
+  it.live("shares one session between concurrent acquirers", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        const first = yield* Effect.scoped(manager.acquire("demo"));
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const second = yield* manager.acquire("demo");
+            expect(second).toBe(first);
+            const [info] = yield* manager.list;
+            expect(info?.subscribers).toBe(1);
+          }),
+        );
+        expect(yield* listedUsernames(manager)).toEqual(["demo"]);
+      }).pipe(Effect.provide(managerLayer({ idleTimeout: "10 seconds" }))),
+    ),
+  );
+
+  it.live("keeps a watched session beyond any subscriber scope until unwatched", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        yield* manager.watch("demo");
+
+        // Subscriber comes and goes; the watch keeps the session running past the idle timeout.
+        yield* Effect.scoped(manager.acquire("demo"));
+        yield* Effect.sleep("200 millis");
+        const [watched] = yield* manager.list;
+        expect(watched).toMatchObject({ username: "demo", watching: true, subscribers: 0 });
+
+        yield* manager.unwatch("demo");
+        yield* waitUntil(
+          listedUsernames(manager),
+          (names) => names.length === 0,
+          "unwatched session to stop",
+        );
+      }).pipe(Effect.provide(managerLayer({ idleTimeout: "50 millis" }))),
+    ),
+  );
+
+  it.live("starts configured streamers immediately and keeps them watched", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        yield* waitUntil(listedUsernames(manager), (names) => names.includes("demo"), "startup watch");
+        yield* Effect.sleep("150 millis");
+        const [info] = yield* manager.list;
+        expect(info).toMatchObject({ username: "demo", watching: true, state: "live" });
+      }).pipe(Effect.provide(managerLayer({ idleTimeout: "50 millis", watch: ["demo"] }))),
+    ),
+  );
+
+  it.live("watch returns the running session", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        const session = yield* manager.watch("demo");
+        expect(session.username).toBe("demo");
+        // The session's runner is forked, so the first snapshot may still read "idle".
+        const status = yield* waitUntil(session.status, (s) => s.state === "live", "live");
+        expect(status).toMatchObject({ username: "demo", state: "live" });
+        expect(Option.getOrUndefined(yield* manager.get("demo"))).toBe(session);
+      }).pipe(Effect.provide(managerLayer({ idleTimeout: "50 millis" }))),
+    ),
+  );
+});

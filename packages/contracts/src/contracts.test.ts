@@ -8,7 +8,7 @@ describe("contracts", () => {
   it("lists every event type", () => {
     expect(LIVE_EVENT_TYPES).toContain("chat");
     expect(LIVE_EVENT_TYPES).toContain("streamEnd");
-    expect(LIVE_EVENT_TYPES).toHaveLength(11);
+    expect(LIVE_EVENT_TYPES).toHaveLength(13);
   });
 
   it("decodes valid events and rejects wrong field types", () => {
@@ -45,6 +45,8 @@ describe("contracts", () => {
       emote: () => "emote",
       viewers: () => "viewers",
       streamEnd: () => "end",
+      battle: () => "battle",
+      battleScore: () => "battleScore",
     });
     expect(describeEvent({ type: "follow", timestamp: 1, user })).toBe("Viewer followed");
   });
