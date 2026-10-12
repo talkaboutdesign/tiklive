@@ -1,0 +1,6 @@
+{
+  "name": "@tiklive/example-overlays",
+  "private": true,
+  "description": "Example dashboard and OBS overlays built on @tiklive/client",
+  "type": "module"
+}

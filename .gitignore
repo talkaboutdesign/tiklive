@@ -43,3 +43,6 @@ Thumbs.db
 !.vscode/extensions.json
 *.swp
 *~
+
+# Reference repos (synced locally, never committed)
+.repos/

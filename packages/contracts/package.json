@@ -1,0 +1,18 @@
+{
+  "name": "@tiklive/contracts",
+  "version": "0.1.0",
+  "description": "Event and wire-protocol schemas shared by tiklive packages",
+  "license": "MIT",
+  "type": "module",
+  "repository": { "type": "git", "url": "https://github.com/talkaboutdesign/tiklive", "directory": "packages/contracts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["dist", "src", "!src/**/*.test.ts"],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vp test run"
+  },
+  "dependencies": { "effect": "catalog:" },
+  "devDependencies": { "@effect/vitest": "catalog:" }
+}

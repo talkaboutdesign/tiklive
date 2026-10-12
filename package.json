@@ -1,36 +1,46 @@
 {
-  "name": "tiklive",
-  "version": "0.1.0",
-  "description": "Self-hosted TikTok LIVE event server for building stream overlays",
+  "name": "@tiklive/monorepo",
+  "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "bin": {
-    "tiklive": "./dist/cli.js"
-  },
+  "packageManager": "bun@1.4.3",
   "engines": {
-    "node": ">=20"
+    "bun": ">=1.4.0"
+  },
+  "workspaces": {
+    "packages": [
+      "packages/*",
+      "examples/*"
+    ],
+    "catalog": {
+      "@effect/platform-bun": "4.0.2",
+      "@effect/platform-node": "4.0.2",
+      "@effect/vitest": "4.0.2",
+      "@types/bun": "1.4.2",
+      "@types/node": "26.6.5",
+      "effect": "4.0.2",
+      "typescript": "7.0.2",
+      "vite-plus": "1.1.0"
+    }
   },
   "scripts": {
-    "dev": "tsx watch src/cli.ts",
-    "start": "node dist/cli.js",
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  },
-  "license": "MIT",
-  "dependencies": {
-    "ws": "^8.22.0"
+    "dev": "bun --watch packages/server/src/bin.ts --static examples/overlays",
+    "start": "bun packages/server/src/bin.ts --static examples/overlays",
+    "build": "bun run --filter './packages/*' build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun --bun vp test run",
+    "test:node": "vp test run",
+    "lint": "vp lint",
+    "fmt": "vp fmt",
+    "check": "vp check && bun run typecheck"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
-    "@types/ws": "^8.18.2",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "@effect/vitest": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
   },
-  "files": [
-    "dist",
-    "public"
-  ]
+  "patchedDependencies": {
+    "@effect/vitest@4.0.2": "patches/@effect%2Fvitest@4.0.2.patch"
+  }
 }

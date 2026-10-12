@@ -4,9 +4,9 @@
  * Field numbers come from TikTok's webcast protobuf schemas. Each decoder only
  * reads the handful of fields overlays need.
  */
-import type { Emote, LiveEvent, LiveUser } from '../events.js';
-import type { RawMessage } from './frames.js';
-import { decode, type ProtoMessage } from './wire.js';
+import type { Emote, LiveEvent, LiveUser } from '@tiklive/contracts';
+import type { RawMessage } from './frames.ts';
+import { decode, type ProtoMessage } from './wire.ts';
 
 /** Common header present as field 1 on every webcast message. */
 function common(m: ProtoMessage): { msgId: string; timestamp: number; displayKey: string } {
@@ -25,19 +25,20 @@ function imageUrl(image: ProtoMessage | undefined): string {
 }
 
 export function decodeUser(u: ProtoMessage | undefined, identity?: ProtoMessage): LiveUser {
-  const user: LiveUser = {
+  return {
     userId: u?.id(1) ?? '',
     uniqueId: u?.str(38) ?? '',
     nickname: u?.str(3) ?? '',
     profilePictureUrl: imageUrl(u?.msg(9)),
+    ...(identity
+      ? {
+          isGifter: identity.bool(1),
+          isSubscriber: identity.bool(2),
+          isFollower: identity.bool(4),
+          isModerator: identity.bool(5),
+        }
+      : {}),
   };
-  if (identity) {
-    user.isGifter = identity.bool(1);
-    user.isSubscriber = identity.bool(2);
-    user.isFollower = identity.bool(4);
-    user.isModerator = identity.bool(5);
-  }
-  return user;
 }
 
 function decodeEmote(e: ProtoMessage | undefined): Emote {
@@ -152,14 +153,14 @@ function base(m: ProtoMessage): { timestamp: number; msgId?: string } {
 }
 
 export function isSupportedMethod(method: string): boolean {
-  return method in decoders;
+  return Object.hasOwn(decoders, method);
 }
 
 /** Returns undefined for message types overlays don't need (or variants we skip). */
 export function decodeLiveEvent(raw: RawMessage): LiveEvent | undefined {
-  const decoder = decoders[raw.method];
+  const decoder = Object.hasOwn(decoders, raw.method) ? decoders[raw.method] : undefined;
   if (!decoder) return undefined;
   const event = decoder(decode(raw.payload));
-  if (event && !event.msgId && raw.msgId && raw.msgId !== '0') event.msgId = raw.msgId;
+  if (event && !event.msgId && raw.msgId && raw.msgId !== '0') return { ...event, msgId: raw.msgId };
   return event;
 }
