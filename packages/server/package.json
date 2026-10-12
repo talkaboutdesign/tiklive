@@ -1,6 +1,6 @@
 {
   "name": "tiklive",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "TikTok LIVE connector and self-hosted event server for overlays and apps",
   "keywords": [
     "livestream",
