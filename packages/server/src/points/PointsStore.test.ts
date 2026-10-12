@@ -13,11 +13,13 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
+import * as Scheduler from "effect/Scheduler";
 import * as TestClock from "effect/testing/TestClock";
 import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { layerFile, layerMemory, makeStoreForTest, PointsStore, PointsWriteError } from "./PointsStore.ts";
+import { layerFile, layerMemory, PointsStore, PointsWriteError } from "./PointsStore.ts";
+import { makeStore, type Persistence } from "./store.ts";
 
 const USER = "streamer";
 const OTHER = "other";
@@ -588,17 +590,43 @@ describe("PointsStore in a file", () => {
 
 // ---- a flush and a dashboard change waiting for the write lock ----
 
-/** Lets the runnable fibers run until they wait. Nothing here sleeps in real time. */
-const settle = Effect.forEach(Array.from({ length: 50 }), () => Effect.yieldNow, { discard: true });
+/**
+ * Run newly woken work before the current fiber continues. In particular, releasing a semaphore
+ * schedules its waiters; yielding at that point exposes a save whose version is recorded too late.
+ * This uses only the Scheduler API, without inspecting the store or the runtime's private state.
+ */
+const handoffScheduler = (): Scheduler.Scheduler & { readonly settle: Effect.Effect<void> } => {
+  const dispatcher = new Scheduler.MixedScheduler("sync").makeDispatcher();
+  let handoff = false;
+  const controlled: Scheduler.SchedulerDispatcher = {
+    scheduleTask: (task, priority) => {
+      handoff = true;
+      dispatcher.scheduleTask(() => {
+        handoff = false;
+        task();
+      }, priority);
+    },
+    flush: () => dispatcher.flush(),
+  };
+  return {
+    executionMode: "async",
+    shouldYield: () => handoff,
+    makeDispatcher: () => controlled,
+    // Drain all runnable work to suspension, rather than guessing how many yields it needs.
+    settle: Effect.sync(() => dispatcher.flush()),
+  };
+};
 
 /**
  * A disk that keeps every write in order. The first write of `hold.username` waits on `hold.release`,
- * and `hold.entered` completes once that write has started, so the test decides when it finishes.
+ * and the dashboard save has its own gate, so the flush can queue behind it before it finishes.
  */
 const fakeDisk = (hold: {
   username: string;
   entered: Deferred.Deferred<void>;
   release: Deferred.Deferred<void>;
+  changeEntered: Deferred.Deferred<void>;
+  changeRelease: Deferred.Deferred<void>;
 }) => {
   const writes: Array<{ username: string; points: Array<[string, number]> }> = [];
   let held = true;
@@ -606,47 +634,113 @@ const fakeDisk = (hold: {
     writes,
     persistence: {
       load: () => Effect.succeed(undefined),
-      save: (username: string, stored: { viewers: ReadonlyArray<{ userId: string; points: number }> }) =>
+      save: (username, stored) =>
         Effect.gen(function* () {
           if (held && username === hold.username) {
             held = false;
             yield* Deferred.succeed(hold.entered, undefined);
             yield* Deferred.await(hold.release);
           }
+          if (username === USER && stored.viewers[0]?.points === 99) {
+            yield* Deferred.succeed(hold.changeEntered, undefined);
+            yield* Deferred.await(hold.changeRelease);
+          }
           writes.push({ username, points: stored.viewers.map((viewer) => [viewer.userId, viewer.points]) });
         }),
-    },
+    } satisfies Persistence,
   };
 };
 
 describe("PointsStore: a dashboard change and a flush", () => {
-  it.effect("keeps the newest totals on disk when a change queues behind a flush's held write", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const entered = yield* Deferred.make<void>();
-        const release = yield* Deferred.make<void>();
-        const disk = fakeDisk({ username: OTHER, entered, release });
+  it.effect("never overwrites a dashboard save with an older flush snapshot at write-lock handoff", () => {
+    const scheduler = handoffScheduler();
+    return Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const changeEntered = yield* Deferred.make<void>();
+      const changeRelease = yield* Deferred.make<void>();
+      const disk = fakeDisk({ username: OTHER, entered, release, changeEntered, changeRelease });
 
-        // Both streamers changed, so the flush snapshots both (USER at version 1, 50 points). It writes
-        // OTHER first, and that write is held, so the flush keeps the write lock while USER waits.
-        const store = yield* makeStoreForTest(disk.persistence, true);
-        yield* store.record(OTHER, follow("9"));
-        yield* store.record(USER, follow("1"));
-        yield* TestClock.adjust("5 seconds");
-        yield* Deferred.await(entered);
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          // The flush snapshots both boards (USER at version 1, 50 points), then holds OTHER's save.
+          const store = yield* makeStore(disk.persistence, true);
+          yield* store.record(OTHER, follow("9"));
+          yield* store.record(USER, follow("1"));
+          yield* TestClock.adjust("5 seconds");
+          yield* Deferred.await(entered);
 
-        // The change for USER is version 2 (99 points). It takes the lock and waits for the write lock.
-        const change = yield* Effect.forkChild(store.adjust(USER, "1", { set: 99 }));
-        yield* settle;
-        yield* Deferred.succeed(release, undefined);
-        yield* Fiber.join(change);
-        yield* settle;
+          // Queue version 2 (99 points) behind OTHER. The scheduler hands the write lock to it
+          // before the flush can start saving its old USER snapshot.
+          const change = yield* Effect.forkChild(store.adjust(USER, "1", { set: 99 }));
+          yield* scheduler.settle;
+          yield* Deferred.succeed(release, undefined);
+          yield* Deferred.await(changeEntered);
+          // Keep the dashboard save blocked until the flush has queued behind its write lock.
+          yield* scheduler.settle;
+          yield* Deferred.succeed(changeRelease, undefined);
+          yield* Fiber.join(change);
+          yield* scheduler.settle;
 
-        // The newest write of USER is the change, and the store agrees with the disk.
-        const userWrites = disk.writes.filter((write) => write.username === USER);
-        expect(userWrites.at(-1)?.points).toEqual([["1", 99]]);
-        expect(Option.getOrThrow(yield* store.get(USER, "1")).points).toBe(99);
-      }),
-    ),
-  );
+          // Releasing the dashboard's write lock wakes the old flush BEFORE commit continues.
+          // It must already know version 2 is saved, or it overwrites 99 points with 50.
+          expect(disk.writes.filter((write) => write.username === USER)).toEqual([
+            { username: USER, points: [["1", 99]] },
+          ]);
+          expect(Option.getOrThrow(yield* store.get(USER, "1")).points).toBe(99);
+        }),
+      );
+      // Scope close runs another flush. Already saved boards must not be written again.
+      expect(disk.writes).toEqual([
+        { username: OTHER, points: [["9", 50]] },
+        { username: USER, points: [["1", 99]] },
+      ]);
+    }).pipe(Effect.provideService(Scheduler.Scheduler, scheduler));
+  });
+
+  it.effect("records during a blocked flush and saves the newer version when the scope closes", () => {
+    const scheduler = handoffScheduler();
+    return Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const close = yield* Deferred.make<void>();
+      const ready = yield* Deferred.make<PointsStore["Service"]>();
+      const writes: Array<number | undefined> = [];
+      let first = true;
+      const persistence: Persistence = {
+        load: () => Effect.succeed(undefined),
+        save: (_, stored) =>
+          Effect.gen(function* () {
+            if (first) {
+              first = false;
+              yield* Deferred.succeed(entered, undefined);
+              yield* Deferred.await(release);
+            }
+            writes.push(stored.viewers[0]?.points);
+          }),
+      };
+      const owner = yield* Effect.forkChild(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const store = yield* makeStore(persistence, true);
+            yield* Deferred.succeed(ready, store);
+            yield* Deferred.await(close);
+          }),
+        ),
+      );
+      const store = yield* Deferred.await(ready);
+      yield* store.record(USER, follow("1"));
+      yield* TestClock.adjust("5 seconds");
+      yield* Deferred.await(entered);
+
+      // This must complete while save is still blocked. Its newer version remains dirty.
+      yield* store.record(USER, follow("1"));
+      yield* Deferred.succeed(close, undefined);
+      yield* scheduler.settle;
+      // The finalizer is now waiting for the timer's write, with its own newer snapshot.
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(owner);
+      expect(writes).toEqual([50, 100]);
+    }).pipe(Effect.provideService(Scheduler.Scheduler, scheduler));
+  });
 });
