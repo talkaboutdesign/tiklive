@@ -3,16 +3,17 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { LiveEvent, LiveUser } from "@tiklive/contracts";
 
-// [handle, followerCount, followStatus]: a mix of friends, followers and low-follower strangers.
-const NAMES: ReadonlyArray<readonly [string, number, NonNullable<LiveUser["followStatus"]>]> = [
-  ["pixelpanda", 1840, "friend"],
-  ["nightowl", 312, "follower"],
-  ["lofi.luna", 25300, "follower"],
-  ["capt.crunch", 4, "none"],
-  ["mochi_mia", 960, "friend"],
-  ["turbo.tim", 0, "none"],
-  ["starlight", 7120, "none"],
-  ["bytebandit", 58, "follower"],
+// [handle, followerCount, followStatus, gifterLevel]: a mix of friends, followers and low-follower
+// strangers, with gifter levels from newcomers to big spenders.
+const NAMES: ReadonlyArray<readonly [string, number, NonNullable<LiveUser["followStatus"]>, number]> = [
+  ["pixelpanda", 1840, "friend", 36],
+  ["nightowl", 312, "follower", 12],
+  ["lofi.luna", 25300, "follower", 47],
+  ["capt.crunch", 4, "none", 3],
+  ["mochi_mia", 960, "friend", 22],
+  ["turbo.tim", 0, "none", 1],
+  ["starlight", 7120, "none", 31],
+  ["bytebandit", 58, "follower", 8],
 ];
 const COMMENTS = [
   "hello!! 👋",
@@ -78,16 +79,22 @@ const GIFTS = [
   },
 ];
 
+const GOAL_TARGET = 100;
+
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
 
 function fakeUser(): LiveUser {
-  const entry = pick(NAMES);
-  const [name, followerCount, followStatus] = entry;
+  return userFor(pick(NAMES));
+}
+
+function userFor(entry: (typeof NAMES)[number]): LiveUser {
+  const [name, followerCount, followStatus, gifterLevel] = entry;
   return {
     userId: String(1000 + NAMES.indexOf(entry)),
     uniqueId: name,
     nickname: name.replace(/[._]/g, " "),
     profilePictureUrl: `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(name)}`,
+    gifterLevel,
     followerCount,
     followingCount: 150,
     followStatus,
@@ -116,8 +123,46 @@ export const demoEvents: Stream.Stream<LiveEvent> = Stream.suspend(() => {
   let streak: GiftStreak | undefined;
   // msgIds of chat messages not yet deleted, so chatDelete events point at real chat.
   const recentChats: string[] = [];
+  // A Rose goal that fills up and then restarts with a new goalId.
+  let goal = { id: 1, progress: 0 };
 
   const base = () => ({ timestamp: Date.now(), msgId: `demo-${++seq}` });
+
+  const goalEvent = (): LiveEvent => {
+    goal.progress = Math.min(GOAL_TARGET, goal.progress + 1 + Math.floor(Math.random() * 6));
+    // Three different viewers, with the top one contributing about half of the progress.
+    const contributors = NAMES.slice(0, 3).map((entry, i) => {
+      const user = userFor(entry);
+      return {
+        user: {
+          userId: user.userId,
+          nickname: user.nickname,
+          profilePictureUrl: user.profilePictureUrl,
+        },
+        count: Math.max(1, Math.round(goal.progress * [0.5, 0.3, 0.2][i]!)),
+      };
+    });
+    const event: LiveEvent = {
+      type: "goal",
+      ...base(),
+      goalId: String(goal.id),
+      description: "GIFT GAL",
+      goals: [
+        {
+          kind: "gift",
+          giftId: 5655,
+          giftName: "Rose",
+          giftImageUrl: `${CDN}eba3a9bb85c33e017f3648eaf88d7189~tplv-obj.webp`,
+          progress: goal.progress,
+          target: GOAL_TARGET,
+        },
+      ],
+      contributors: contributors.sort((a, b) => b.count - a.count),
+      endsAt: Date.now() + 2 * 60 * 60 * 1000,
+    };
+    if (goal.progress >= GOAL_TARGET) goal = { id: goal.id + 1, progress: 0 };
+    return event;
+  };
 
   const giftEvent = (s: GiftStreak): LiveEvent => {
     s.sent++;
@@ -189,6 +234,8 @@ export const demoEvents: Stream.Stream<LiveEvent> = Stream.suspend(() => {
       return { type: "follow", ...base(), user: fakeUser() };
     } else if (roll < 0.98) {
       return { type: "share", ...base(), user: fakeUser() };
+    } else if (roll < 0.99) {
+      return goalEvent();
     } else {
       return { type: "subscribe", ...base(), user: fakeUser(), subMonth: 1 + Math.floor(Math.random() * 6) };
     }

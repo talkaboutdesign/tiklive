@@ -9,6 +9,7 @@ import type {
   BattleHost,
   BattleScoreEvent,
   Emote,
+  GoalItem,
   LiveEvent,
   LiveUser,
 } from "@tiklive/contracts";
@@ -34,14 +35,31 @@ function imageUrl(image: ProtoMessage | undefined): string {
 // FollowInfo.followStatus: the viewer's relationship to the streamer.
 const FOLLOW_STATUS: ReadonlyArray<NonNullable<LiveUser["followStatus"]>> = ["none", "follower", "friend"];
 
+/**
+ * The gifter level badge. User field 64 is a repeated badge list. The gifter badge's image is
+ * `grade_badge_*`, and the level is the decimal string in badge field 12.5. Fan club and
+ * top-gifter badges don't match the image name, so they're skipped.
+ */
+function gifterLevel(u: ProtoMessage | undefined): number | undefined {
+  for (const badge of u?.msgs(64) ?? []) {
+    const image = badge.msg(23)?.msg(2)?.str(2) ?? "";
+    if (!image.includes("grade_badge")) continue;
+    const level = Number.parseInt(badge.msg(12)?.str(5) ?? "", 10);
+    return Number.isSafeInteger(level) && level > 0 ? level : undefined;
+  }
+  return undefined;
+}
+
 export function decodeUser(u: ProtoMessage | undefined, identity?: ProtoMessage): LiveUser {
   const follow = u?.msg(22);
   const followStatus = follow ? FOLLOW_STATUS[follow.num(3)] : undefined;
+  const level = gifterLevel(u);
   return {
     userId: u?.id(1) ?? "",
     uniqueId: u?.str(38) ?? "",
     nickname: u?.str(3) ?? "",
     profilePictureUrl: imageUrl(u?.msg(9)),
+    ...(level ? { gifterLevel: level } : {}),
     ...(follow ? { followingCount: follow.num(1), followerCount: follow.num(2) } : {}),
     ...(followStatus ? { followStatus } : {}),
     ...(identity
@@ -156,6 +174,38 @@ const decoders: Record<string, Decoder> = {
     // action 1 = joined; other actions are moderation (kick, admin, ...).
     if (m.num(10) !== 1) return undefined;
     return { type: "join", ...base(m), user: decodeUser(m.msg(2)) };
+  },
+
+  // LIVE goals (e.g. "GIFT GAL"). Field numbers: 3=goal (1=goal id, 4=targets (1=type, 2=giftId,
+  // 3=progress, 4=target, 5=gift (1=name, 2=image), 6=giftId as string), 5=description,
+  // 9=end (unix s), 11=contributors (1=userId, 2=avatar, 3=nickname, 4=count)). Type 1 is a gift target.
+  WebcastGoalUpdateMessage(m) {
+    const goal = m.msg(3);
+    if (!goal) return undefined;
+    const end = goal.num(9);
+    return {
+      type: "goal",
+      ...base(m),
+      goalId: goal.id(1),
+      description: goal.str(5),
+      goals: goal.msgs(4).map((t): GoalItem => {
+        const gift = t.msg(5);
+        const kind = t.num(1) === 1 ? "gift" : "other";
+        return {
+          kind,
+          ...(kind === "gift"
+            ? { giftId: t.num(2), giftName: gift?.str(1) ?? "", giftImageUrl: imageUrl(gift?.msg(2)) }
+            : {}),
+          progress: t.num(3),
+          target: t.num(4),
+        };
+      }),
+      contributors: goal.msgs(11).map((c) => ({
+        user: { userId: c.id(1), nickname: c.str(3), profilePictureUrl: imageUrl(c.msg(2)) },
+        count: c.num(4),
+      })),
+      ...(end ? { endsAt: end * 1000 } : {}),
+    };
   },
 
   WebcastSocialMessage(m) {

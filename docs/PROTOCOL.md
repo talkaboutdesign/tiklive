@@ -194,6 +194,7 @@ de-duplication). `user` is a `LiveUser`:
   isSubscriber?: boolean;
   isFollower?: boolean;
   isGifter?: boolean;
+  gifterLevel?: number;      // the viewer's gifter level ("Lv 36" badge), when TikTok includes it. Absent for non-gifters
   followerCount?: number;    // the viewer's own counts, when TikTok includes them
   followingCount?: number;
   followStatus?: "none" | "follower" | "friend"; // the viewer's relationship to the streamer. friend = mutual follow
@@ -214,6 +215,15 @@ de-duplication). `user` is a `LiveUser`:
 | `emote`      | `user`, `emotes: Emote[]`                                                                                                                                                                                                               |
 | `viewers`    | `viewerCount`, `topViewers: TopViewer[]` (`{user, coinCount, rank}`)                                                                                                                                                                    |
 | `streamEnd`  | `reason: "ended" \| "suspended"`                                                                                                                                                                                                        |
+| `goal`       | `goalId: string`, `description` (e.g. "GIFT GAL"), `goals: GoalItem[]`, `contributors: GoalContributor[]`, `endsAt?` (unix ms)                                                                                                          |
+
+`GoalItem` is `{ kind: "gift" | "other", giftId?, giftName?, giftImageUrl?, progress, target }`. `kind` is `gift`
+when the target counts one kind of gift (then the gift fields are set). `GoalContributor` is
+`{ user: { userId, nickname, profilePictureUrl }, count }`. Contributors come in TikTok's order, and the list may not
+include everyone, so `count`s don't always add up to `progress`.
+
+**Goals.** Each `goal` event is the full state of goal `goalId`, sent when the goal appears and each time its
+progress changes. Replace the previous state of that goal with the newest one. A new `goalId` means a new goal.
 
 `Emote` is `{ emoteId, imageUrl }`.
 
@@ -351,7 +361,8 @@ with `PUT /api/rules`, sending the `revision` you last read. A save based on an 
   Clients must ignore unknown fields and event types. The browser client already does.
 - Actions (the `action` message, the `actions` subscribe option, `actions=1`, and the `/api/rules`,
   `/api/media`, `/api/media/import`, `/api/sounds/search` and `/media/:file` routes) was an additive change, so `PROTOCOL_VERSION` stays at 1.
-  So were `PATCH /api/media/:id`, the follow fields on `LiveUser`, and `SessionStatus.hlsUrl`, and the
+  So were `PATCH /api/media/:id`, the follow fields on `LiveUser`, `SessionStatus.hlsUrl`, the `goal` event and
+  `LiveUser.gifterLevel`, and the
   rule additions: the `join` trigger, the `friends` audience, `minFollowers` and `oncePerStream`, and the `{followers}` placeholder.
   The `webhook` step is another additive rule change, so `PROTOCOL_VERSION` stays at 1. Older players skip the
   step kind they don't know.
