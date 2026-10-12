@@ -8,7 +8,8 @@ name: Desktop build
 # - Run by hand (Actions → Desktop build → Run workflow) to test the build;
 #   installers are then only uploaded as workflow artifacts.
 #
-# Secrets (all optional; without them the mac build is unsigned):
+# Secrets, in the `release` environment (all optional; without them the mac
+# build is unsigned):
 #   CSC_LINK          base64 of the Developer ID Application .p12
 #   CSC_KEY_PASSWORD  password of that .p12
 #   APPLE_API_KEY     contents of the App Store Connect AuthKey_XXXX.p8
@@ -35,6 +36,10 @@ permissions:
 jobs:
   build:
     name: Desktop ${{ matrix.label }}
+    # The signing secrets live in the protected `release` environment: only the
+    # repository owner can start this, and it waits for their approval.
+    if: github.triggering_actor == github.repository_owner
+    environment: release
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:

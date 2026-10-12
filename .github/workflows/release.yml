@@ -1,6 +1,7 @@
 name: Release
 
-# Runs only when started by hand (Actions → Release → Run workflow on main).
+# Runs only when started by hand (Actions → Release → Run workflow on main), by
+# the repository owner, after they approve the `release` environment.
 # With pending changesets, changesets/action opens or updates a
 # "Release: version packages" PR. After that PR is merged, run the workflow
 # again to stage the new versions on npm (a maintainer approves them with 2FA),
@@ -22,6 +23,10 @@ permissions:
 jobs:
   release:
     name: Version or publish
+    # Only the repository owner can start a release, and the protected `release`
+    # environment (main branch only) waits for their approval before this runs.
+    if: github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main'
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
