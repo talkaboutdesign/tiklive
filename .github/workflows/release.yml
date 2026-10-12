@@ -90,4 +90,4 @@ jobs:
           # Release notes: this version's section of the server changelog.
           awk -v v="## $version" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
           git tag "v$version" && git push origin "v$version"
-          gh release create "v$version" dist/bin/* --title "v$version" --notes-file notes.md
+          gh release create "v$version" $(ls dist/bin/tiklive-* | grep -v "\.map$") --title "v$version" --notes-file notes.md
