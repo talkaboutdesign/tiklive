@@ -357,6 +357,8 @@
       .top-right {
         margin-left: auto;
         display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
         align-items: center;
         gap: 12px;
         min-width: 0;
@@ -380,7 +382,9 @@
       /* Desktop app only: sound controls for the Actions player (hidden in a normal browser) */
       .app-sound {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
+        justify-content: flex-end;
         gap: 8px;
         min-width: 0;
       }
@@ -403,6 +407,7 @@
       }
       .app-now {
         display: flex;
+        flex: none;
         align-items: center;
         gap: 6px;
         min-width: 0;
@@ -413,6 +418,7 @@
       }
       .app-now-text {
         min-width: 0;
+        max-width: 220px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1463,7 +1469,7 @@
       if (window.tikliveDesktop) {
         const APP_AUDIO_KEY = "tiklive.appAudio";
         const PLAYER_OFFLINE_MS = 5000;
-        const PLAYER_POLL_MS = 2000;
+        const PLAYER_POLL_MS = 1000;
         const channel = new BroadcastChannel("tiklive-player");
         const loadedAt = Date.now();
         let player = null; // the last status the player sent
@@ -1494,8 +1500,9 @@
         function renderSound() {
           const settings = readAppAudio();
           $("app-toggle").setAttribute("aria-pressed", String(settings.enabled));
-          $("app-icon-on").hidden = !settings.enabled;
-          $("app-icon-off").hidden = settings.enabled;
+          // SVG elements have no hidden property, so toggle the attribute.
+          $("app-icon-on").toggleAttribute("hidden", !settings.enabled);
+          $("app-icon-off").toggleAttribute("hidden", settings.enabled);
           $("app-volume").value = String(Math.round(settings.volume * 100));
         }
 

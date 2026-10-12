@@ -65,6 +65,14 @@ Plays the actions you set up on the Actions page: sounds, images, GIFs and video
 switches. Each action runs its steps together. Actions play one at a time, in the order they fired. See
 [actions.md](./actions.md) for setting up actions.
 
+The player depends on how you run tiklive:
+
+- **Desktop app:** the app plays sounds and speech itself, through the computer's audio. The link on the Actions
+  page leaves them out (`sounds=0&speech=0`), so the player in OBS shows pictures, GIFs, videos and scene switches
+  only. Sounds and speech don't need anything set up in OBS.
+- **Command-line server (`npx tiklive`):** there's no app to play them, so the player in OBS plays everything.
+  Tick **Control audio via OBS** for its sounds and speech.
+
 | Param      | Default | Meaning                                                 |
 | ---------- | ------- | ------------------------------------------------------- |
 | `username` | none    | Streamer whose actions to play (required)               |
@@ -79,14 +87,19 @@ switches. Each action runs its steps together. Actions play one at a time, in th
 
 Example: `/overlays/actions.html?username=yourname&speech=0&volume=0.8`
 
+The desktop app's link on the Actions page is the same URL with `&sounds=0&speech=0` added. Tick **OBS plays sounds
+and speech too** there if you want OBS to play them instead, and turn off app sound in the app's header so they
+don't play twice.
+
 OBS setup tips:
 
 - Set the Browser Source size to 1920×1080. Media appears in the middle of the frame.
-- Tick **Control audio via OBS** so sounds and speech go through OBS's mixer, where you can adjust their levels.
+- Command-line server only: tick **Control audio via OBS** so sounds and speech go through OBS's mixer, where you
+  can adjust their levels. Skip this with the desktop app, which plays them itself.
 - For scene switches, set **Page permissions** to **Advanced access to OBS**. Without it, the player skips scene
   steps and logs a warning.
-- If speech is silent in OBS, open the player in a normal browser tab with `&visuals=0&obs=0` and capture that
-  audio instead.
+- Command-line server only: if speech is silent in OBS, open the player in a normal browser tab with
+  `&visuals=0&obs=0` and capture that audio instead.
 
 In a normal browser tab, the browser may block sound until you click the page. A **Click to enable sound** button
 appears when that happens. OBS doesn't need it.

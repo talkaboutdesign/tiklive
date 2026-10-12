@@ -12,10 +12,13 @@ the same as the dashboard.
 The Actions page shows the player's URL at the top. To add it:
 
 1. In OBS, add a **Browser Source** and paste the URL. Set the size to 1920×1080.
-2. Tick **Control audio via OBS**, so sounds and speech go through OBS's mixer.
+2. With the command line, tick **Control audio via OBS**, so sounds and speech go through OBS's mixer. Skip this in
+   the desktop app, which plays sounds and speech itself; its URL leaves them out.
 3. For scene switching, set the source's **Page permissions** to **Advanced access to OBS**.
 
-The player is invisible until an action plays. Setup details are in the
+The player is invisible until an action plays. In the desktop app, the header of the Actions page also has sound
+controls: a button to turn sounds and speech on or off, a volume slider, a chip showing what's playing and how many
+are waiting, and **Skip** and **Clear**. Setup details are in the
 [Actions player section of Overlays](./overlays.md#actions-player-overlaysactionshtml).
 
 ## 2. Create an action
@@ -124,10 +127,11 @@ right username.
 
 ## Text-to-speech
 
-Speech depends on the voices and speech engine of the computer running OBS. If speech is silent in OBS,
-open the player in a normal browser tab with `&visuals=0&obs=0` added to its URL, for example
-`http://127.0.0.1:8080/overlays/actions.html?username=yourname&visuals=0&obs=0`. If speech plays in that tab,
-the problem is OBS's audio or browser source, not tiklive.
+Speech depends on the voices and speech engine of the computer that plays it: the desktop app's computer, or the
+one running OBS with the command-line server. With the command line, if speech is silent in OBS, open the player in
+a normal browser tab with `&visuals=0&obs=0` added to its URL, for example
+`http://127.0.0.1:8080/overlays/actions.html?username=yourname&visuals=0&obs=0`. If speech plays in that tab, the
+problem is OBS's audio or browser source, not tiklive.
 
 ## Where rules and uploads are stored
 

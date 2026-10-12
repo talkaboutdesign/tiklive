@@ -182,6 +182,9 @@
       let lastError = "";
       let pumping = false; // the queue loop is running
       let current = null; // { action, controller } for the action playing now
+      // The rule name shown as "playing". It stays through the gap between two actions, so the
+      // dashboard doesn't flicker, and clears when the queue runs dry.
+      let nowPlaying = null;
       let unlockOffered = false;
       const queue = [];
       // Sound and video elements playing now, with their step volume, so a volume change applies at once.
@@ -230,7 +233,7 @@
           connected: connection === "connected",
           username: liveName,
           enabled: appAudio.enabled,
-          playing: current?.action?.ruleName ?? null,
+          playing: nowPlaying,
           queued: queue.length,
         });
       }
@@ -463,6 +466,7 @@
       async function playAction(action) {
         const controller = new AbortController();
         current = { action, controller };
+        nowPlaying = action?.ruleName ?? null;
         refresh();
         const steps = Array.isArray(action?.steps) ? action.steps : [];
         const blocking = [];
@@ -511,6 +515,7 @@
           if (queue.length) await sleep(gapMs);
         }
         pumping = false;
+        nowPlaying = null;
         refresh();
       }
 
