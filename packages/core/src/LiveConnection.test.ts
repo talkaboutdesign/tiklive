@@ -1,7 +1,9 @@
 import { describe, expect, it } from "@effect/vitest";
+import { TikTokWeb } from "./TikTokWeb.ts";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -330,4 +332,39 @@ describe("LiveConnection.connect", () => {
       expect(sockets).toHaveLength(1);
     }),
   );
+});
+
+describe("device cookie timeouts", () => {
+  for (const refreshOnly of [false, true]) {
+    it.effect(`times out a stalled ${refreshOnly ? "refresh" : "initial"} cookie request`, () =>
+      Effect.gen(function* () {
+        const base = yield* TikTokWeb;
+        const started = yield* Latch.make();
+        const web = TikTokWeb.of({
+          ...base,
+          getTtwid: (options) =>
+            refreshOnly && !options?.refresh
+              ? Effect.succeed("old-cookie")
+              : started.open.pipe(Effect.andThen(Effect.never)),
+        });
+        const sockets = fakeWebSocketLayer((socket) => queueMicrotask(() => socket.fail()));
+        const fiber = yield* LiveConnection.connect("someone", {
+          connectTimeout: "1 second",
+          wsHosts: ["ws://fake/ws"],
+        }).pipe(
+          Stream.runDrain,
+          Effect.result,
+          Effect.provideService(TikTokWeb, web),
+          Effect.provide(sockets.layer),
+          Effect.forkChild,
+        );
+        yield* started.await;
+        yield* TestClock.adjust("1 second");
+        expect(yield* Fiber.join(fiber)).toMatchObject({
+          _tag: "Failure",
+          failure: { _tag: "TikTokRequestError", message: "Device cookie request timed out" },
+        });
+      }).pipe(Effect.provide(fakeTikTokWebLayer())),
+    );
+  }
 });

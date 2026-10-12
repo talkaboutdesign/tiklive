@@ -38,7 +38,8 @@ LiveConnection.events("someone").pipe(
 - `LiveConnection.layer(options)`: the default TikTok and WebSocket layers. The TikTok layer uses `fetch`,
   and the WebSocket layer uses the runtime's global `WebSocket`.
 - Options: `roomId`, `wsHosts`, `includeHistory`, `includeRaw`, `reconnect`, `heartbeatInterval`,
-  `idleTimeout`, `connectTimeout`.
+  `idleTimeout`, `connectTimeout`. The connection timeout applies separately to room lookup, cookie requests
+  (including refresh) and each socket open. Unexpected room API errors remain retryable.
 
 The stream fails with a typed error: `UserNotFound`, `UserOffline`, `TikTokRequestError`,
 `SocketOpenFailed` or `ReconnectFailed`, all in the `ConnectError` union. Each is a tagged error, so you can
