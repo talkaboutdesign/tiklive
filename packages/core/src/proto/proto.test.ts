@@ -219,3 +219,71 @@ describe("live event decoding", () => {
     ).toBeUndefined();
   });
 });
+
+describe("battle decoding", () => {
+  // Shapes mirror real WebcastLinkMicBattle / WebcastLinkMicArmies payloads.
+  const host = (id: string, handle: string) =>
+    new ProtoWriter()
+      .varint(1, id)
+      .message(
+        2,
+        new ProtoWriter().message(
+          1,
+          new ProtoWriter().varint(1, id).string(2, handle.toUpperCase()).string(4, handle),
+        ),
+      );
+  const settings = new ProtoWriter().varint(1, "77").varint(2, 1791769672539).varint(3, 301).varint(5, 2);
+
+  it("decodes a finished battle with results", () => {
+    const payload = new ProtoWriter()
+      .varint(2, "77")
+      .message(3, settings)
+      .varint(4, 6)
+      .message(
+        5,
+        new ProtoWriter()
+          .varint(1, "1")
+          .message(2, new ProtoWriter().varint(1, "1").varint(2, 1).varint(3, 9)),
+      )
+      .message(5, new ProtoWriter().varint(1, "2").message(2, new ProtoWriter().varint(1, "2").varint(3, 15)))
+      .message(10, host("1", "alpha"))
+      .message(10, host("2", "beta"))
+      .finish();
+    const event = decodeLiveEvent({ method: "WebcastLinkMicBattle", payload, msgId: "", isHistory: false });
+    expect(event).toMatchObject({
+      type: "battle",
+      battleId: "77",
+      status: "finished",
+      action: "cutShort",
+      durationSeconds: 301,
+      hosts: [
+        { user: { userId: "1", uniqueId: "alpha", nickname: "ALPHA" }, score: 9, result: "lose" },
+        { user: { userId: "2", uniqueId: "beta" }, score: 15, result: "win" },
+      ],
+    });
+  });
+
+  it("decodes battle scores with top gifters sorted", () => {
+    const army = (id: string, score: number) =>
+      new ProtoWriter().varint(1, id).varint(2, score).string(3, `fan${id}`);
+    const payload = new ProtoWriter()
+      .varint(2, "77")
+      .message(
+        3,
+        new ProtoWriter()
+          .varint(1, "2")
+          .message(2, new ProtoWriter().message(1, army("10", 3)).message(1, army("11", 5)).varint(2, 8)),
+      )
+      .varint(7, 1)
+      .finish();
+    const event = decodeLiveEvent({ method: "WebcastLinkMicArmies", payload, msgId: "", isHistory: false });
+    expect(event).toMatchObject({
+      type: "battleScore",
+      battleId: "77",
+      reason: "scoreUpdate",
+      teams: [
+        { hostUserId: "2", score: 8, topGifters: [{ score: 5, user: { nickname: "fan11" } }, { score: 3 }] },
+      ],
+    });
+  });
+});
