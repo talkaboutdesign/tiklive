@@ -2,7 +2,10 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import {
   ClientMessage,
+  DEFAULT_POINTS_SETTINGS,
   GiftInfo,
+  PointsAdjustRequest,
+  PointsSettings,
   LIVE_EVENT_TYPES,
   LiveEvent,
   normalizeUsername,
@@ -290,5 +293,27 @@ describe("actions", () => {
     expect(() =>
       Schema.decodeUnknownSync(ServerMessage)({ type: "action", username: "demo", action: { id: "a1" } }),
     ).toThrow();
+  });
+});
+
+describe("viewer points", () => {
+  it("accepts the default settings and rejects fractions, negatives and out-of-range values", () => {
+    expect(Schema.is(PointsSettings)(DEFAULT_POINTS_SETTINGS)).toBe(true);
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, perMessage: 1.5 })).toBe(false);
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, perFollow: -1 })).toBe(false);
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, likesPerPoint: 0 })).toBe(false);
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, messageCooldownSeconds: 86_401 })).toBe(
+      false,
+    );
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, perJoin: Infinity })).toBe(false);
+    expect(Schema.is(PointsSettings)({ perMessage: 1 })).toBe(false);
+  });
+
+  it("accepts a whole-number delta or set, within bounds", () => {
+    expect(Schema.is(PointsAdjustRequest)({ delta: -5 })).toBe(true);
+    expect(Schema.is(PointsAdjustRequest)({ set: 0 })).toBe(true);
+    expect(Schema.is(PointsAdjustRequest)({ delta: 1.5 })).toBe(false);
+    expect(Schema.is(PointsAdjustRequest)({ set: -1 })).toBe(false);
+    expect(Schema.is(PointsAdjustRequest)({ delta: 2_000_000_000 })).toBe(false);
   });
 });

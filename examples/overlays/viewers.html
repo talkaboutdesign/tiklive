@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Viewers · tiklive</title>
+    <script>
+      try {
+        var t = localStorage.getItem("tiklive.theme");
+        document.documentElement.dataset.theme = t === "light" || t === "dark" ? t : "system";
+      } catch {}
+    </script>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/app/app.css" />
+    <style>
+      /* Viewers page parts. The shell (app.css) supplies the tokens, sidebar, buttons, inputs and groups. */
+
+      .viewers-tools {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin: 4px 0 10px;
+      }
+      .viewers-tools .input {
+        flex: 1 1 220px;
+        max-width: 320px;
+      }
+      .board {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .board-head,
+      .viewer {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr) 84px 76px 76px 120px 168px;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+      }
+      .board-head {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 500;
+        border-bottom: 1px solid var(--line);
+      }
+      .viewer + .viewer {
+        border-top: 1px solid var(--line);
+      }
+      .board-empty {
+        margin: 0;
+        padding: 28px 16px;
+        text-align: center;
+      }
+      .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .rank {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+      }
+      .who {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+      .who-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .who-name,
+      .who-handle {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .who-name {
+        font-weight: 500;
+      }
+      .who-handle {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .points {
+        font-weight: 600;
+      }
+      .seen {
+        color: var(--muted);
+        font-size: 13px;
+        text-align: right;
+      }
+      .adjust {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+      }
+      .adjust .input {
+        width: 72px;
+        height: 28px;
+        font-variant-numeric: tabular-nums;
+      }
+      .adjust .btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        justify-content: center;
+      }
+      .list-foot {
+        display: flex;
+        justify-content: center;
+        margin: 12px 0 0;
+      }
+      .settings-form {
+        margin: 0;
+      }
+      .settings-form .row-control .input {
+        width: 110px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .settings-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 12px 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      @media (max-width: 760px) {
+        .board-head,
+        .viewer {
+          grid-template-columns: 32px minmax(0, 1fr) 84px;
+        }
+        .board-head .coins,
+        .board-head .messages,
+        .board-head .seen,
+        .viewer .coins,
+        .viewer .messages,
+        .viewer .seen {
+          display: none;
+        }
+        .viewer .adjust {
+          grid-column: 2 / -1;
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside id="sidebar"></aside>
+      <main id="main">
+        <header id="page-header"></header>
+        <div class="page" id="page">
+          <div class="empty" id="no-user" hidden>
+            <p>Choose a streamer on the dashboard to see their viewers.</p>
+            <p><a class="btn btn-primary" href="/">Go to the dashboard</a></p>
+          </div>
+
+          <div id="viewers" hidden>
+            <div class="viewers-tools">
+              <input
+                class="input"
+                type="search"
+                id="search"
+                placeholder="Search by name or @handle"
+                aria-label="Search by name or @handle"
+              />
+              <p class="hint" id="status" role="status"></p>
+            </div>
+
+            <section class="section" aria-labelledby="board-title">
+              <h2 class="section-title" id="board-title">Leaderboard</h2>
+              <div class="group">
+                <div class="board-head" id="board-head" aria-hidden="true">
+                  <span class="rank">#</span>
+                  <span>Viewer</span>
+                  <span class="num">Points</span>
+                  <span class="num coins">Coins</span>
+                  <span class="num messages">Messages</span>
+                  <span class="seen">Last seen</span>
+                  <span class="adjust">Adjust</span>
+                </div>
+                <ol class="board" id="rows"></ol>
+                <p class="hint board-empty" id="empty" hidden></p>
+              </div>
+              <div class="list-foot">
+                <button class="btn" type="button" id="more" hidden>Load more</button>
+              </div>
+            </section>
+
+            <section class="section" aria-labelledby="settings-title">
+              <h2 class="section-title" id="settings-title">How viewers earn points</h2>
+              <form class="group settings-form" id="settings" novalidate></form>
+            </section>
+
+            <section class="section" aria-labelledby="reset-title">
+              <h2 class="section-title" id="reset-title">Reset</h2>
+              <div class="group">
+                <div class="row">
+                  <div class="row-text">
+                    <span class="row-title" id="reset-title-text">Reset all points</span>
+                    <span class="row-desc"
+                      >Sets every viewer back to 0. Settings stay. This can't be undone.</span
+                    >
+                  </div>
+                  <div class="row-control">
+                    <button class="btn btn-danger" type="button" id="reset">Reset all points</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module">
+      import { api, avatar, el, getUsername, icon, mountShell, onUsernameChange, toast } from "/app/shell.js";
+
+      const PAGE = 50;
+      const REFRESH_MS = 10_000;
+      const MAX_AMOUNT = 1_000_000;
+
+      // The settings, in the order they are shown. Every value is a whole number from min to max.
+      const FIELDS = [
+        {
+          key: "perMessage",
+          title: "Chat message",
+          desc: "Points for each chat message.",
+          min: 0,
+          max: 1000,
+        },
+        {
+          key: "messageCooldownSeconds",
+          title: "Chat cooldown",
+          desc: "Chat points are given at most once per this many seconds, per viewer. 0 gives points for every message.",
+          min: 0,
+          max: 86400,
+          unit: "seconds",
+        },
+        {
+          key: "likesPerPoint",
+          title: "Likes",
+          desc: "One point per this many likes. Likes add up across batches, so 20 likes give one point.",
+          min: 1,
+          max: 100000,
+          unit: "likes",
+        },
+        {
+          key: "perCoin",
+          title: "Coins from gifts",
+          desc: "Points per coin of a finished gift. A combo counts once, when it ends.",
+          min: 0,
+          max: 1000,
+          unit: "per coin",
+        },
+        { key: "perFollow", title: "Follow", desc: "Points for each new follow.", min: 0, max: 100000 },
+        { key: "perShare", title: "Share", desc: "Points for each share.", min: 0, max: 100000 },
+        {
+          key: "perSubscribe",
+          title: "Subscribe",
+          desc: "Points for each subscription.",
+          min: 0,
+          max: 100000,
+        },
+        {
+          key: "perJoin",
+          title: "Join",
+          desc: "Points each time a viewer joins the stream.",
+          min: 0,
+          max: 100000,
+        },
+      ];
+
+      const state = {
+        username: "",
+        viewers: [],
+        total: 0,
+        query: "",
+        settings: null,
+        loaded: false,
+        error: "",
+        settingsDirty: false,
+        pendingRender: false,
+        // The amount typed into each row, by user id, kept across re-renders.
+        amounts: new Map(),
+        request: 0,
+      };
+
+      mountShell({ page: "viewers", crumbs: ["Viewers"] });
+
+      const $ = (id) => document.getElementById(id);
+      const noUser = $("no-user");
+      const viewersPanel = $("viewers");
+      const search = $("search");
+      const status = $("status");
+      const rows = $("rows");
+      const head = $("board-head");
+      const empty = $("empty");
+      const more = $("more");
+      const form = $("settings");
+      const resetButton = $("reset");
+
+      const number = (n) => Number(n).toLocaleString();
+      const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+      function ago(time) {
+        const seconds = Math.max(0, Math.round((Date.now() - time) / 1000));
+        if (seconds < 60) return "just now";
+        const minutes = Math.round(seconds / 60);
+        if (minutes < 60) return relative.format(-minutes, "minute");
+        const hours = Math.round(minutes / 60);
+        if (hours < 24) return relative.format(-hours, "hour");
+        return relative.format(-Math.round(hours / 24), "day");
+      }
+
+      const base = () => `/api/sessions/${encodeURIComponent(state.username)}/points`;
+
+      // ---------- Leaderboard ----------
+
+      function viewerRow(viewer, index) {
+        const name = viewer.nickname || viewer.uniqueId;
+        const amount = el("input", {
+          class: "input",
+          type: "number",
+          inputmode: "numeric",
+          min: 1,
+          max: MAX_AMOUNT,
+          step: 1,
+          value: state.amounts.get(viewer.userId) ?? 10,
+          "aria-label": `Points to add or take from ${name}`,
+        });
+        amount.addEventListener("input", () => state.amounts.set(viewer.userId, amount.value));
+        const up = el(
+          "button",
+          { class: "btn btn-small", type: "button", "aria-label": `Add points to ${name}` },
+          icon("plus", 14),
+        );
+        const down = el(
+          "button",
+          { class: "btn btn-small", type: "button", "aria-label": `Take points from ${name}` },
+          icon("minus", 14),
+        );
+        up.addEventListener("click", () => adjust(viewer.userId, 1, amount));
+        down.addEventListener("click", () => adjust(viewer.userId, -1, amount));
+
+        const item = el(
+          "li",
+          { class: "viewer" },
+          el("span", { class: "rank" }, String(index + 1)),
+          el(
+            "div",
+            { class: "who" },
+            avatar(viewer.profilePictureUrl, name, "sm"),
+            el(
+              "div",
+              { class: "who-text" },
+              el("span", { class: "who-name" }, name),
+              el("span", { class: "who-handle" }, viewer.uniqueId ? `@${viewer.uniqueId}` : ""),
+            ),
+          ),
+          el("span", { class: "num points" }, number(viewer.points)),
+          el("span", { class: "num coins" }, number(viewer.coins)),
+          el("span", { class: "num messages" }, number(viewer.messages)),
+          el(
+            "span",
+            { class: "seen", title: new Date(viewer.lastSeen).toLocaleString() },
+            ago(viewer.lastSeen),
+          ),
+          el("div", { class: "adjust" }, amount, up, down),
+        );
+        item.dataset.userId = viewer.userId;
+        return item;
+      }
+
+      function renderSettings() {
+        if (!state.settings || state.settingsDirty) return;
+        const inputs = [...form.querySelectorAll("input")];
+        for (const input of inputs) input.value = String(state.settings[input.name]);
+      }
+
+      function buildSettings() {
+        const fields = FIELDS.map((field) =>
+          el(
+            "label",
+            { class: "row" },
+            el(
+              "span",
+              { class: "row-text" },
+              el("span", { class: "row-title" }, field.title),
+              el("span", { class: "row-desc" }, field.desc),
+            ),
+            el(
+              "span",
+              { class: "row-control" },
+              el("input", {
+                class: "input",
+                type: "number",
+                name: field.key,
+                min: field.min,
+                max: field.max,
+                step: 1,
+                inputmode: "numeric",
+                required: true,
+                "aria-label": field.title,
+              }),
+              field.unit ? el("span", { class: "muted" }, field.unit) : null,
+            ),
+          ),
+        );
+        form.append(
+          ...fields,
+          el(
+            "div",
+            { class: "settings-actions" },
+            el("button", { class: "btn btn-primary", type: "submit" }, "Save settings"),
+          ),
+        );
+        for (const input of form.querySelectorAll("input")) {
+          input.addEventListener("input", () => (state.settingsDirty = true));
+        }
+      }
+
+      function render() {
+        state.pendingRender = false;
+        const hasUser = state.username !== "";
+        noUser.hidden = hasUser;
+        viewersPanel.hidden = !hasUser;
+        if (!hasUser) return;
+
+        const count = state.loaded
+          ? `${number(state.total)} ${state.total === 1 ? "viewer" : "viewers"}`
+          : "";
+        status.textContent = state.error
+          ? `Could not load viewers: ${state.error}`
+          : state.query && state.loaded
+            ? `${count} match "${state.query}"`
+            : count;
+
+        rows.replaceChildren(...state.viewers.map(viewerRow));
+        head.hidden = state.viewers.length === 0;
+        if (state.loaded && state.viewers.length === 0) {
+          empty.hidden = false;
+          empty.textContent = state.query
+            ? `No viewers match "${state.query}".`
+            : "No points yet. Viewers earn points when they chat, gift, like, follow and more.";
+        } else {
+          empty.hidden = true;
+        }
+        more.hidden = state.viewers.length >= state.total;
+        renderSettings();
+      }
+
+      // Refreshes don't rebuild the list while a row's amount has focus, so typing isn't lost.
+      function renderSoon() {
+        if (rows.contains(document.activeElement)) {
+          state.pendingRender = true;
+          return;
+        }
+        render();
+      }
+
+      // Loads the top of the leaderboard. `size` covers the rows already shown, so a refresh keeps them.
+      async function load({ append = false } = {}) {
+        if (!state.username) return;
+        const request = ++state.request;
+        const offset = append ? state.viewers.length : 0;
+        const limit = append ? PAGE : Math.max(PAGE, state.viewers.length);
+        const url = new URL(base(), location.origin);
+        url.searchParams.set("limit", String(limit));
+        url.searchParams.set("offset", String(offset));
+        if (state.query) url.searchParams.set("q", state.query);
+        try {
+          const board = await api(url.pathname + url.search);
+          if (request !== state.request) return;
+          state.viewers = append ? [...state.viewers, ...board.viewers] : board.viewers;
+          state.total = board.total;
+          state.settings = board.settings;
+          state.loaded = true;
+          state.error = "";
+        } catch (error) {
+          if (request !== state.request) return;
+          state.error = error.message;
+        }
+        renderSoon();
+      }
+
+      function setUsername(name) {
+        state.username = name;
+        state.viewers = [];
+        state.total = 0;
+        state.settings = null;
+        state.loaded = false;
+        state.error = "";
+        state.settingsDirty = false;
+        search.value = "";
+        state.query = "";
+        render();
+        if (name) load();
+      }
+
+      // ---------- Changes ----------
+
+      async function adjust(userId, sign, amountInput) {
+        const amount = Number(amountInput.value);
+        if (!Number.isInteger(amount) || amount < 1 || amount > MAX_AMOUNT) {
+          toast(`Enter a whole number from 1 to ${number(MAX_AMOUNT)}.`, { error: true });
+          amountInput.focus();
+          return;
+        }
+        try {
+          const updated = await api(`${base()}/${encodeURIComponent(userId)}`, {
+            method: "PATCH",
+            json: { delta: sign * amount },
+          });
+          state.viewers = state.viewers.map((viewer) => (viewer.userId === userId ? updated : viewer));
+          render();
+          toast(`${updated.nickname || updated.uniqueId} now has ${number(updated.points)} points.`);
+        } catch (error) {
+          toast(error.message, { error: true });
+          if (error.status === 404) await load();
+        }
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+        const body = {};
+        for (const input of form.querySelectorAll("input")) body[input.name] = Number(input.value);
+        const submit = form.querySelector('button[type="submit"]');
+        submit.disabled = true;
+        try {
+          state.settings = await api(`${base()}/settings`, { method: "PUT", json: body });
+          state.settingsDirty = false;
+          renderSettings();
+          toast("Settings saved. New points use them from now on.");
+        } catch (error) {
+          toast(error.message, { error: true });
+        } finally {
+          submit.disabled = false;
+        }
+      });
+
+      resetButton.addEventListener("click", async () => {
+        if (!window.confirm(`Reset every viewer's points for @${state.username}? This can't be undone.`))
+          return;
+        try {
+          await api(base(), { method: "DELETE" });
+          state.viewers = [];
+          state.total = 0;
+          state.loaded = true;
+          render();
+          toast("All points were reset.");
+        } catch (error) {
+          toast(error.message, { error: true });
+        }
+      });
+
+      more.addEventListener("click", () => load({ append: true }));
+
+      let searchTimer;
+      search.addEventListener("input", () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          state.query = search.value.trim();
+          state.viewers = [];
+          state.loaded = false;
+          render();
+          load();
+        }, 250);
+      });
+
+      rows.addEventListener("focusout", () =>
+        setTimeout(() => {
+          if (state.pendingRender && !rows.contains(document.activeElement)) render();
+        }, 0),
+      );
+
+      buildSettings();
+      onUsernameChange((name) => setUsername(name));
+      setUsername(getUsername());
+
+      // Keeps the board fresh while the page is on screen.
+      setInterval(() => {
+        if (!document.hidden && state.username) load();
+      }, REFRESH_MS);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden && state.username) load();
+      });
+    </script>
+  </body>
+</html>

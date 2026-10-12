@@ -2,7 +2,8 @@
 <!--
   Top supporters for the current stream: coins from gifts, likes, or both.
     http://localhost:8080/overlays/leaderboard.html?username=YOURNAME
-  metric: gifts (coins, default) | likes | both (two columns)
+  metric: gifts (coins, default) | likes | both (two columns) | points (viewer points, from the server)
+  points are read from the server every 5 s, so they include chat, follows and more, not just gifts and likes
   limit: rows per column, 1 to 10 (default 5)   title: heading (default per metric)
   id: saved-state name (default)   reset=1: clear saved totals on load
   &token=… if the server requires one
@@ -125,6 +126,9 @@
       .column.coins .value {
         color: #ffd166;
       }
+      .column.points .value {
+        color: #7dd3fc;
+      }
       .column.likes .value {
         color: #ff7ad9;
       }
@@ -186,8 +190,14 @@
       import { TikLive } from "/tiklive.js";
 
       const params = new URLSearchParams(location.search);
-      const METRICS = { gifts: "Top gifters", likes: "Top likers", both: "Top supporters" };
+      const METRICS = {
+        gifts: "Top gifters",
+        likes: "Top likers",
+        both: "Top supporters",
+        points: "Top viewers",
+      };
       const metric = Object.hasOwn(METRICS, params.get("metric")) ? params.get("metric") : "gifts";
+      const pointsMode = metric === "points";
       const limit = Math.min(10, Math.max(1, Number(params.get("limit")) || 5));
       const id = (params.get("id") || "default").replace(/[^\w-]/g, "_").slice(0, 40);
       const reset = params.get("reset") === "1";
@@ -197,8 +207,15 @@
       const COLUMNS = {
         coins: { heading: "Coins", field: "coins", css: "coins" },
         likes: { heading: "Likes", field: "likes", css: "likes" },
+        points: { heading: "Points", field: "points", css: "points" },
       };
-      const columnKeys = metric === "both" ? ["coins", "likes"] : [metric === "likes" ? "likes" : "coins"];
+      const EMPTY = { coins: "No gifts yet", likes: "No likes yet", points: "No points yet" };
+      const columnKeys =
+        metric === "both"
+          ? ["coins", "likes"]
+          : metric === "points"
+            ? ["points"]
+            : [metric === "likes" ? "likes" : "coins"];
 
       document.getElementById("title").textContent = title;
       const columnsEl = document.getElementById("columns");
@@ -218,8 +235,9 @@
         return { col, list, rows: new Map() };
       });
 
-      const live = new TikLive({ events: ["gift", "like"] });
-      const prefix = `tiklive.leaderboard.${live.username}.${id}.`;
+      // Points mode doesn't use the live connection. Everything else is gifts and likes from events.
+      const live = pointsMode ? null : new TikLive({ events: ["gift", "like"] });
+      const prefix = `tiklive.leaderboard.${live ? live.username : "points"}.${id}.`;
 
       // Storage can be unavailable (private windows), so every access is optional.
       const storageKeys = () => {
@@ -398,7 +416,7 @@
         if (ranked.length === 0) {
           const empty = document.createElement("li");
           empty.className = "empty";
-          empty.textContent = col.field === "coins" ? "No gifts yet" : "No likes yet";
+          empty.textContent = EMPTY[col.field];
           list.append(empty);
         }
 
@@ -421,7 +439,7 @@
 
       // Status carries the stream's start. streamStartedAt doesn't change on reconnect, so it's the
       // preferred key. liveSince is used when TikTok doesn't say when the stream started.
-      live.on("status", (status) => {
+      live?.on("status", (status) => {
         const start = status.streamStartedAt ?? status.liveSince;
         if (start === undefined && streamKey !== null) return;
         const key = start === undefined ? "default" : String(start);
@@ -438,8 +456,43 @@
         if (streamKey === null) pending.push(event);
         else apply(event);
       };
-      live.on("gift", onEvent);
-      live.on("like", onEvent);
+      live?.on("gift", onEvent);
+      live?.on("like", onEvent);
+
+      // Viewer points are totals kept by the server. Each poll replaces the board, in the server's order.
+      async function pollPoints() {
+        const name = (params.get("username") || "demo").trim().replace(/^@/, "").toLowerCase();
+        if (!/^[a-z0-9._]{1,32}$/.test(name)) return;
+        const url = new URL(`/api/sessions/${encodeURIComponent(name)}/points`, location.origin);
+        url.searchParams.set("limit", String(limit));
+        if (params.get("token")) url.searchParams.set("token", params.get("token"));
+        try {
+          const res = await fetch(url);
+          if (!res.ok) return;
+          const board = await res.json();
+          users = new Map(
+            board.viewers.map((v, i) => [
+              v.userId,
+              {
+                userId: v.userId,
+                nickname: v.nickname || v.uniqueId || "",
+                avatar: v.profilePictureUrl || "",
+                coins: 0,
+                likes: 0,
+                points: v.points,
+                seq: i,
+              },
+            ]),
+          );
+          render();
+        } catch {
+          // Keep the board on screen. The next poll tries again.
+        }
+      }
+      if (pointsMode) {
+        pollPoints();
+        setInterval(pollPoints, 5000);
+      }
       render();
     </script>
   </body>

@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpRouter from "effect/http/HttpRouter";
 import { type HttpOptions, routes } from "./http.ts";
+import * as PointsStore from "./points/PointsStore.ts";
 import * as MediaStore from "./rules/MediaStore.ts";
 import * as RuleEngine from "./rules/RuleEngine.ts";
 import * as RulesStore from "./rules/RulesStore.ts";
@@ -24,8 +25,9 @@ export interface ServerOptions extends HttpOptions {
   /** Log each HTTP request. Default false. */
   readonly logRequests?: boolean;
   /**
-   * Directory for action rules (`rules.json`) and uploaded media (`media/`). Without it, rules
-   * live in memory until the server stops and uploads are turned off.
+   * Directory for action rules (`rules.json`), uploaded media (`media/`) and viewer points
+   * (`points/`). Without it, rules and points live in memory until the server stops and uploads
+   * are turned off.
    */
   readonly dataDir?: string;
 }
@@ -42,12 +44,15 @@ export const layer = (
     options.tiktok ?? LiveConnection.layer(options.userAgent ? { userAgent: options.userAgent } : {});
   const rules = options.dataDir ? RulesStore.layerFile(options.dataDir) : RulesStore.layerMemory();
   const media = options.dataDir ? MediaStore.layerFile(options.dataDir) : MediaStore.layerDisabled;
+  const points = options.dataDir ? PointsStore.layerFile(options.dataDir) : PointsStore.layerMemory;
   // One engine instance, shared by the sessions and the router (layers are memoized by identity).
   // The engine sends webhook steps with the global fetch.
   const engine = RuleEngine.layer.pipe(Layer.provide(Layer.mergeAll(rules, FetchHttpClient.layer)));
-  const sessions = SessionManager.layer(options.sessions).pipe(Layer.provide(Layer.mergeAll(tiktok, engine)));
+  const sessions = SessionManager.layer(options.sessions).pipe(
+    Layer.provide(Layer.mergeAll(tiktok, engine, points)),
+  );
 
   return HttpRouter.serve(routes(options), { disableLogger: !options.logRequests }).pipe(
-    Layer.provide(Layer.mergeAll(sessions, engine, rules, media, tiktok, sounds)),
+    Layer.provide(Layer.mergeAll(sessions, engine, rules, media, points, tiktok, sounds)),
   );
 };

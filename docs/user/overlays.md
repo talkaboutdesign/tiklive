@@ -104,18 +104,20 @@ Example: `/overlays/timer.html?username=yourname&start=120&perSub=600&max=240&la
 
 Top gifters and likers for the current stream. Coins come from finished gift combos, and likes come from the
 like count. Rows reorder with a short animation, and the top three get a crown and medal colours.
+With `metric=points`, the board shows viewer points instead, from the server, so chat and follows count too.
+See [viewer points](./points.md).
 
 Totals are saved per stream, so an OBS reload keeps them. When a new stream starts, the totals start from zero.
 Gifts and likes sent while the page is closed aren't counted, because the overlay doesn't ask for replayed events.
 
-| Param      | Default    | Meaning                                                        |
-| ---------- | ---------- | -------------------------------------------------------------- |
-| `username` | `demo`     | Streamer to follow                                             |
-| `metric`   | `gifts`    | `gifts` (coins), `likes`, or `both` (two columns)              |
-| `limit`    | `5`        | Rows per column, 1 to 10                                       |
-| `title`    | per metric | Heading. Defaults to Top gifters, Top likers or Top supporters |
-| `id`       | `default`  | Name for the saved totals                                      |
-| `reset`    | off        | `1` clears the saved totals on load                            |
+| Param      | Default    | Meaning                                                                     |
+| ---------- | ---------- | --------------------------------------------------------------------------- |
+| `username` | `demo`     | Streamer to follow                                                          |
+| `metric`   | `gifts`    | `gifts` (coins), `likes`, `both` (two columns), or `points` (viewer points) |
+| `limit`    | `5`        | Rows per column, 1 to 10                                                    |
+| `title`    | per metric | Heading. Defaults to Top gifters, Top likers, Top supporters or Top viewers |
+| `id`       | `default`  | Name for the saved totals                                                   |
+| `reset`    | off        | `1` clears the saved totals on load                                         |
 
 Example: `/overlays/leaderboard.html?username=yourname&metric=both&limit=3`
 

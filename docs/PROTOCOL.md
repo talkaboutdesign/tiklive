@@ -123,41 +123,46 @@ are `/media/:file` and the static files: they aren't guarded, because OBS loads 
 `<img>`, `<audio>` and `<video>` sources and can't send headers.
 Responses are JSON. Errors look like `{"error": "message"}`.
 
-| Method and path                         | Success                                | Notes                                                                                                                                                                                                    |
-| --------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/health`                       | `200 {ok: true, protocolVersion}`      | No auth, no Host or Origin check                                                                                                                                                                         |
-| `GET /api/sessions`                     | `200 {sessions: SessionInfo[]}`        | Only sessions that are running                                                                                                                                                                           |
-| `GET /api/sessions/:username`           | `200 SessionStatus`                    | `404` if no session is running for that streamer                                                                                                                                                         |
-| `PUT` or `POST /api/sessions/:username` | `200 SessionStatus & {watching: true}` | Keeps the session running until `DELETE`. Same as `--watch`                                                                                                                                              |
-| `DELETE /api/sessions/:username`        | `200 {ok: true}`                       | Stops watching. The session still closes after its subscribers leave and the idle timeout passes                                                                                                         |
-| `POST /api/sessions/:username/simulate` | `200 {ok: true, event}`                | Injects an event as if TikTok sent it. Needs a running session                                                                                                                                           |
-| `GET /api/gifts`                        | `200 {gifts: GiftInfo[]}`              | TikTok's gift catalog, sorted by price. Cached for an hour. `502` if TikTok's lookup fails                                                                                                               |
-| `GET /api/rules`                        | `200 RuleSet`                          | The action rules and their `revision`                                                                                                                                                                    |
-| `PUT /api/rules`                        | `200 RuleSet`                          | Body is a `RuleSet` whose `revision` is the one you last read. `409` if the rules changed since. Up to 1 MB                                                                                              |
-| `POST /api/rules/:id/test`              | `200 {ok: true, action}`               | Body `{username}`. Fires rule `:id` once, with a sample event, for a streamer with a running session. The action has `test: true`. `404` if either is missing                                            |
-| `GET /api/media`                        | `200 {media: MediaItem[]}`             | Uploaded files, newest first                                                                                                                                                                             |
-| `POST /api/media`                       | `201 MediaItem`                        | Raw file bytes. `Content-Type` is the file's type, and `X-File-Name` its percent-encoded name. Up to 25 MB. Needs `--data-dir`                                                                           |
-| `PATCH /api/media/:id`                  | `200 MediaItem`                        | Body `{name}` (1 to 200 characters). Renames the item for display. Its file and `url` stay the same. `404` if no such item                                                                               |
-| `DELETE /api/media/:id`                 | `200 {ok: true}`                       | `404` if no such item                                                                                                                                                                                    |
-| `GET /api/sounds/search?q=&page=`       | `200 SoundSearchResponse`              | Searches myinstants.com. `q` is 1 to 100 characters, `page` 1 to 50. Cached for 10 minutes. `400` for a bad `q`, `502` if MyInstants fails                                                               |
-| `POST /api/media/import`                | `201 MediaItem`                        | Body `{url, name?}`. Copies a MyInstants sound (`https://www.myinstants.com/media/sounds/<file>.mp3`) into the library. `400` for any other URL, `502` if the download fails, `503` without `--data-dir` |
-| `GET /media/:file`                      | `200` the file                         | Not guarded (see above). Cached for a year. `Range` requests (for seeking in video) work on Bun. On Node the whole file is sent                                                                          |
+| Method and path                                | Success                                | Notes                                                                                                                                                                                                    |
+| ---------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health`                              | `200 {ok: true, protocolVersion}`      | No auth, no Host or Origin check                                                                                                                                                                         |
+| `GET /api/sessions`                            | `200 {sessions: SessionInfo[]}`        | Only sessions that are running                                                                                                                                                                           |
+| `GET /api/sessions/:username`                  | `200 SessionStatus`                    | `404` if no session is running for that streamer                                                                                                                                                         |
+| `PUT` or `POST /api/sessions/:username`        | `200 SessionStatus & {watching: true}` | Keeps the session running until `DELETE`. Same as `--watch`                                                                                                                                              |
+| `DELETE /api/sessions/:username`               | `200 {ok: true}`                       | Stops watching. The session still closes after its subscribers leave and the idle timeout passes                                                                                                         |
+| `POST /api/sessions/:username/simulate`        | `200 {ok: true, event}`                | Injects an event as if TikTok sent it. Needs a running session                                                                                                                                           |
+| `GET /api/gifts`                               | `200 {gifts: GiftInfo[]}`              | TikTok's gift catalog, sorted by price. Cached for an hour. `502` if TikTok's lookup fails                                                                                                               |
+| `GET /api/rules`                               | `200 RuleSet`                          | The action rules and their `revision`                                                                                                                                                                    |
+| `PUT /api/rules`                               | `200 RuleSet`                          | Body is a `RuleSet` whose `revision` is the one you last read. `409` if the rules changed since. Up to 1 MB                                                                                              |
+| `POST /api/rules/:id/test`                     | `200 {ok: true, action}`               | Body `{username}`. Fires rule `:id` once, with a sample event, for a streamer with a running session. The action has `test: true`. `404` if either is missing                                            |
+| `GET /api/media`                               | `200 {media: MediaItem[]}`             | Uploaded files, newest first                                                                                                                                                                             |
+| `POST /api/media`                              | `201 MediaItem`                        | Raw file bytes. `Content-Type` is the file's type, and `X-File-Name` its percent-encoded name. Up to 25 MB. Needs `--data-dir`                                                                           |
+| `PATCH /api/media/:id`                         | `200 MediaItem`                        | Body `{name}` (1 to 200 characters). Renames the item for display. Its file and `url` stay the same. `404` if no such item                                                                               |
+| `DELETE /api/media/:id`                        | `200 {ok: true}`                       | `404` if no such item                                                                                                                                                                                    |
+| `GET /api/sounds/search?q=&page=`              | `200 SoundSearchResponse`              | Searches myinstants.com. `q` is 1 to 100 characters, `page` 1 to 50. Cached for 10 minutes. `400` for a bad `q`, `502` if MyInstants fails                                                               |
+| `POST /api/media/import`                       | `201 MediaItem`                        | Body `{url, name?}`. Copies a MyInstants sound (`https://www.myinstants.com/media/sounds/<file>.mp3`) into the library. `400` for any other URL, `502` if the download fails, `503` without `--data-dir` |
+| `GET /api/sessions/:username/points`           | `200 PointsLeaderboard`                | Viewer points, best first. Query: `limit` 1 to 200 (default 50), `offset` (default 0), `q` (name or @handle, up to 100 characters). Works without a running session                                      |
+| `DELETE /api/sessions/:username/points`        | `200 {ok: true}`                       | Sets every viewer's points to 0. The settings stay                                                                                                                                                       |
+| `PUT /api/sessions/:username/points/settings`  | `200 PointsSettings`                   | Body is the whole `PointsSettings` (see below). `400` if a value is missing, not a whole number, or out of range                                                                                         |
+| `GET /api/sessions/:username/points/:userId`   | `200 ViewerPoints`                     | `404` if the viewer has no points                                                                                                                                                                        |
+| `PATCH /api/sessions/:username/points/:userId` | `200 ViewerPoints`                     | Body `{delta}` or `{set}`, a whole number, not both. The total never goes below 0. `404` if the viewer has no points. Written to disk before the reply                                                   |
+| `GET /media/:file`                             | `200` the file                         | Not guarded (see above). Cached for a year. `Range` requests (for seeking in video) work on Bun. On Node the whole file is sent                                                                          |
 
 Status codes used across these routes:
 
-| Status | Meaning                                                                                                                                           |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `400`  | Invalid username, invalid JSON, a body that fails validation (rules, events), or a duplicate rule id                                              |
-| `401`  | Missing or wrong token                                                                                                                            |
-| `403`  | Host or Origin not allowed                                                                                                                        |
-| `404`  | No such session, rule or media item (or unknown path under `/api`)                                                                                |
-| `405`  | Method not supported on that route                                                                                                                |
-| `409`  | Rules were saved since you read them. The body has `revision`, the current one                                                                    |
-| `413`  | Simulate body over 64 KB, rules over 1 MB, test or import body over 16 KB, or upload over 25 MB                                                   |
-| `415`  | Body isn't JSON where JSON is required (simulate, rules, the test and import endpoints), or an upload of a type that isn't allowed                |
-| `500`  | Rules or the media index couldn't be saved                                                                                                        |
-| `502`  | MyInstants couldn't be reached, or returned an error or a file that isn't an audio file (sound search, import), or TikTok's lookup failed (gifts) |
-| `503`  | Uploads and imports are turned off because the server has no `--data-dir`                                                                         |
+| Status | Meaning                                                                                                                                             |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | Invalid username, invalid JSON, a body that fails validation (rules, events, points), a duplicate rule id, or a bad points `limit`, `offset` or `q` |
+| `401`  | Missing or wrong token                                                                                                                              |
+| `403`  | Host or Origin not allowed                                                                                                                          |
+| `404`  | No such session, rule, media item or viewer (or unknown path under `/api`)                                                                          |
+| `405`  | Method not supported on that route                                                                                                                  |
+| `409`  | Rules were saved since you read them. The body has `revision`, the current one                                                                      |
+| `413`  | Simulate body over 64 KB, rules over 1 MB, test or import body over 16 KB, points body over 4 KB, or upload over 25 MB                              |
+| `415`  | Body isn't JSON where JSON is required (simulate, rules, the test and import endpoints, points), or an upload of a type that isn't allowed          |
+| `500`  | Rules, the media index or the points couldn't be saved                                                                                              |
+| `502`  | MyInstants couldn't be reached, or returned an error or a file that isn't an audio file (sound search, import), or TikTok's lookup failed (gifts)   |
+| `503`  | Uploads and imports are turned off because the server has no `--data-dir`                                                                           |
 
 ### Simulate body
 
@@ -305,6 +310,14 @@ MP4, WebM, MP3, WAV, OGG or M4A, up to 25 MB. SVG isn't allowed.
 
 Sound search reads myinstants.com on the user's behalf; nothing is sent there unless someone searches or imports.
 `POST /api/media/import` copies a found sound into the media library, so rules keep working without the site.
+
+Viewer points are per streamer. `PointsLeaderboard` is `{settings, viewers, total}`, where `total` counts the
+viewers that match `q`. A `ViewerPoints` is `{userId, uniqueId, nickname, profilePictureUrl, points, coins,
+messages, firstSeen, lastSeen}`. `PointsSettings` has eight whole-number fields, all required: `perMessage`,
+`messageCooldownSeconds`, `likesPerPoint` (at least 1), `perCoin`, `perFollow`, `perShare`, `perSubscribe` and
+`perJoin`. The schemas are in `packages/contracts/src/points.ts`. The points are stored in
+`<dataDir>/points/<username>.json`, or in memory without a data directory. See
+[viewer points](./user/points.md) for what earns them.
 
 Rules are stored in `rules.json` in the data directory (in memory when there isn't one). Save them
 with `PUT /api/rules`, sending the `revision` you last read. A save based on an older revision gets
