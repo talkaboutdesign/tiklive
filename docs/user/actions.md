@@ -83,8 +83,12 @@ Chat and join triggers have a **From** setting and a **Minimum followers** setti
 
 A join trigger with **Once per viewer per stream** on (the default) fires at most once for each viewer while the
 stream runs. tiklive remembers who has fired in memory. The list clears when TikTok reports that the stream has
-ended, so the same viewer fires again the next time you go live. A brief connection drop doesn't clear it. Restarting
+ended or when a connection discovers a different room, including after an unused session expires, so the same
+viewer fires again the next time you go live. A brief connection drop doesn't clear it. Restarting
 tiklive does, because the list isn't saved to disk.
+
+Expired cooldown timestamps and state for removed or disabled rules are pruned once a minute. Rules without
+per-viewer cooldowns do not retain per-viewer cooldown timestamps.
 
 Each join action keeps its own list, so two welcome actions can both greet the same viewer.
 

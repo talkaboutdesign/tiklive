@@ -59,10 +59,10 @@ export const make = (options: SessionManagerOptions = {}) =>
     const sessionOptionsFor = (username: string): Session.SessionOptions | undefined => {
       if (Option.isNone(engine) && Option.isNone(points)) return options.session;
       // Points first, so a rule that runs on this event already sees the viewer's new total.
-      const actions = (event: LiveEvent): Effect.Effect<ReadonlyArray<FiredAction>> =>
+      const actions = (event: LiveEvent, roomId?: string): Effect.Effect<ReadonlyArray<FiredAction>> =>
         Effect.gen(function* () {
           if (Option.isNone(points))
-            return Option.isSome(engine) ? yield* engine.value.fire(username, event) : [];
+            return Option.isSome(engine) ? yield* engine.value.fire(username, event, {}, roomId) : [];
           yield* points.value.record(username, event);
           if (Option.isNone(engine)) return [];
           const userId = "user" in event ? event.user.userId : undefined;
@@ -71,6 +71,7 @@ export const make = (options: SessionManagerOptions = {}) =>
             username,
             event,
             Option.isSome(viewer) ? { points: String(viewer.value.points) } : {},
+            roomId,
           );
         });
       return { ...options.session, actions };

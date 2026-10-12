@@ -18,6 +18,7 @@ import {
   type EngineState,
   type Firing,
   renderRule,
+  pruneState,
   sampleEvent,
   type TemplateValues,
   userOf,
@@ -42,6 +43,8 @@ export class RuleEngine extends Context.Service<
       username: string,
       event: LiveEvent,
       extra?: Vars,
+      /** Room identity keeps per-stream state correct across session eviction. */
+      roomId?: string,
     ) => Effect.Effect<ReadonlyArray<FiredAction>>;
     /**
      * Fires one rule with a made-up event that matches its trigger, ignoring `enabled`
@@ -76,17 +79,28 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
     // Started but not finished (waiting or sending). Changed only inside Effect.sync.
     let pending = 0;
     // Mutated only inside Effect.try/sync blocks, which run without yielding.
-    const states = new Map<string, EngineState>();
+    const states = new Map<string, { state: EngineState; roomId: string | undefined }>();
     let counter = 0;
 
-    const stateFor = (username: string): EngineState => {
-      let state = states.get(username);
-      if (!state) {
-        state = emptyState();
-        states.set(username, state);
+    const stateFor = (username: string, roomId?: string): EngineState => {
+      let entry = states.get(username);
+      if (!entry) {
+        entry = { state: emptyState(), roomId };
+        states.set(username, entry);
+      } else if (roomId !== undefined && entry.roomId !== roomId) {
+        evaluate([], entry.state, { type: "streamEnd", reason: "ended", timestamp: 0 }, 0);
+        entry.roomId = roomId;
       }
-      return state;
+      return entry.state;
     };
+
+    yield* Effect.gen(function* () {
+      const { rules } = yield* store.get;
+      const now = yield* Clock.currentTimeMillis;
+      yield* Effect.sync(() => {
+        for (const { state } of states.values()) pruneState(rules, state, now);
+      });
+    }).pipe(Effect.delay("1 minute"), Effect.forever, Effect.forkScoped);
 
     const nextId = (now: number) => `${now.toString(36)}-${counter++}`;
 
@@ -142,12 +156,13 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
       username: string,
       event: LiveEvent,
       extra: Vars = {},
+      roomId?: string,
     ): Effect.Effect<ReadonlyArray<FiredAction>> =>
       Effect.gen(function* () {
         const { rules } = yield* store.get;
         const now = yield* Clock.currentTimeMillis;
         const firings = yield* Effect.try({
-          try: () => evaluate(rules, stateFor(username), event, now, extra),
+          try: () => evaluate(rules, stateFor(username, roomId), event, now, extra),
           catch: (cause) => cause,
         }).pipe(
           Effect.catch((cause) =>

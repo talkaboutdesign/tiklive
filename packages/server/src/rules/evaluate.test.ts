@@ -5,7 +5,15 @@
 import { describe, expect, it } from "@effect/vitest";
 import { LiveEvent, type LiveUser, type Rule, type RuleStep, type RuleTrigger } from "@tiklive/contracts";
 import * as Schema from "effect/Schema";
-import { bodyMode, emptyState, evaluate, renderTemplate, sampleEvent, type Vars } from "./evaluate.ts";
+import {
+  bodyMode,
+  emptyState,
+  evaluate,
+  pruneState,
+  renderTemplate,
+  sampleEvent,
+  type Vars,
+} from "./evaluate.ts";
 
 const NOW = 1_700_000_000_000;
 const USER: LiveUser = { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" };
@@ -961,5 +969,30 @@ describe("evaluate: webhook steps", () => {
     );
     expect(likes[0]?.eventType).toBe("like");
     expect(likes[0]?.vars.likes).toBe("10");
+  });
+});
+
+describe("rule state retention", () => {
+  it("does not retain viewer cooldown entries when cooldowns are disabled", () => {
+    const state = emptyState();
+    const rules = [rule("chat", { type: "chat", match: "any" })];
+    for (let id = 0; id < 1000; id++) {
+      expect(evaluate(rules, state, chat("hi", { ...USER, userId: String(id) }), NOW)).toHaveLength(1);
+    }
+    expect(state.lastFiredByUser.size).toBe(0);
+    expect(state.lastFired.size).toBe(0);
+  });
+
+  it("prunes expired cooldowns while preserving active cooldown behavior", () => {
+    const state = emptyState();
+    const rules = [rule("chat", { type: "chat", match: "any" }, { userCooldown: 10 })];
+    evaluate(rules, state, chat("hi"), NOW);
+    pruneState(rules, state, NOW + 9999);
+    expect(evaluate(rules, state, chat("hi"), NOW + 9999)).toHaveLength(0);
+    pruneState(rules, state, NOW + 10000);
+    expect(state.lastFiredByUser.size).toBe(0);
+    expect(evaluate(rules, state, chat("hi"), NOW + 10000)).toHaveLength(1);
+    pruneState([], state, NOW + 10000);
+    expect(state.lastFiredByUser.size).toBe(0);
   });
 });
