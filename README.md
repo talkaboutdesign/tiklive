@@ -20,10 +20,6 @@ TikTok directly.
 npx @tiklive/server          # or: bunx @tiklive/server
 ```
 
-Or download a standalone binary for macOS, Linux or Windows from the
-[latest release](https://github.com/talkaboutdesign/tiklive/releases/latest). It needs no Node or Bun, and
-includes the dashboard and example overlays at http://localhost:8080.
-
 **Use the library** in your own app:
 
 ```sh
@@ -198,6 +194,7 @@ Each event has `type`, `timestamp` (unix ms), and usually `msgId`. Users look li
 | `type`                      | Fields                                                                                                                            |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `chat`                      | `user`, `comment`, `emotes[]`                                                                                                     |
+| `chatDelete`                | `msgIds[]` of deleted `chat` events, `userIds[]`                                                                                  |
 | `gift`                      | `user`, `giftId`, `giftName`, `giftImageUrl`, `diamondCount`, `repeatCount`, `streaking`, `totalDiamonds`, `groupId`, `receiver?` |
 | `like`                      | `user`, `likeCount`, `totalLikeCount`                                                                                             |
 | `follow` / `share` / `join` | `user`                                                                                                                            |

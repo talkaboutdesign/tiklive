@@ -1,7 +1,7 @@
 # @tiklive/core
 
 Connects to a TikTok LIVE room and streams typed events. It needs no signing service, no login and no
-headless browser. See [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#connection-lifecycle-liveconnection)
+headless browser. See [docs/ARCHITECTURE.md](https://github.com/talkaboutdesign/tiklive/blob/main/docs/ARCHITECTURE.md#connection-lifecycle-liveconnection)
 for how the connection works.
 
 ## Usage
@@ -38,4 +38,4 @@ LiveConnection.events("someone").pipe(
 Reconnects, backoff, de-duplication and the room lookup are handled for you. A stream that fails with
 `UserOffline` on its first attempt tells you the streamer isn't live. Interrupting the stream closes the socket.
 
-Schemas for the events themselves are in [`@tiklive/contracts`](../contracts/README.md).
+Schemas for the events themselves are in [`@tiklive/contracts`](https://github.com/talkaboutdesign/tiklive/blob/main/packages/contracts/README.md).

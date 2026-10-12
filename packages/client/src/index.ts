@@ -148,7 +148,7 @@ export class TikLive {
    * Subscribes to a message type. Returns a function that removes the handler.
    *
    * - An event type (`"chat"`, `"gift"`, `"like"`, `"follow"`, `"share"`, `"join"`,
-   *   `"subscribe"`, `"question"`, `"emote"`, `"viewers"`, `"streamEnd"`) receives
+   *   `"subscribe"`, `"question"`, `"emote"`, `"viewers"`, `"streamEnd"`, `"chatDelete"`) receives
    *   that event with its {@link EventMeta}.
    * - `"*"` receives every event.
    * - `"status"` receives each {@link SessionStatus} update (state, title, stats...).
