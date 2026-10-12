@@ -49,6 +49,10 @@ your chat in the middle, and gifts on the right. Likes, joins and other noise st
   follows can be turned on.
 - **Gifts** (right column): the latest gifts, newest first, your top gifters, and the coins so far. Big gifts are
   highlighted.
+- **Goal** (top of the right column): the streamer's latest LIVE goal, with progress bars and the top three
+  contributors. It appears once a goal arrives during the session, and stays hidden until then.
+- **Gifter levels**: chat rows show a viewer's gifter level as a small "Lv 36" badge, when TikTok sends it. Level 30
+  and up stands out.
 - **Resize the right column** by dragging its left edge. Double-click the edge to reset it. With the keyboard, tab to
   the edge and use the arrow keys. The width is remembered.
 - **Silence** (the eye button on a message): hides that person in tiklive only. They can still chat on TikTok, and

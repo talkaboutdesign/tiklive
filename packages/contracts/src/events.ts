@@ -22,6 +22,11 @@ export const LiveUser = Schema.Struct({
   isSubscriber: Schema.optionalKey(Schema.Boolean),
   isFollower: Schema.optionalKey(Schema.Boolean),
   isGifter: Schema.optionalKey(Schema.Boolean),
+  /**
+   * The viewer's gifter level (the "Lv" badge TikTok shows for gifting). Present when TikTok
+   * includes the badge on the message. Absent for viewers who haven't gifted.
+   */
+  gifterLevel: Schema.optionalKey(Count),
   /** The viewer's own follower and following counts. Present when TikTok includes them. */
   followerCount: Schema.optionalKey(Count),
   followingCount: Schema.optionalKey(Count),
@@ -218,6 +223,49 @@ export const BattleScoreEvent = Schema.Struct({
 });
 export type BattleScoreEvent = typeof BattleScoreEvent.Type;
 
+/** The user in a goal's contributor list. Goal messages carry only these fields. */
+export const GoalUser = Schema.Struct({
+  userId: Schema.String,
+  nickname: Schema.String,
+  profilePictureUrl: Schema.String,
+});
+export type GoalUser = typeof GoalUser.Type;
+
+/** One target inside a goal, e.g. "15 / 100 Roses". */
+export const GoalItem = Schema.Struct({
+  /** `gift` when the target counts gifts of one kind. `other` for target types tiklive doesn't name. */
+  kind: Schema.Literals(["gift", "other"]),
+  giftId: Schema.optionalKey(Count),
+  giftName: Schema.optionalKey(Schema.String),
+  giftImageUrl: Schema.optionalKey(Schema.String),
+  progress: Count,
+  target: Count,
+});
+export type GoalItem = typeof GoalItem.Type;
+
+export const GoalContributor = Schema.Struct({
+  user: GoalUser,
+  /** Contributions to the goal, in the same unit as `progress`. */
+  count: Count,
+});
+export type GoalContributor = typeof GoalContributor.Type;
+
+/**
+ * A streamer's LIVE goal (for example "GIFT GAL"). Sent when the goal appears and each time its
+ * progress changes. Each update carries the full state of goal `goalId`.
+ */
+export const GoalEvent = Schema.Struct({
+  type: Schema.tag("goal"),
+  ...base,
+  goalId: Schema.String,
+  description: Schema.String,
+  goals: Schema.Array(GoalItem),
+  contributors: Schema.Array(GoalContributor),
+  /** Unix ms when the goal ends. */
+  endsAt: Schema.optionalKey(Count),
+});
+export type GoalEvent = typeof GoalEvent.Type;
+
 /** Any event that originates from TikTok. Use `LiveEvent.match` / `LiveEvent.guards` to branch on `type`. */
 export const LiveEvent = Schema.Union([
   ChatEvent,
@@ -234,6 +282,7 @@ export const LiveEvent = Schema.Union([
   StreamEndEvent,
   BattleEvent,
   BattleScoreEvent,
+  GoalEvent,
 ]).pipe(Schema.toTaggedUnion("type"));
 export type LiveEvent = typeof LiveEvent.Type;
 

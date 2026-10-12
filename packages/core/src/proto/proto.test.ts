@@ -376,3 +376,170 @@ describe("chat deletion decoding", () => {
     ).toBeUndefined();
   });
 });
+
+describe("goal decoding", () => {
+  // A gift goal with one gift target and one unknown target, and two contributors.
+  const goalPayload = () =>
+    new ProtoWriter()
+      .message(1, common("500", 1791744001000))
+      .message(
+        3,
+        new ProtoWriter()
+          .varint(1, "7695831808499763999")
+          .message(
+            4,
+            new ProtoWriter()
+              .varint(1, 1)
+              .varint(2, 5655)
+              .varint(3, 15)
+              .varint(4, 100)
+              .message(
+                5,
+                new ProtoWriter()
+                  .string(1, "Rose")
+                  .message(2, new ProtoWriter().string(1, "https://img/rose.png")),
+              ),
+          )
+          .message(4, new ProtoWriter().varint(1, 7).varint(3, 2).varint(4, 5))
+          .string(5, "GIFT GAL")
+          .varint(9, 1791839928)
+          .message(
+            11,
+            new ProtoWriter()
+              .varint(1, "6822775526810371077")
+              .message(2, new ProtoWriter().string(1, "https://img/daddy.webp"))
+              .string(3, "Daddy Butch")
+              .varint(4, 10)
+              .string(5, "6822775526810371077"),
+          )
+          .message(11, new ProtoWriter().varint(1, "7530015499872846903").string(3, "Paddler").varint(4, 1)),
+      )
+      .finish();
+
+  it("decodes gift goals with progress, contributors and end time", () => {
+    expect(
+      decodeLiveEvent({
+        method: "WebcastGoalUpdateMessage",
+        payload: goalPayload(),
+        msgId: "",
+        isHistory: false,
+      }),
+    ).toEqual({
+      type: "goal",
+      msgId: "500",
+      timestamp: 1791744001000,
+      goalId: "7695831808499763999",
+      description: "GIFT GAL",
+      goals: [
+        {
+          kind: "gift",
+          giftId: 5655,
+          giftName: "Rose",
+          giftImageUrl: "https://img/rose.png",
+          progress: 15,
+          target: 100,
+        },
+        { kind: "other", progress: 2, target: 5 },
+      ],
+      contributors: [
+        {
+          user: {
+            userId: "6822775526810371077",
+            nickname: "Daddy Butch",
+            profilePictureUrl: "https://img/daddy.webp",
+          },
+          count: 10,
+        },
+        { user: { userId: "7530015499872846903", nickname: "Paddler", profilePictureUrl: "" }, count: 1 },
+      ],
+      endsAt: 1791839928000,
+    });
+  });
+
+  it("allows a goal with no targets or contributors", () => {
+    const payload = new ProtoWriter()
+      .message(1, common("501", 1791744002000))
+      .message(3, new ProtoWriter().varint(1, "9"))
+      .finish();
+    expect(
+      decodeLiveEvent({ method: "WebcastGoalUpdateMessage", payload, msgId: "", isHistory: false }),
+    ).toEqual({
+      type: "goal",
+      msgId: "501",
+      timestamp: 1791744002000,
+      goalId: "9",
+      description: "",
+      goals: [],
+      contributors: [],
+    });
+  });
+
+  it("drops goal updates without a goal", () => {
+    const payload = new ProtoWriter().message(1, common("502", 1791744003000)).finish();
+    expect(
+      decodeLiveEvent({ method: "WebcastGoalUpdateMessage", payload, msgId: "", isHistory: false }),
+    ).toBeUndefined();
+  });
+});
+
+describe("gifter level", () => {
+  // Gifter badge (field 64 of the user): image `grade_badge_*`, level as a decimal string at 12.5.
+  const gifterBadge = (level: string, image = "webcast-va/grade_badge_icon_lite_lv35_v3.png") =>
+    new ProtoWriter()
+      .varint(1, 4)
+      .varint(2, 20)
+      .message(12, new ProtoWriter().string(1, "2").varint(2, "7138382115757971236").string(5, level))
+      .message(23, new ProtoWriter().varint(1, 4).message(2, new ProtoWriter().string(2, image)));
+
+  const fanBadge = () =>
+    new ProtoWriter()
+      .varint(1, 4)
+      .varint(2, 30)
+      .message(12, new ProtoWriter().string(1, "2").string(5, "7"))
+      .message(
+        23,
+        new ProtoWriter().message(
+          2,
+          new ProtoWriter().string(2, "webcast-va/webcast-va-fans_badge_icon_lv1_v2.png"),
+        ),
+      );
+
+  const chatWith = (...badges: ProtoWriter[]) => {
+    const userWriter = user("1", "alice", "Alice");
+    for (const badge of badges) userWriter.message(64, badge);
+    return new ProtoWriter()
+      .message(1, common("600", 1791744004000))
+      .message(2, userWriter)
+      .string(3, "hi")
+      .finish();
+  };
+
+  it("reads the level from a gifter badge", () => {
+    const event = decodeLiveEvent({
+      method: "WebcastChatMessage",
+      payload: chatWith(gifterBadge("36")),
+      msgId: "600",
+      isHistory: false,
+    });
+    expect(event).toMatchObject({ type: "chat", user: { gifterLevel: 36 } });
+  });
+
+  it("skips fan club badges and leaves the level out when there is none", () => {
+    const withFan = decodeLiveEvent({
+      method: "WebcastChatMessage",
+      payload: chatWith(fanBadge(), gifterBadge("21", "webcast-va/grade_badge_icon_lite_lv20_v1.png")),
+      msgId: "600",
+      isHistory: false,
+    });
+    expect(withFan).toMatchObject({ user: { gifterLevel: 21 } });
+
+    const fanOnly = decodeLiveEvent({
+      method: "WebcastChatMessage",
+      payload: chatWith(fanBadge()),
+      msgId: "600",
+      isHistory: false,
+    });
+    expect(fanOnly).toBeDefined();
+    expect(fanOnly && "user" in fanOnly && "gifterLevel" in fanOnly.user).toBe(false);
+  });
+});

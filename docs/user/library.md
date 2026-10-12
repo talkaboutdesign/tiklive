@@ -160,7 +160,7 @@ Each event has `type`, `timestamp` (unix ms), and usually `msgId`. Users look li
 
 ```ts
 { userId, uniqueId /* @handle */, nickname, profilePictureUrl,
-  isModerator?, isSubscriber?, isFollower?, isGifter? }
+  isModerator?, isSubscriber?, isFollower?, isGifter?, gifterLevel? }
 ```
 
 | `type`                      | Fields                                                                                                                            |
@@ -175,6 +175,7 @@ Each event has `type`, `timestamp` (unix ms), and usually `msgId`. Users look li
 | `emote`                     | `user`, `emotes[]`                                                                                                                |
 | `viewers`                   | `viewerCount`, `topViewers[]`                                                                                                     |
 | `streamEnd`                 | `reason`: `ended` \| `suspended`                                                                                                  |
+| `goal`                      | `goalId`, `description`, `goals[]` (`kind`, `progress`, `target`, gift fields), `contributors[]` (`user`, `count`), `endsAt?`     |
 
 **Gift streaks:** streakable gifts (Rose and so on) fire repeatedly while a viewer holds the combo, with
 `streaking: true` and a rising `repeatCount`. The final event has `streaking: false`. Alerts and coin totals

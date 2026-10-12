@@ -540,6 +540,14 @@
       .tag.friend {
         --tag: var(--success);
       }
+      /* Gifter level ("Lv 36"). Level 30 and up is emphasized. */
+      .tag.level {
+        --tag: var(--warning);
+      }
+      .tag.level.high {
+        --tag: var(--accent);
+        font-weight: 700;
+      }
       .row-text {
         max-width: 80ch;
         font-size: 15px;
@@ -688,6 +696,73 @@
       .preview-note {
         color: var(--muted);
         font-size: 12px;
+      }
+
+      /* ---------- Goal card (top of the side panel, hidden until a goal arrives) ---------- */
+      .goal {
+        flex: none;
+        padding: 14px 20px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .goal-title {
+        margin: 0 0 8px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .goal-item + .goal-item {
+        margin-top: 10px;
+      }
+      .goal-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .goal-img {
+        width: 20px;
+        height: 20px;
+        object-fit: contain;
+      }
+      .goal-bar {
+        height: 6px;
+        margin-top: 6px;
+        border-radius: 999px;
+        background: var(--hover);
+        overflow: hidden;
+      }
+      .goal-bar > span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: var(--accent);
+      }
+      .goal-top {
+        margin: 12px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .goal-top li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+        font-size: 13px;
+      }
+      .goal-name {
+        flex: 1 1 0;
+        min-width: 0;
+        overflow: hidden;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .goal-count {
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
       }
 
       /* ---------- Gifts lane ---------- */
@@ -1045,6 +1120,11 @@
                 aria-valuemax="640"
                 aria-valuenow="340"
               ></div>
+              <section class="goal" id="goal" aria-label="Goal" hidden>
+                <p class="goal-title" id="goal-title"></p>
+                <div id="goal-items"></div>
+                <ol class="goal-top" id="goal-top" aria-label="Top contributors"></ol>
+              </section>
               <section class="preview" id="preview" aria-label="Preview" hidden>
                 <div class="preview-head">
                   <span class="preview-title">Preview</span>
@@ -1216,6 +1296,7 @@
       let nextId = 1;
       let pending = 0; // messages that arrived while scrolled up
       let giftLog = []; // finished gifts, newest first
+      let goal; // the latest goal event this session, if any
       let topViewers = []; // from the most recent viewers event
       let previewOpen = readJson(KEYS.preview, false);
       let previewMuted = readJson(KEYS.previewMuted, true);
@@ -1474,10 +1555,12 @@
         pending = 0;
         giftLog = [];
         topViewers = [];
+        goal = undefined;
         $("feed").replaceChildren();
         updatePill();
         renderGifts();
         renderTop();
+        renderGoal();
         updateCounts();
         client.on("*", mine(addEvent));
         client.on(
@@ -1734,6 +1817,16 @@
         } else if (followsStreamer(u)) {
           badges.push(el("span", { class: "tag follower" }, "Follower"));
         }
+        if (typeof u.gifterLevel === "number") {
+          const high = u.gifterLevel >= 30;
+          badges.push(
+            el(
+              "span",
+              { class: high ? "tag level high" : "tag level", title: "Gifter level" },
+              `Lv ${u.gifterLevel}`,
+            ),
+          );
+        }
 
         let body;
         if (e.type === "gift") {
@@ -1858,11 +1951,69 @@
         );
       }
 
+      // The goal card shows the latest goal event. Hidden until one arrives.
+      function renderGoal() {
+        $("goal").hidden = !goal;
+        if (!goal) return;
+        $("goal-title").textContent = goal.description || "Goal";
+        $("goal-items").replaceChildren(...goal.goals.map(goalItem));
+        const top = goal.contributors
+          .filter((c) => c?.user && !isSilenced(c.user))
+          .sort((a, b) => num(b.count) - num(a.count))
+          .slice(0, 3);
+        $("goal-top").hidden = top.length === 0;
+        $("goal-top").replaceChildren(
+          ...top.map(({ user, count }) => {
+            const name = user.nickname || "Viewer";
+            return el(
+              "li",
+              {},
+              avatar(user.profilePictureUrl, name, "sm"),
+              el("span", { class: "goal-name" }, name),
+              el("span", { class: "goal-count muted" }, num(count).toLocaleString()),
+            );
+          }),
+        );
+      }
+
+      function goalItem(item) {
+        const progress = num(item.progress);
+        const target = Math.max(1, num(item.target));
+        const label = item.kind === "gift" && item.giftName ? ` ${item.giftName}` : "";
+        const bar = el("span");
+        bar.style.width = `${Math.min(100, (progress / target) * 100)}%`;
+        return el(
+          "div",
+          { class: "goal-item" },
+          el(
+            "div",
+            { class: "goal-line" },
+            item.kind === "gift"
+              ? img(item.giftImageUrl, { class: "goal-img", alt: "", width: 20, height: 20 })
+              : null,
+            el("span", {}, `${progress.toLocaleString()} / ${target.toLocaleString()}${label}`),
+          ),
+          el(
+            "div",
+            {
+              class: "goal-bar",
+              role: "progressbar",
+              "aria-label": item.giftName || "Goal progress",
+              "aria-valuemin": 0,
+              "aria-valuemax": target,
+              "aria-valuenow": Math.min(progress, target),
+            },
+            bar,
+          ),
+        );
+      }
+
       // Redraws everything that depends on the filters or the silenced list.
       function refresh() {
         render();
         renderGifts();
         renderTop();
+        renderGoal();
       }
 
       function removeMessages(msgIds) {
@@ -1882,6 +2033,11 @@
         if (event.type === "viewers") {
           topViewers = Array.isArray(event.topViewers) ? event.topViewers : [];
           renderTop();
+          return;
+        }
+        if (event.type === "goal") {
+          goal = event;
+          renderGoal();
           return;
         }
         // Gifts stream while a combo runs. Only the final one (streaking: false) is shown.

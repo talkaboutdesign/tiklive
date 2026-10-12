@@ -31,7 +31,31 @@ describe("contracts", () => {
     expect(LIVE_EVENT_TYPES).toContain("chat");
     expect(LIVE_EVENT_TYPES).toContain("streamEnd");
     expect(LIVE_EVENT_TYPES).toContain("chatDelete");
-    expect(LIVE_EVENT_TYPES).toHaveLength(14);
+    expect(LIVE_EVENT_TYPES).toContain("goal");
+    expect(LIVE_EVENT_TYPES).toHaveLength(15);
+  });
+
+  it("accepts goal events and the optional gifter level", () => {
+    const decode = Schema.decodeUnknownSync(LiveEvent);
+    const goal = {
+      type: "goal",
+      timestamp: 1,
+      goalId: "7695831808499763999",
+      description: "GIFT GAL",
+      goals: [
+        { kind: "gift", giftId: 5655, giftName: "Rose", giftImageUrl: "", progress: 15, target: 100 },
+        { kind: "other", progress: 2, target: 5 },
+      ],
+      contributors: [{ user: { userId: "2", nickname: "Pal", profilePictureUrl: "" }, count: 10 }],
+      endsAt: 1791839928000,
+    };
+    expect(decode(goal)).toEqual(goal);
+    expect(() => decode({ ...goal, goals: [{ ...goal.goals[0], kind: "trophy" }] })).toThrow();
+
+    const gifter = { ...user, gifterLevel: 36 };
+    expect(decode({ type: "chat", timestamp: 1, user: gifter, comment: "hi", emotes: [] })).toMatchObject({
+      user: { gifterLevel: 36 },
+    });
   });
 
   it("decodes valid events and rejects wrong field types", () => {
@@ -84,6 +108,7 @@ describe("contracts", () => {
       streamEnd: () => "end",
       battle: () => "battle",
       battleScore: () => "battleScore",
+      goal: (e) => e.description,
     });
     expect(describeEvent({ type: "follow", timestamp: 1, user })).toBe("Viewer followed");
   });
