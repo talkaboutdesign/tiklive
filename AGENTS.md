@@ -148,9 +148,8 @@ Patterns used here:
   Run `bun run build` after changing the client.
 - **Host and Origin checks** apply to `/api` and `/ws`. Static files are not guarded, by design. Don't put
   secrets in the static directory.
-- **Stats reset on reconnect.** `Session` resets stats on every `Connected`, which includes reconnects after a
-  drop. `SessionStats` is documented as resetting only when the stream starts. Don't "fix" the docs without
-  deciding which behavior is intended. See the "Known gaps" section of ARCHITECTURE.md.
+- **Stats reset per stream.** `Session` resets stats when `Connected` brings a new room ID (a new stream).
+  Reconnects to the same room keep running totals.
 - **No resume cursor.** tiklive doesn't send the signed `im/fetch` request, so reconnects can drop events.
   Don't add retries that pretend otherwise. Duplicates are de-duplicated by `msgId` (a bounded set of the last 5000).
 - **Package exports are public API.** `tiklive` exports `.`, `./core`, `./contracts`, `./client`, `./testing`,

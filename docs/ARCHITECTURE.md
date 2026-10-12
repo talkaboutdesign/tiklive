@@ -149,8 +149,9 @@ A session follows one streamer and runs until its scope closes.
 - **Other failures:** the session goes to `error` and retries after `pollInterval`.
 - **Demo:** the username `demo` runs `demoEvents` (fake events) instead of connecting.
 
-Stats update on each event. A status push is published at most once per second, and only when the
-stats changed. State changes publish immediately.
+Stats update on each event. Stats reset when a new stream (room) starts, and survive reconnects to the
+same room. A status push is published at most once per second, and only when the stats changed. State
+changes publish immediately.
 
 ## Session manager (`server/SessionManager`)
 
@@ -254,9 +255,6 @@ Errors are `Schema.TaggedError`s, so they serialize and pattern-match well:
 
 These are things the code does that the design doesn't intend, or things that aren't wired up yet:
 
-- **Stats reset on every reconnect**, not only when the streamer goes live. `Session` resets stats on
-  each `Connected` event, and `Connected` fires again after a network drop. `SessionStats` is documented
-  as resetting when the stream starts.
 - **`internal` error code** is in the schema but never sent.
 - **`ServerOptions.port` and `host`** are read only by the platform layers, not by `Server.layer`. Passing
   them to `Server.layer` does nothing.
