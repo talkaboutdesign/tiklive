@@ -46,9 +46,24 @@ export const FollowTrigger = Schema.Struct({ type: Schema.tag("follow") });
 export const ShareTrigger = Schema.Struct({ type: Schema.tag("share") });
 export const SubscribeTrigger = Schema.Struct({ type: Schema.tag("subscribe") });
 
-/** Who may trigger a chat rule. `everyone` is the default. */
-export const ChatAudience = Schema.Literals(["everyone", "followers", "subscribers", "moderators"]);
+/**
+ * Who may trigger a rule. `everyone` is the default. `followers` includes friends (mutual
+ * follows). `friends` is only viewers who follow the streamer and whom the streamer follows back.
+ */
+export const ChatAudience = Schema.Literals([
+  "everyone",
+  "followers",
+  "friends",
+  "subscribers",
+  "moderators",
+]);
 export type ChatAudience = typeof ChatAudience.Type;
+
+/**
+ * Viewers with at least this many followers may trigger the rule. Followers and friends of
+ * the streamer always pass, and so does a viewer whose follower count TikTok didn't send.
+ */
+const MinFollowers = Range(0, 1_000_000_000);
 
 export const ChatTrigger = Schema.Struct({
   type: Schema.tag("chat"),
@@ -60,8 +75,26 @@ export const ChatTrigger = Schema.Struct({
   /** Required for `command` and `contains`. An empty `text` never matches. */
   text: Schema.optionalKey(Text(100)),
   from: Schema.optionalKey(ChatAudience),
+  minFollowers: Schema.optionalKey(MinFollowers),
 });
 export type ChatTrigger = typeof ChatTrigger.Type;
+
+/**
+ * Fires when a viewer joins the stream. Only joins TikTok reports as joins; viewers who
+ * were already watching don't count.
+ */
+export const JoinTrigger = Schema.Struct({
+  type: Schema.tag("join"),
+  /** Who may trigger it. Default everyone. */
+  from: Schema.optionalKey(ChatAudience),
+  minFollowers: Schema.optionalKey(MinFollowers),
+  /**
+   * Each viewer triggers it at most once per stream. The count resets when the stream
+   * ends (`streamEnd`). Default true.
+   */
+  oncePerStream: Schema.optionalKey(Schema.Boolean),
+});
+export type JoinTrigger = typeof JoinTrigger.Type;
 
 /** Fires every time the stream's like count passes another multiple of `every`. */
 export const LikesTrigger = Schema.Struct({
@@ -76,6 +109,7 @@ export const RuleTrigger = Schema.Union([
   ShareTrigger,
   SubscribeTrigger,
   ChatTrigger,
+  JoinTrigger,
   LikesTrigger,
 ]).pipe(Schema.toTaggedUnion("type"));
 export type RuleTrigger = typeof RuleTrigger.Type;
@@ -139,6 +173,7 @@ export type RuleStepKind = RuleStep["kind"];
 /**
  * Placeholders allowed in step text. Unknown placeholders are left as typed.
  * `count`, `coins` and `giftName` are empty for non-gift triggers; `comment` for non-chat ones.
+ * `followers` is the viewer's follower count, empty when TikTok didn't send it.
  */
 export const TEMPLATE_VARIABLES = [
   "nickname",
@@ -149,6 +184,7 @@ export const TEMPLATE_VARIABLES = [
   "comment",
   "likes",
   "months",
+  "followers",
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 

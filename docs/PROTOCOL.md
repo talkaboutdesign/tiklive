@@ -277,10 +277,14 @@ The schemas are in [`packages/contracts/src/rules.ts`](../packages/contracts/src
 
 - **`Rule`**: `id`, `name`, `enabled`, `trigger`, `steps` (at most 10), and optional `cooldown` and
   `userCooldown` in seconds.
-- **Triggers**: `gift`, `follow`, `share`, `subscribe`, `chat` (`command`, `contains` or `any`), and
-  `likes` (every N likes).
+- **Triggers**: `gift`, `follow`, `share`, `subscribe`, `chat` (`command`, `contains` or `any`), `join`
+  (a viewer joins; `oncePerStream` defaults to true), and `likes` (every N likes).
+- **Audiences**: `from` on `chat` and `join` is `everyone` (the default), `followers` (includes friends),
+  `friends` (mutual follows only), `subscribers` or `moderators`. `minFollowers` on `chat` and `join`
+  sets the least follower count a viewer may have; followers and friends of the streamer always pass it,
+  and so does a viewer whose count is unknown.
 - **Steps**: `sound`, `media`, `speak` (text to speech) and `obsScene`. Text can use placeholders
-  such as `{nickname}` and `{comment}`.
+  such as `{nickname}`, `{comment}` and `{followers}` (the viewer's follower count).
 - **`RuleSet`**: `{revision, rules}`, at most 200 rules. `revision` goes up on every save.
 - **`FiredAction`**: `id`, `ruleId`, `ruleName`, `timestamp`, `user` (when there is one), `test`, and
   `steps` with the placeholders already filled in.
@@ -326,7 +330,8 @@ with `PUT /api/rules`, sending the `revision` you last read. A save based on an 
   Clients must ignore unknown fields and event types. The browser client already does.
 - Actions (the `action` message, the `actions` subscribe option, `actions=1`, and the `/api/rules`,
   `/api/media`, `/api/media/import`, `/api/sounds/search` and `/media/:file` routes) was an additive change, so `PROTOCOL_VERSION` stays at 1.
-  So were `PATCH /api/media/:id`, the follow fields on `LiveUser`, and `SessionStatus.hlsUrl`.
+  So were `PATCH /api/media/:id`, the follow fields on `LiveUser`, and `SessionStatus.hlsUrl`, and the
+  rule additions: the `join` trigger, the `friends` audience, `minFollowers` and `oncePerStream`, and the `{followers}` placeholder.
 - The browser client (`packages/client`) checks `hello.protocolVersion` against its own
   constant and logs one warning on a mismatch. It doesn't refuse to connect.
 - When the version changes, update `PROTOCOL_VERSION`, this document, and the client together.

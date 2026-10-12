@@ -266,6 +266,48 @@ describe("Session actions", () => {
     ),
   );
 
+  it.live("tells the actions hook a stream ended when a reconnect lands in a new room", () => {
+    let room = "1";
+    const ws = fakeWebSocketLayer();
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const seen: Array<LiveEvent["type"]> = [];
+        const session = yield* Session.make("someone", {
+          connection: { reconnect: { maxDelay: "20 millis" }, heartbeatInterval: "1 hour" },
+          actions: (event) =>
+            Effect.sync(() => {
+              seen.push(event.type);
+              return [];
+            }),
+        });
+        yield* waitForState(session, "live");
+
+        // Same room after a drop: the stream goes on.
+        ws.sockets[0]!.serverClose();
+        yield* waitUntil(
+          Effect.sync(() => ws.sockets.length),
+          (n) => n === 2,
+          "reconnect",
+        );
+        yield* waitForState(session, "live");
+        expect(seen).toEqual([]);
+
+        // New room: the old stream is over, even though TikTok never said so.
+        room = "2";
+        ws.sockets[1]!.serverClose();
+        yield* waitUntil(
+          Effect.sync(() => seen),
+          (types) => types.includes("streamEnd"),
+          "streamEnd",
+        );
+        expect(seen).toEqual(["streamEnd"]);
+        expect((yield* session.status).roomId).toBe("2");
+      }).pipe(
+        Effect.provide(Layer.mergeAll(fakeTikTokWebLayer({ live: true, roomId: () => room }), ws.layer)),
+      ),
+    );
+  });
+
   it.live("emitAction publishes the action as-is", () =>
     Effect.scoped(
       Effect.gen(function* () {
