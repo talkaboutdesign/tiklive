@@ -68,6 +68,11 @@
       .msg.gift .name {
         color: #ffd166;
       }
+      .msg img.gift-img {
+        height: 1.4em;
+        vertical-align: middle;
+        margin: 0 4px;
+      }
       .badge {
         font-size: 12px;
         padding: 1px 6px;
@@ -180,7 +185,9 @@
       live.on("join", (e) => add(e.user, ["joined"], "system"));
       live.on("follow", (e) => add(e.user, ["followed!"], "system"));
       live.on("gift", (e) => {
-        if (!e.streaking) add(e.user, [`sent ${e.giftName ?? ""} ×${Number(e.repeatCount) || 0}`], "gift");
+        if (e.streaking) return;
+        const icon = img(e.giftImageUrl, { className: "gift-img", alt: e.giftName ?? "" });
+        add(e.user, [`sent ${e.giftName ?? ""}`, icon ?? " ", `×${Number(e.repeatCount) || 0}`], "gift");
       });
     </script>
   </body>
