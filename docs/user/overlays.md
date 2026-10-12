@@ -59,11 +59,66 @@ A progress bar driven by the streamer's running totals.
 
 Example: `/overlays/goal.html?username=yourname&metric=diamonds&target=5000&label=Coin%20goal`
 
+## Actions player: `/overlays/actions.html`
+
+Plays the actions you set up on the Actions page: sounds, images, GIFs and videos, text-to-speech, and OBS scene
+switches. Each action runs its steps together. Actions play one at a time, in the order they fired. See
+[actions.md](./actions.md) for setting up actions.
+
+The player depends on how you run tiklive:
+
+- **Desktop app:** the app plays sounds and speech itself, through the computer's audio. The link on the Actions
+  page leaves them out (`sounds=0&speech=0`), so the player in OBS shows pictures, GIFs, videos and scene switches
+  only. Sounds and speech don't need anything set up in OBS.
+- **Command-line server (`npx tiklive`):** there's no app to play them, so the player in OBS plays everything.
+  Tick **Control audio via OBS** for its sounds and speech.
+
+| Param      | Default | Meaning                                                 |
+| ---------- | ------- | ------------------------------------------------------- |
+| `username` | none    | Streamer whose actions to play (required)               |
+| `sounds`   | on      | `0` turns sound steps off                               |
+| `visuals`  | on      | `0` turns image, GIF and video steps off                |
+| `speech`   | on      | `0` turns text-to-speech off                            |
+| `obs`      | on      | `0` turns scene switches off                            |
+| `volume`   | `1`     | Master volume, 0 to 1                                   |
+| `queue`    | `20`    | Most actions waiting to play. Extra ones are dropped.   |
+| `gap`      | `300`   | Milliseconds between actions                            |
+| `debug`    | off     | `1` shows a status line (connection, queue, last error) |
+
+Example: `/overlays/actions.html?username=yourname&speech=0&volume=0.8`
+
+The desktop app's link on the Actions page is the same URL with `&sounds=0&speech=0` added. Tick **OBS plays sounds
+and speech too** there if you want OBS to play them instead, and turn off app sound in the app's header so they
+don't play twice.
+
+OBS setup tips:
+
+- Set the Browser Source size to 1920×1080. Media appears in the middle of the frame.
+- Command-line server only: tick **Control audio via OBS** so sounds and speech go through OBS's mixer, where you
+  can adjust their levels. Skip this with the desktop app, which plays them itself.
+- For scene switches, set **Page permissions** to **Advanced access to OBS**. Without it, the player skips scene
+  steps and logs a warning.
+- Command-line server only: if speech is silent in OBS, open the player in a normal browser tab with
+  `&visuals=0&obs=0` and capture that audio instead.
+
+In a normal browser tab, the browser may block sound until you click the page. A **Click to enable sound** button
+appears when that happens. OBS doesn't need it.
+
 ## Dashboard: `/`
 
-Connects to a streamer, shows the live event log and status, lists the overlay URLs with copy buttons, and
-has test buttons that send fake events to every overlay connected to that streamer. Pass `?username=` in the
-URL to connect on load.
+The first time you open the dashboard, it asks for your TikTok username. tiklive saves it in this browser, so
+later visits go straight to the dashboard. You don't need to be live for this: tiklive waits and connects when
+you go live. Use **Change** in the header to switch to another username.
+
+The dashboard shows your status (live, offline, connecting or error), viewer and engagement totals, and a
+filterable event log. The overlay URLs are on the right, with copy and open buttons. The Alerts overlay has a
+minimum-coins setting, and the goal bar has a metric and a target. Changing one updates its URL.
+
+The test buttons send fake events to every overlay connected to your username. They're enabled once connected.
+
+Two cases don't save anything. `?username=` in the URL connects for that visit only. `demo` (typed in the form,
+or from "Try the demo") shows fake events and is never saved. If the server runs with `--token`, open the
+dashboard with `?token=` and the token is added to the overlay URLs.
 
 ## Write your own overlay
 

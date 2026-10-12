@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import {
   PROTOCOL_VERSION as CONTRACT_PROTOCOL_VERSION,
+  type FiredAction,
   type LiveEvent,
   type SessionStatus,
 } from "@tiklive/contracts";
@@ -343,6 +344,43 @@ describe("reconnect", () => {
     lastSocket().drop();
     vi.advanceTimersByTime(60_000);
     expect(FakeSocket.instances).toHaveLength(1);
+    live.close();
+  });
+});
+
+describe("actions", () => {
+  const action: FiredAction = {
+    id: "a1",
+    ruleId: "dance",
+    ruleName: "Dance",
+    timestamp: 3,
+    user,
+    steps: [{ kind: "speak", text: "Viewer dances" }],
+  };
+
+  it("asks for actions in the subscribe message only when actions is set", () => {
+    const live = new TikLive({ server, username: "alice", actions: true, WebSocket: FakeWebSocket });
+    lastSocket().open();
+    expect(JSON.parse(lastSocket().sent[0] ?? "")).toEqual({
+      action: "subscribe",
+      username: "alice",
+      actions: true,
+    });
+    expect(live.actions).toBe(true);
+    live.close();
+  });
+
+  it("passes action messages to 'action' handlers with the username, but not to '*'", () => {
+    const live = new TikLive({ server, actions: true, WebSocket: FakeWebSocket });
+    const onAction = vi.fn();
+    const onAll = vi.fn();
+    live.on("action", onAction);
+    live.on("*", onAll);
+    lastSocket().open();
+    lastSocket().receive({ type: "action", username: "alice", action });
+
+    expect(onAction).toHaveBeenCalledWith(action, { username: "alice" });
+    expect(onAll).not.toHaveBeenCalled();
     live.close();
   });
 });

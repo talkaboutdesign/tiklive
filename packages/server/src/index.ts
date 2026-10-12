@@ -4,3 +4,7 @@ export type { HttpOptions } from "./http.ts";
 export { routes } from "./http.ts";
 export * as SessionManager from "./SessionManager.ts";
 export * as Session from "./Session.ts";
+export * as RulesStore from "./rules/RulesStore.ts";
+export * as MediaStore from "./rules/MediaStore.ts";
+export * as RuleEngine from "./rules/RuleEngine.ts";
+export * as SoundSearch from "./rules/SoundSearch.ts";

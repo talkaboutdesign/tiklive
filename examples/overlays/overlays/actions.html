@@ -1,0 +1,604 @@
+<!doctype html>
+<!--
+  Actions player: plays the actions set up on the Actions page (sounds, images, GIFs, videos,
+  text-to-speech and OBS scene switches). Add as an OBS Browser Source:
+    http://localhost:8080/overlays/actions.html?username=YOURNAME
+  Options: &sounds=0 / &visuals=0 / &speech=0 / &obs=0 (turn one kind of step off)
+           &volume=1 (master volume, 0 to 1)  &queue=20 (max waiting actions)
+           &gap=300 (milliseconds between actions)  &debug=1 (status line)
+           &token=… if the server requires one
+  app=1 is the desktop app's hidden player (internal): no visible UI. It takes its username and sound
+  settings from the app's dashboard (localStorage), and controls it on the "tiklive-player" channel.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>tiklive actions</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        overflow: hidden;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        pointer-events: none;
+      }
+      .media {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        animation: pop-in 0.25s ease-out;
+      }
+      .media.leaving {
+        animation: fade-out 0.25s ease-in forwards;
+      }
+      .media img,
+      .media video {
+        display: block;
+        max-width: 60vw;
+        max-height: 60vh;
+        object-fit: contain;
+      }
+      .media figcaption {
+        max-width: 60vw;
+        color: #fff;
+        font-size: 36px;
+        font-weight: 800;
+        line-height: 1.2;
+        text-align: center;
+        overflow-wrap: anywhere;
+        text-shadow:
+          0 2px 4px rgba(0, 0, 0, 0.9),
+          0 0 12px rgba(0, 0, 0, 0.7);
+      }
+      @keyframes pop-in {
+        from {
+          opacity: 0;
+          transform: scale(0.85);
+        }
+      }
+      @keyframes fade-out {
+        to {
+          opacity: 0;
+          transform: scale(0.95);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .media,
+        .media.leaving {
+          animation: none;
+        }
+      }
+      #unlock {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 12px 22px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(16, 16, 22, 0.85);
+        color: #fff;
+        font-size: 20px;
+        cursor: pointer;
+      }
+      #debug {
+        position: fixed;
+        left: 8px;
+        bottom: 8px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        font:
+          13px/1.3 ui-monospace,
+          Menlo,
+          monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="debug" hidden></div>
+    <script type="module">
+      import { TikLive } from "/tiklive.js";
+
+      const params = new URLSearchParams(location.search);
+      // Numeric option with a default; a missing or non-numeric value falls back to `def`.
+      const numParam = (k, def) =>
+        params.has(k) && Number.isFinite(Number(params.get(k))) ? Number(params.get(k)) : def;
+      const enabled = (k) => params.get(k) !== "0";
+      const clamp01 = (n) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1);
+      const masterVolume = clamp01(numParam("volume", 1));
+      const maxQueue = Math.max(1, Math.floor(numParam("queue", 20)));
+      const gapMs = Math.max(0, numParam("gap", 300));
+      const appMode = params.get("app") === "1";
+      const urlName = params.get("username");
+
+      const ACTION_CAP_MS = 60_000;
+      const SOUND_CAP_MS = 30_000;
+      const VIDEO_CAP_S = 60;
+      const IMAGE_DEFAULT_S = 5;
+      const POP_MS = 250;
+      const VIDEO_EXT = /\.(mp4|webm)$/i;
+      const OBS_HINT =
+        "Scene switching needs OBS: set this browser source's Page permissions to 'Advanced access to OBS'.";
+      // App mode only: the dashboard saves the username and the sound settings here, and sends controls.
+      const USERNAME_KEY = "tiklive.username";
+      const APP_AUDIO_KEY = "tiklive.appAudio";
+      const CHANNEL = "tiklive-player";
+      const USERNAME = /^[a-z0-9._]{1,32}$/;
+
+      // Which step kinds this instance plays.
+      const playable = {
+        sound: enabled("sounds"),
+        media: enabled("visuals"),
+        speak: enabled("speech"),
+        obsScene: enabled("obs"),
+      };
+
+      const stage = document.getElementById("stage");
+      const debugLine = document.getElementById("debug");
+      debugLine.hidden = params.get("debug") !== "1";
+
+      // Desktop app settings. Only app mode reads them; a missing or invalid value uses the default.
+      let appAudio = { enabled: true, volume: 1 };
+      function readAppAudio() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(APP_AUDIO_KEY) ?? "null");
+          return {
+            enabled: typeof saved?.enabled === "boolean" ? saved.enabled : true,
+            volume: Number.isFinite(saved?.volume) ? clamp01(saved.volume) : 1,
+          };
+        } catch {
+          return { enabled: true, volume: 1 };
+        }
+      }
+      function savedUsername() {
+        try {
+          const saved = localStorage.getItem(USERNAME_KEY) ?? "";
+          return USERNAME.test(saved) ? saved : null;
+        } catch {
+          return null;
+        }
+      }
+
+      let connection = "idle"; // idle, connecting, connected or disconnected
+      let lastError = "";
+      let pumping = false; // the queue loop is running
+      let current = null; // { action, controller } for the action playing now
+      // The rule name shown as "playing". It stays through the gap between two actions, so the
+      // dashboard doesn't flicker, and clears when the queue runs dry.
+      let nowPlaying = null;
+      let unlockOffered = false;
+      const queue = [];
+      // Sound and video elements playing now, with their step volume, so a volume change applies at once.
+      const playingMedia = new Map();
+      const warned = new Set();
+      let live = null; // the current TikLive connection
+      let liveName = null; // app mode: the username to play (null when none is saved)
+      let channel = null; // app mode: the control channel
+
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const level = (volume) => clamp01((volume ?? 1) * masterVolume * appAudio.volume);
+      const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      // Only same-origin /media/ paths and http(s) URLs may play. Anything else is skipped.
+      function safeUrl(raw) {
+        try {
+          const url = new URL(String(raw ?? ""), location.origin);
+          const allowed =
+            url.origin === location.origin
+              ? url.pathname.startsWith("/media/")
+              : url.protocol === "http:" || url.protocol === "https:";
+          if (allowed) return url.href;
+        } catch {
+          // Fall through to the warning below.
+        }
+        console.warn("tiklive actions: skipped media URL", raw);
+        return "";
+      }
+
+      function warnOnce(key, message) {
+        if (warned.has(key)) return;
+        warned.add(key);
+        console.warn(message);
+      }
+
+      function updateDebug() {
+        if (debugLine.hidden) return;
+        const state = current ? " · playing" : "";
+        debugLine.textContent = `${connection} · queued ${queue.length}${state} · last error: ${lastError || "none"}`;
+      }
+
+      // App mode: tells the dashboard what the player is doing. Sent on every change.
+      function postStatus() {
+        channel?.postMessage({
+          type: "status",
+          connected: connection === "connected",
+          username: liveName,
+          enabled: appAudio.enabled,
+          playing: nowPlaying,
+          queued: queue.length,
+        });
+      }
+
+      function refresh() {
+        updateDebug();
+        postStatus();
+      }
+
+      function reportError(message) {
+        lastError = message;
+        updateDebug();
+      }
+
+      // Browsers block sound until the page gets a click. Inside OBS this never shows, and the app
+      // allows sound without a click, so it never shows there either.
+      function offerUnlock() {
+        if (unlockOffered || appMode || window.obsstudio) return;
+        unlockOffered = true;
+        const button = document.createElement("button");
+        button.id = "unlock";
+        button.textContent = "Click to enable sound";
+        button.addEventListener("click", () => button.remove());
+        document.body.append(button);
+      }
+
+      // Runs one step. `start(finish, signal)` begins playback and returns a teardown function. `finish`
+      // ends the step, and so does `signal` aborting (skip, clear, or the action's cap). The promise
+      // always resolves, and the teardown runs exactly once.
+      function runStep(start, signal) {
+        return new Promise((resolve) => {
+          let finished = false;
+          let teardown = () => {};
+          const finish = () => {
+            if (finished) return;
+            finished = true;
+            signal.removeEventListener("abort", finish);
+            teardown();
+            resolve();
+          };
+          if (signal.aborted) return finish();
+          signal.addEventListener("abort", finish);
+          try {
+            teardown = start(finish, signal) ?? teardown;
+          } catch (err) {
+            reportError(String(err?.message ?? err));
+            console.warn("tiklive actions: step failed", err);
+            finish();
+          }
+          if (finished) teardown();
+        });
+      }
+
+      function playSound(step, finish) {
+        const url = safeUrl(step.url);
+        if (!url) return finish();
+        const audio = new Audio(url);
+        audio.volume = level(step.volume);
+        playingMedia.set(audio, step.volume);
+        const timer = setTimeout(finish, SOUND_CAP_MS);
+        audio.addEventListener("ended", finish);
+        audio.addEventListener("error", finish);
+        audio.play().catch((err) => {
+          if (err?.name === "NotAllowedError") offerUnlock();
+          else if (err?.name !== "AbortError") reportError(err?.message ?? String(err));
+          finish();
+        });
+        return () => {
+          clearTimeout(timer);
+          playingMedia.delete(audio);
+          audio.pause();
+          audio.removeAttribute("src");
+          audio.load();
+        };
+      }
+
+      // Removes a media figure, fading it out unless the user prefers reduced motion.
+      function leave(node) {
+        if (reducedMotion()) return node.remove();
+        node.classList.add("leaving");
+        setTimeout(() => node.remove(), POP_MS);
+      }
+
+      function showMedia(step, finish) {
+        const url = safeUrl(step.url);
+        if (!url) return finish();
+        const isVideo = VIDEO_EXT.test(new URL(url).pathname);
+        const figure = document.createElement("figure");
+        figure.className = "media";
+        let media;
+        let timer;
+        if (isVideo) {
+          media = document.createElement("video");
+          media.playsInline = true;
+          media.autoplay = true;
+          media.volume = level(step.volume);
+          playingMedia.set(media, step.volume);
+          media.addEventListener("ended", finish);
+          media.addEventListener("error", finish);
+          media.src = url;
+          media.play().catch((err) => {
+            if (err?.name === "NotAllowedError") offerUnlock();
+            else if (err?.name !== "AbortError") reportError(err?.message ?? String(err));
+            finish();
+          });
+          timer = setTimeout(finish, Math.min(step.duration ?? VIDEO_CAP_S, VIDEO_CAP_S) * 1000);
+        } else {
+          media = document.createElement("img");
+          media.referrerPolicy = "no-referrer";
+          media.addEventListener("error", finish);
+          media.src = url;
+          timer = setTimeout(finish, (step.duration ?? IMAGE_DEFAULT_S) * 1000);
+        }
+        figure.append(media);
+        if (step.text) {
+          const caption = document.createElement("figcaption");
+          caption.textContent = step.text;
+          figure.append(caption);
+        }
+        stage.append(figure);
+        return () => {
+          clearTimeout(timer);
+          if (isVideo) {
+            playingMedia.delete(media);
+            media.pause();
+            media.removeAttribute("src");
+            media.load();
+          }
+          leave(figure);
+        };
+      }
+
+      // The browser's voice list can start empty, so wait up to 1 s for it before looking up the voice.
+      async function findVoice(synth, name) {
+        if (!synth.getVoices().length) {
+          await new Promise((resolve) => {
+            let timer;
+            const done = () => {
+              clearTimeout(timer);
+              synth.removeEventListener("voiceschanged", done);
+              resolve();
+            };
+            timer = setTimeout(done, 1000);
+            synth.addEventListener("voiceschanged", done);
+          });
+        }
+        return synth.getVoices().find((voice) => voice.name === name);
+      }
+
+      function speak(step, finish, signal) {
+        const synth = window.speechSynthesis;
+        if (!synth || typeof SpeechSynthesisUtterance === "undefined") {
+          warnOnce(
+            "speech",
+            "tiklive actions: text-to-speech is not available in this browser, so speech is skipped.",
+          );
+          return finish();
+        }
+        const utterance = new SpeechSynthesisUtterance(step.text);
+        utterance.rate = step.rate ?? 1;
+        utterance.volume = level(step.volume);
+        // Safety net: if the engine never reports the end, stop speaking and move on.
+        const timer = setTimeout(
+          () => {
+            synth.cancel();
+            finish();
+          },
+          Math.max(5000, step.text.length * 120),
+        );
+        let stopped = false;
+        const begin = () => {
+          if (stopped) return;
+          try {
+            synth.speak(utterance);
+          } catch (err) {
+            reportError(err?.message ?? String(err));
+            finish();
+          }
+        };
+        utterance.addEventListener("end", finish);
+        utterance.addEventListener("error", (event) => {
+          if (event.error === "not-allowed") offerUnlock();
+          finish();
+        });
+        if (step.voice) {
+          findVoice(synth, step.voice).then((voice) => {
+            if (voice) utterance.voice = voice;
+            begin();
+          });
+        } else {
+          begin();
+        }
+        return () => {
+          stopped = true;
+          clearTimeout(timer);
+          // A stopped action (skip, clear, cap) cuts its speech off. A normal end leaves the queue alone.
+          if (signal.aborted) synth.cancel();
+        };
+      }
+
+      // OBS scene switches don't block: they happen as the action starts.
+      function switchScene(step) {
+        const obs = window.obsstudio;
+        if (typeof obs?.setCurrentScene !== "function") return warnOnce("obs", OBS_HINT);
+        try {
+          obs.getCurrentScene((previous) => {
+            try {
+              obs.setCurrentScene(step.scene);
+              if (step.revertAfter && previous?.name) {
+                setTimeout(() => {
+                  try {
+                    obs.setCurrentScene(previous.name);
+                  } catch (err) {
+                    console.warn("tiklive actions: could not switch back to scene", err);
+                  }
+                }, step.revertAfter * 1000);
+              }
+            } catch (err) {
+              console.warn("tiklive actions: could not switch scene", err);
+            }
+          });
+        } catch (err) {
+          console.warn("tiklive actions: could not read the current scene", err);
+        }
+      }
+
+      const STEP_RUNNERS = { sound: playSound, media: showMedia, speak };
+
+      // Starts every enabled step together, then waits for the blocking ones, capped at 60 s.
+      async function playAction(action) {
+        const controller = new AbortController();
+        current = { action, controller };
+        nowPlaying = action?.ruleName ?? null;
+        refresh();
+        const steps = Array.isArray(action?.steps) ? action.steps : [];
+        const blocking = [];
+        let timer;
+        try {
+          for (const step of steps) {
+            if (!step || !playable[step.kind]) continue;
+            if (step.kind === "obsScene") switchScene(step);
+            else {
+              blocking.push(
+                runStep((finish, signal) => STEP_RUNNERS[step.kind](step, finish, signal), controller.signal),
+              );
+            }
+          }
+          const cap = new Promise((resolve) => {
+            timer = setTimeout(resolve, ACTION_CAP_MS);
+          });
+          await Promise.race([Promise.all(blocking), cap]);
+        } finally {
+          clearTimeout(timer);
+          // Ends whatever is still going: the cap, or a skip. Steps that already finished ignore this.
+          controller.abort();
+          current = null;
+          refresh();
+        }
+      }
+
+      // Stops the action that's playing. The queue moves on after the normal gap.
+      const skipCurrent = () => current?.controller.abort();
+      // Drops everything waiting and stops the current action.
+      function clearQueue() {
+        queue.length = 0;
+        skipCurrent();
+        refresh();
+      }
+
+      async function pump() {
+        pumping = true;
+        while (queue.length) {
+          const action = queue.shift();
+          try {
+            await playAction(action);
+          } catch (err) {
+            reportError(err?.message ?? String(err));
+          }
+          if (queue.length) await sleep(gapMs);
+        }
+        pumping = false;
+        nowPlaying = null;
+        refresh();
+      }
+
+      function enqueue(action) {
+        // Desktop app: sounds turned off on the dashboard, so drop the action.
+        if (!appAudio.enabled) return;
+        if (queue.length >= maxQueue) {
+          console.warn(
+            `tiklive actions: queue is full (${maxQueue}), dropped "${action?.ruleName ?? "action"}"`,
+          );
+          return;
+        }
+        queue.push(action);
+        refresh();
+        if (!pumping) pump();
+      }
+
+      // Opens the connection for a streamer. Only one is open at a time, and events from a replaced
+      // connection are ignored.
+      function connect(username) {
+        live?.close();
+        connection = "connecting";
+        const client = new TikLive({ username, events: [], actions: true });
+        live = client;
+        client.on("open", () => {
+          if (client !== live) return;
+          connection = "connected";
+          refresh();
+        });
+        client.on("close", () => {
+          if (client !== live) return;
+          connection = "disconnected";
+          refresh();
+        });
+        client.on("error", (err) => {
+          if (client === live) reportError(err?.message ?? String(err));
+        });
+        client.on("action", (action) => {
+          if (client === live) enqueue(action);
+        });
+        refresh();
+      }
+
+      // App mode without ?username=: play whichever streamer the dashboard saved.
+      function followSavedName() {
+        const name = savedUsername();
+        if (name === liveName) return;
+        liveName = name;
+        live?.close();
+        live = null;
+        clearQueue();
+        if (name) connect(name);
+        else {
+          connection = "idle";
+          refresh();
+        }
+      }
+
+      // Applies the dashboard's sound settings now. Speech that has already started can't change volume.
+      function applyAppAudio() {
+        appAudio = readAppAudio();
+        if (!appAudio.enabled) clearQueue();
+        for (const [media, stepVolume] of playingMedia) media.volume = level(stepVolume);
+        refresh();
+      }
+
+      if (appMode) {
+        appAudio = readAppAudio();
+        liveName = urlName || savedUsername();
+        channel = new BroadcastChannel(CHANNEL);
+        channel.addEventListener("message", (event) => {
+          const type = event.data?.type;
+          if (type === "skip") skipCurrent();
+          else if (type === "clear") clearQueue();
+          else if (type === "status?") postStatus();
+        });
+        window.addEventListener("storage", (event) => {
+          if (event.key === null || event.key === APP_AUDIO_KEY) applyAppAudio();
+          if ((event.key === null || event.key === USERNAME_KEY) && !urlName) followSavedName();
+        });
+      }
+      if (!appMode || liveName) connect(liveName);
+      else refresh();
+    </script>
+  </body>
+</html>

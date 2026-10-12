@@ -3,7 +3,7 @@
  * history and offline/not-found handling. TikTok and WebSocket are faked.
  */
 import { describe, expect, it } from "@effect/vitest";
-import type { LiveEvent, SessionStatus } from "@tiklive/contracts";
+import type { FiredAction, LiveEvent, SessionStatus } from "@tiklive/contracts";
 import * as Core from "@tiklive/core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -197,6 +197,83 @@ describe("Session with a live streamer", () => {
         while (eventCount() < 2) received.push(yield* PubSub.take(subscription));
         const types = received.flatMap((m) => (m._tag === "Event" ? [m.event.type] : []));
         expect(types).toEqual(["chat", "follow"]);
+      }).pipe(Effect.provide(liveLayer())),
+    ),
+  );
+});
+
+const action = (ruleId: string): FiredAction => ({
+  id: `action-${ruleId}`,
+  ruleId,
+  ruleName: ruleId,
+  timestamp: TIMESTAMP,
+  steps: [{ kind: "speak", text: "hi" }],
+});
+
+/** Reads messages until `done` holds for everything read so far. */
+const readUntil = (
+  subscription: PubSub.Subscription<Session.SessionMessage>,
+  done: (messages: ReadonlyArray<Session.SessionMessage>) => boolean,
+) =>
+  Effect.gen(function* () {
+    const messages: Array<Session.SessionMessage> = [];
+    while (!done(messages)) messages.push(yield* PubSub.take(subscription));
+    return messages;
+  });
+
+describe("Session actions", () => {
+  it.live("publishes each action right after the event that fired it", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make("someone", {
+          actions: () => Effect.succeed([action("one"), action("two")]),
+        });
+        yield* waitForState(session, "live");
+        const subscription = yield* session.subscribe;
+
+        yield* session.inject(chat("hello"));
+
+        const messages = yield* readUntil(subscription, (read) =>
+          read.some((m) => m._tag === "Action" && m.action.ruleId === "two"),
+        );
+        const order = messages.flatMap((m) =>
+          m._tag === "Event" ? ["event"] : m._tag === "Action" ? [m.action.ruleId] : [],
+        );
+        expect(order).toEqual(["event", "one", "two"]);
+      }).pipe(Effect.provide(liveLayer())),
+    ),
+  );
+
+  it.live("passes the injected event to the actions hook", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const seen: Array<LiveEvent> = [];
+        const session = yield* Session.make("someone", {
+          actions: (event) =>
+            Effect.sync(() => {
+              seen.push(event);
+              return [];
+            }),
+        });
+        yield* waitForState(session, "live");
+
+        yield* session.inject(follow());
+        expect(seen.map((event) => event.type)).toEqual(["follow"]);
+      }).pipe(Effect.provide(liveLayer())),
+    ),
+  );
+
+  it.live("emitAction publishes the action as-is", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make("someone");
+        yield* waitForState(session, "live");
+        const subscription = yield* session.subscribe;
+
+        yield* session.emitAction(action("test"));
+
+        const messages = yield* readUntil(subscription, (read) => read.some((m) => m._tag === "Action"));
+        expect(messages.at(-1)).toEqual({ _tag: "Action", action: action("test") });
       }).pipe(Effect.provide(liveLayer())),
     ),
   );

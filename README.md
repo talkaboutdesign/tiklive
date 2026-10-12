@@ -3,7 +3,8 @@
 tiklive is an open-source TikTok LIVE connector and event server. It turns TikTok's LIVE WebSocket into
 typed JSON events for stream overlays: chats, gifts, likes, follows, shares, joins, subs and viewer counts.
 It ships a browser client, starter overlays (chat, alerts, goal bar), a dashboard, and a demo mode, so you
-can build overlays without being live.
+can build overlays without being live. Actions turn events into sounds, GIFs, videos, text-to-speech and OBS
+scene switches, set up in the browser with no code.
 
 **[Download the desktop app for macOS and Windows](https://github.com/talkaboutdesign/tiklive/releases/latest)**,
 or run `npx tiklive`.
@@ -120,6 +121,7 @@ Start at [docs/README.md](docs/README.md).
 
 - [Run the server](docs/user/server.md): command-line options, watching streamers, tokens, security, embedding
 - [Overlays](docs/user/overlays.md): OBS setup and the built-in overlays
+- [Actions](docs/user/actions.md): play sounds, GIFs and speech, or switch OBS scenes, when viewers interact
 - [Library](docs/user/library.md): connector, client, contracts, testing fakes, events
 - [Desktop app](docs/user/desktop.md): install, updates, first launch
 - [Wire protocol](docs/PROTOCOL.md): WebSocket messages, REST endpoints, event types

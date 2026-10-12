@@ -14,6 +14,7 @@ import * as RcMap from "effect/RcMap";
 import * as Scope from "effect/Scope";
 import type * as Socket from "effect/socket/Socket";
 import * as Session from "./Session.ts";
+import { RuleEngine } from "./rules/RuleEngine.ts";
 
 export interface SessionInfo extends SessionStatus {
   /** Kept running regardless of subscribers. */
@@ -49,11 +50,18 @@ export const make = (options: SessionManagerOptions = {}) =>
     const running = new Map<string, Session.Session>();
     const subscribers = new Map<string, number>();
     const watching = new Map<string, Scope.Closeable>();
+    // Optional: without a RuleEngine in context, sessions fire no actions.
+    const engine = yield* Effect.serviceOption(RuleEngine);
+
+    const sessionOptionsFor = (username: string): Session.SessionOptions | undefined =>
+      Option.isSome(engine)
+        ? { ...options.session, actions: (event) => engine.value.fire(username, event) }
+        : options.session;
 
     const sessions = yield* RcMap.make({
       lookup: (username: string) =>
         Effect.acquireRelease(
-          Session.make(username, options.session).pipe(
+          Session.make(username, sessionOptionsFor(username)).pipe(
             Effect.tap((s) => Effect.sync(() => running.set(username, s))),
           ),
           () => Effect.sync(() => running.delete(username)),

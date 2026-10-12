@@ -2,7 +2,7 @@
  * One streamer's session: keeps a TikTok connection alive across stream
  * restarts, tracks running stats, and fans events out to subscribers.
  */
-import type { LiveEvent, SessionState, SessionStats, SessionStatus } from "@tiklive/contracts";
+import type { FiredAction, LiveEvent, SessionState, SessionStats, SessionStatus } from "@tiklive/contracts";
 import { demoEvents, LiveConnection, type RoomStatus, type TikTokWeb } from "@tiklive/core";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -15,7 +15,8 @@ export const DEMO_USERNAME = "demo";
 
 export type SessionMessage =
   | { readonly _tag: "Event"; readonly event: LiveEvent }
-  | { readonly _tag: "Status"; readonly status: SessionStatus };
+  | { readonly _tag: "Status"; readonly status: SessionStatus }
+  | { readonly _tag: "Action"; readonly action: FiredAction };
 
 export interface Session {
   readonly username: string;
@@ -30,6 +31,8 @@ export interface Session {
   readonly subscribe: Effect.Effect<PubSub.Subscription<SessionMessage>, never, Scope.Scope>;
   /** Handles an event as if it came from TikTok (test buttons, automations). */
   readonly inject: (event: LiveEvent) => Effect.Effect<void>;
+  /** Publishes an `Action` message as-is. The editor's Test button uses this. */
+  readonly emitAction: (action: FiredAction) => Effect.Effect<void>;
 }
 
 export interface SessionOptions {
@@ -40,6 +43,8 @@ export interface SessionOptions {
   /** Per-subscriber buffer before old messages are dropped. Default 512. */
   readonly subscriberBuffer?: number;
   readonly connection?: LiveConnection.ConnectOptions;
+  /** Runs after each event is published; each returned action is published as an `Action` message. */
+  readonly actions?: (event: LiveEvent) => Effect.Effect<ReadonlyArray<FiredAction>>;
 }
 
 type MutableStats = { -readonly [K in keyof SessionStats]: SessionStats[K] };
@@ -134,7 +139,19 @@ export const make = (
           if (history.length > historySize) history.shift();
         }
         return PubSub.publish(pubsub, { _tag: "Event", event });
-      });
+      }).pipe(Effect.andThen(runActions(event)));
+
+    const publishAction = (action: FiredAction) =>
+      Effect.asVoid(PubSub.publish(pubsub, { _tag: "Action", action }));
+
+    // Actions aren't added to `history`: replays never re-run or re-show them.
+    const actions = options.actions;
+    const runActions = (event: LiveEvent) =>
+      actions
+        ? Effect.suspend(() => actions(event)).pipe(
+            Effect.flatMap((fired) => Effect.forEach(fired, publishAction, { discard: true })),
+          )
+        : Effect.void;
 
     const onConnection = (event: LiveConnection.ConnectionEvent) => {
       switch (event._tag) {
@@ -211,5 +228,6 @@ export const make = (
       recentEvents: Effect.sync(() => [...history]),
       subscribe: PubSub.subscribe(pubsub),
       inject: (event) => Effect.asVoid(handleEvent(event)),
+      emitAction: publishAction,
     } satisfies Session;
   });

@@ -18,6 +18,7 @@
  */
 import type {
   ErrorMessage,
+  FiredAction,
   GiftInfo,
   HelloMessage,
   LiveEvent,
@@ -67,6 +68,11 @@ export interface TikLiveOptions {
   events?: readonly LiveEventType[] | undefined;
   /** Ask the server to replay recent events (excluding likes and viewer counts) on connect. */
   replay?: boolean | undefined;
+  /**
+   * Also receive the actions fired by the server's rules (see the Actions page), as `"action"` events.
+   * Default false.
+   */
+  actions?: boolean | undefined;
   /**
    * WebSocket constructor to use. Defaults to the global `WebSocket`. Mainly
    * useful for tests or for Node versions without a global WebSocket.
@@ -119,6 +125,8 @@ export class TikLive {
   readonly events: readonly LiveEventType[] | undefined;
   /** Whether replay was requested on subscribe. */
   readonly replay: boolean;
+  /** Whether actions were requested on subscribe. */
+  readonly actions: boolean;
   /** Most recent session status from the server, or `null` before the first one. */
   status: SessionStatus | null = null;
 
@@ -142,6 +150,7 @@ export class TikLive {
     this.token = options.token ?? params.get("token") ?? "";
     this.events = options.events;
     this.replay = options.replay ?? false;
+    this.actions = options.actions ?? false;
     this.#reconnect = options.reconnect ?? true;
     this.#WebSocketCtor = options.WebSocket ?? globalThis.WebSocket;
     this.server = options.server ?? defaultServer(loc);
@@ -156,6 +165,8 @@ export class TikLive {
    *   that event with its {@link EventMeta}.
    * - `"*"` receives every event.
    * - `"status"` receives each {@link SessionStatus} update (state, title, stats...).
+   * - `"action"` receives each action fired by a rule, with the streamer's username. Only sent when
+   *   the client was created with `actions: true`. Not sent to `"*"`.
    * - `"hello"` receives the server's greeting on every connection.
    * - `"error"` receives server-side errors (for example, an invalid username).
    * - `"open"` and `"close"` fire when the underlying connection opens or closes.
@@ -166,6 +177,7 @@ export class TikLive {
   on<K extends LiveEventType>(type: K, handler: (event: LiveEventOf<K>, meta: EventMeta) => void): () => void;
   on(type: "*", handler: (event: LiveEvent, meta: EventMeta) => void): () => void;
   on(type: "status", handler: (status: SessionStatus) => void): () => void;
+  on(type: "action", handler: (action: FiredAction, meta: { username: string }) => void): () => void;
   on(type: "hello", handler: (hello: HelloMessage) => void): () => void;
   on(type: "error", handler: (error: ErrorMessage) => void): () => void;
   on(type: "open" | "close", handler: () => void): () => void;
@@ -239,6 +251,7 @@ export class TikLive {
       username: this.username,
       ...(this.events !== undefined && { events: this.events }),
       ...(this.replay && { replay: true }),
+      ...(this.actions && { actions: true }),
     };
   }
 
@@ -273,6 +286,10 @@ export class TikLive {
       case "status":
         this.status = msg.status;
         this.#emit("status", msg.status);
+        return;
+      case "action":
+        // Not sent to "*": that handler is for live events only.
+        this.#emit("action", msg.action, { username: msg.username });
         return;
       case "error":
         if (!this.#handlers.get("error")?.size) console.warn(`[tiklive] ${msg.code}: ${msg.message}`);
