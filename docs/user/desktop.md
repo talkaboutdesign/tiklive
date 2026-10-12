@@ -27,6 +27,17 @@ The app checks GitHub Releases for a newer version. It doesn't download anything
 macOS installs updates only for signed builds. Development builds, from `bun run desktop:dev`, have updates
 turned off.
 
+### Stable or nightly
+
+Open **Settings** in the sidebar and pick an **Update channel** under **About**:
+
+- **Stable** (the default) gets tested releases.
+- **Nightly** gets a new build every time a change is merged. Nightlies get new features first and can have bugs.
+
+The app checks the new channel as soon as you switch. Switching from Nightly back to Stable offers the latest
+stable release even when it's older than your nightly. A nightly install stays on nightlies until a newer nightly
+comes out, even after the stable release of the same version. Switch to Stable to get it.
+
 ## Using it with OBS
 
 The app serves the same dashboard and overlays as the command-line server, at http://127.0.0.1:8080/. Use the

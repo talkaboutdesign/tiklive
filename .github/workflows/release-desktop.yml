@@ -4,7 +4,9 @@ name: Desktop build
 # when the Apple secrets are set) and Windows x64 (unsigned for now).
 #
 # - Called by release.yml, which attaches the installers and updater files to
-#   the vX.Y.Z GitHub Release.
+#   the vX.Y.Z GitHub Release (stable) or prerelease (nightly). A nightly
+#   version (X.Y.Z-nightly.<timestamp>) makes electron-builder write
+#   nightly*.yml instead of latest*.yml.
 # - Run by hand (Actions → Desktop build → Run workflow) to test the build;
 #   installers are then only uploaded as workflow artifacts.
 #
@@ -168,3 +170,4 @@ jobs:
             apps/desktop/release/*.exe
             apps/desktop/release/*.blockmap
             apps/desktop/release/latest*.yml
+            apps/desktop/release/nightly*.yml

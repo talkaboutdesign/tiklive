@@ -3,12 +3,17 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
+import { DesktopSettings, SettingsError } from "../settings.ts";
+import type { UpdateChannel } from "./channel.ts";
 import * as DesktopUpdates from "./DesktopUpdates.ts";
 import { actionFor } from "./updateMachine.ts";
 import { Updater, UpdaterError } from "./Updater.ts";
 
 interface FakeOptions {
   disabledReason?: string;
+  /** The saved channel. */
+  channel?: UpdateChannel;
+  saveFails?: boolean;
   /** Each check takes the next entry; the last one repeats. A string is the available version. */
   checks?: Array<string | undefined | UpdaterError>;
   downloads?: Array<Stream.Stream<number, UpdaterError>>;
@@ -16,12 +21,21 @@ interface FakeOptions {
 }
 
 const fakeUpdater = (options: FakeOptions = {}) => {
-  const calls = { checks: 0, downloads: 0, installs: 0, beforeInstall: 0 };
+  const calls = {
+    checks: 0,
+    downloads: 0,
+    installs: 0,
+    beforeInstall: 0,
+    /** Every channel the updater was pointed at, in order. */
+    channels: [] as Array<UpdateChannel>,
+    saved: [] as Array<UpdateChannel>,
+  };
   const checks = options.checks ?? [undefined];
   const downloads = options.downloads ?? [Stream.make(40, 100)];
   const updater = Updater.of({
     currentVersion: "1.0.0",
     disabledReason: options.disabledReason,
+    setChannel: (channel) => Effect.sync(() => void calls.channels.push(channel)),
     check: Effect.suspend(() => {
       const next = checks[Math.min(calls.checks++, checks.length - 1)];
       return next instanceof UpdaterError ? Effect.fail(next) : Effect.succeed(next);
@@ -34,8 +48,16 @@ const fakeUpdater = (options: FakeOptions = {}) => {
         : Effect.void;
     }),
   });
+  const settings = DesktopSettings.of({
+    updateChannel: Effect.succeed(options.channel ?? "latest"),
+    setUpdateChannel: (channel) =>
+      options.saveFails
+        ? Effect.fail(new SettingsError({ message: "disk full" }))
+        : Effect.sync(() => void calls.saved.push(channel)),
+  });
   const service = DesktopUpdates.make({ beforeInstall: Effect.sync(() => calls.beforeInstall++) }).pipe(
     Effect.provideService(Updater, updater),
+    Effect.provideService(DesktopSettings, settings),
   );
   return { calls, service };
 };
@@ -52,6 +74,7 @@ describe("DesktopUpdates", () => {
       expect(yield* updates.state).toEqual({
         status: "disabled",
         currentVersion: "1.0.0",
+        channel: "latest",
         message: "dev build",
       });
     }).pipe(Effect.scoped),
@@ -178,6 +201,71 @@ describe("DesktopUpdates", () => {
       yield* TestClock.adjust("1 hour");
       expect(calls.checks).toBe(1);
       expect((yield* updates.state).status).toBe("downloaded");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("starts on the saved channel", () =>
+    Effect.gen(function* () {
+      const { calls, service } = fakeUpdater({ channel: "nightly" });
+      const updates = yield* service;
+
+      expect(calls.channels).toEqual(["nightly"]);
+      expect((yield* updates.state).channel).toBe("nightly");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("switching channels saves it and checks the new channel right away", () =>
+    Effect.gen(function* () {
+      const { calls, service } = fakeUpdater({ checks: ["1.1.0", "1.2.0-nightly.20261012173210"] });
+      const updates = yield* service;
+      yield* updates.check;
+      expect(yield* updates.state).toMatchObject({ channel: "latest", availableVersion: "1.1.0" });
+
+      yield* updates.setChannel("nightly");
+
+      expect(calls.saved).toEqual(["nightly"]);
+      expect(calls.channels).toEqual(["latest", "nightly"]);
+      expect(calls.checks).toBe(2);
+      expect(yield* updates.state).toMatchObject({
+        status: "available",
+        channel: "nightly",
+        availableVersion: "1.2.0-nightly.20261012173210",
+      });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("picking the current channel does nothing", () =>
+    Effect.gen(function* () {
+      const { calls, service } = fakeUpdater();
+      const updates = yield* service;
+      yield* updates.setChannel("latest");
+
+      expect(calls.saved).toEqual([]);
+      expect(calls.checks).toBe(0);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("keeps the old channel when it can't be saved", () =>
+    Effect.gen(function* () {
+      const { calls, service } = fakeUpdater({ saveFails: true });
+      const updates = yield* service;
+      const result = yield* Effect.result(updates.setChannel("nightly"));
+
+      expect(result._tag).toBe("Failure");
+      expect(calls.channels).toEqual(["latest"]);
+      expect((yield* updates.state).channel).toBe("latest");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("saves the channel while updates are disabled, without checking", () =>
+    Effect.gen(function* () {
+      const { calls, service } = fakeUpdater({ disabledReason: "dev build" });
+      const updates = yield* service;
+      yield* updates.setChannel("nightly");
+
+      expect(calls.saved).toEqual(["nightly"]);
+      expect(calls.checks).toBe(0);
+      expect(yield* updates.state).toMatchObject({ status: "disabled", channel: "nightly" });
     }).pipe(Effect.scoped),
   );
 });

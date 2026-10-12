@@ -1,6 +1,7 @@
 /**
  * Owns the update state. Checks shortly after startup and then on an interval;
- * downloading and installing only happen when the user asks.
+ * downloading and installing only happen when the user asks. The channel
+ * (stable or nightly) comes from the saved settings.
  */
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -10,6 +11,8 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
+import { DesktopSettings, type SettingsError } from "../settings.ts";
+import type { UpdateChannel } from "./channel.ts";
 import * as Machine from "./updateMachine.ts";
 import { Updater } from "./Updater.ts";
 
@@ -30,14 +33,19 @@ export class DesktopUpdates extends Context.Service<
     readonly check: Effect.Effect<void>;
     readonly download: Effect.Effect<void>;
     readonly install: Effect.Effect<void>;
+    /** Saves the channel, points the updater at it and checks it right away. */
+    readonly setChannel: (channel: UpdateChannel) => Effect.Effect<void, SettingsError>;
   }
 >()("@tiklive/desktop/DesktopUpdates") {}
 
 export const make = (options: DesktopUpdatesOptions = {}) =>
   Effect.gen(function* () {
     const updater = yield* Updater;
+    const settings = yield* DesktopSettings;
+    const channel = yield* settings.updateChannel;
+    yield* updater.setChannel(channel);
     const ref = yield* SubscriptionRef.make(
-      Machine.initialState(updater.currentVersion, updater.disabledReason),
+      Machine.initialState(updater.currentVersion, channel, updater.disabledReason),
     );
     // One action at a time: a poll never races a download or an install.
     const lock = yield* Semaphore.make(1);
@@ -79,6 +87,18 @@ export const make = (options: DesktopUpdatesOptions = {}) =>
       }
     }).pipe(lock.withPermits(1));
 
+    const setChannel = (next: UpdateChannel) =>
+      Effect.gen(function* () {
+        if ((yield* SubscriptionRef.get(ref)).channel === next) return false;
+        yield* settings.setUpdateChannel(next);
+        yield* updater.setChannel(next);
+        yield* update((state) => Machine.onChannelChange(state, next));
+        return true;
+      }).pipe(
+        lock.withPermits(1),
+        Effect.flatMap((changed) => (changed ? check : Effect.void)),
+      );
+
     if (updater.disabledReason === undefined) {
       yield* check.pipe(
         Effect.repeat(Schedule.spaced(POLL_INTERVAL)),
@@ -93,6 +113,7 @@ export const make = (options: DesktopUpdatesOptions = {}) =>
       check,
       download,
       install,
+      setChannel,
     });
   });
 

@@ -26,8 +26,13 @@ in your keychain and notarizes with an App Store Connect API key. Windows builds
 
 ## Releases and updates
 
-The release workflow builds the signed macOS DMGs and the Windows installer, and attaches them to the `vX.Y.Z`
-GitHub Release with the `latest*.yml` files the updater reads. The app's version is the `tiklive` package version.
+The release workflow builds the signed macOS DMGs and the Windows installer for both channels. Stable releases
+(`vX.Y.Z`) carry `latest*.yml` update files; nightly prereleases (`vX.Y.Z-nightly.<timestamp>`) carry
+`nightly*.yml`. The app's version is the `tiklive` package version.
+
+The update channel (`latest` or `nightly`) is saved in `desktop-settings.json` in the app's data folder and set on
+the Settings page (`examples/overlays/settings.html`, About). `src/updates/channel.ts` maps it to electron-updater's `channel`,
+`allowPrerelease` and `allowDowngrade`.
 The signing secrets, the `release` environment and the release steps are in
 [docs/operations/release.md](../../docs/operations/release.md). How updates behave for users is in
 [docs/user/desktop.md](../../docs/user/desktop.md#updates).

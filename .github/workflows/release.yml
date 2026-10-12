@@ -5,7 +5,8 @@ name: Release
 # - Nightly: every push to main with pending changesets. CI runs first. The
 #   changesets are versioned as a snapshot (0.6.0-nightly.20261012173210)
 #   without committing anything, `tiklive` is published under the npm
-#   `nightly` dist-tag, and the commit gets a GitHub prerelease.
+#   `nightly` dist-tag, the desktop app is built, and the commit gets a GitHub
+#   prerelease with the installers and nightly*.yml update files.
 # - Stable: Actions → Release → Run workflow, channel "stable". Promotes the
 #   latest nightly: on that nightly's commit it runs `changeset version`,
 #   merges the version commit into main, publishes `tiklive` to `latest`,
@@ -51,6 +52,9 @@ jobs:
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
 
@@ -91,15 +95,18 @@ jobs:
       - if: steps.version.outputs.version
         run: bun run release
 
-      - name: Create GitHub prerelease
+      # The snapshot's changelog isn't committed, so the notes travel as an artifact.
+      - name: Write release notes
         if: steps.version.outputs.version
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
-          git tag "v$VERSION" && git push origin "v$VERSION"
-          gh release create "v$VERSION" --prerelease --latest=false --title "v$VERSION" --notes-file notes.md
+        run: awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
+
+      - if: steps.version.outputs.version
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: notes.md
 
   stable:
     name: Stable
@@ -181,27 +188,46 @@ jobs:
       # Skips the package if this version is already on npm.
       - run: bun run release
 
+      - name: Write release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: notes.md
+
+  # Both channels. A version's prerelease suffix makes electron-builder write
+  # nightly*.yml instead of latest*.yml, which is how the app tells them apart.
   desktop:
     name: Desktop
-    needs: stable
+    needs: [nightly, stable]
+    if: ${{ !failure() && !cancelled() && (needs.nightly.outputs.version != '' || needs.stable.outputs.version != '') }}
     uses: ./.github/workflows/release-desktop.yml
     with:
-      version: ${{ needs.stable.outputs.version }}
-      ref: ${{ needs.stable.outputs.sha }}
+      version: ${{ needs.nightly.outputs.version || needs.stable.outputs.version }}
+      ref: ${{ needs.nightly.outputs.version && needs.nightly.outputs.sha || needs.stable.outputs.sha }}
     secrets: inherit
 
   # Created only once every installer is built, like t3code: the desktop
   # app's updater reads the latest release, so it must never see one without
   # its latest*.yml files.
+  # Nightlies are prereleases, never marked latest: the stable channel reads
+  # the latest release, the nightly channel the newest nightly prerelease.
   github-release:
     name: GitHub Release
-    needs: [stable, desktop]
+    needs: [nightly, stable, desktop]
+    if: ${{ !failure() && !cancelled() && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.nightly.outputs.version || needs.stable.outputs.version }}
+      NIGHTLY: ${{ needs.nightly.outputs.version != '' }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.stable.outputs.sha }}
+          ref: ${{ needs.nightly.outputs.version && needs.nightly.outputs.sha || needs.stable.outputs.sha }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -209,12 +235,17 @@ jobs:
           merge-multiple: true
           path: release-assets
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.stable.outputs.version }}
         run: |
-          # Release notes: this version's section of the server changelog.
-          awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
           git tag "v$VERSION" && git push origin "v$VERSION"
-          gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md release-assets/*
+          if [[ "$NIGHTLY" == "true" ]]; then
+            gh release create "v$VERSION" --prerelease --latest=false --title "v$VERSION" --notes-file notes.md release-assets/*
+          else
+            gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md release-assets/*
+          fi

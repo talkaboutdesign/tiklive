@@ -3,6 +3,7 @@
  * the state and decides when each transition runs; this file only says what
  * the next state is.
  */
+import type { UpdateChannel } from "./channel.ts";
 
 export type UpdateStatus =
   | "disabled"
@@ -19,6 +20,8 @@ export type UpdateErrorContext = "check" | "download" | "install";
 export interface UpdateState {
   readonly status: UpdateStatus;
   readonly currentVersion: string;
+  /** Where updates come from: stable releases or nightlies. */
+  readonly channel: UpdateChannel;
   /** The newer version, once a check finds one. Kept through download, install and their errors. */
   readonly availableVersion?: string;
   /** 0–100 while downloading. */
@@ -33,16 +36,27 @@ export interface UpdateState {
 /** What the update button should do in this state. */
 export type UpdateAction = "download" | "install" | "none";
 
-export const initialState = (currentVersion: string, disabledReason?: string): UpdateState =>
+export const initialState = (
+  currentVersion: string,
+  channel: UpdateChannel,
+  disabledReason?: string,
+): UpdateState =>
   disabledReason === undefined
-    ? { status: "idle", currentVersion }
-    : { status: "disabled", currentVersion, message: disabledReason };
+    ? { status: "idle", currentVersion, channel }
+    : { status: "disabled", currentVersion, channel, message: disabledReason };
 
-const base = ({ currentVersion, checkedAt }: UpdateState): UpdateState => ({
+const base = ({ currentVersion, channel, checkedAt }: UpdateState): UpdateState => ({
   status: "idle",
   currentVersion,
+  channel,
   ...(checkedAt !== undefined ? { checkedAt } : {}),
 });
+
+/** A new channel starts over: what the old one found no longer applies. */
+export const onChannelChange = (state: UpdateState, channel: UpdateChannel): UpdateState =>
+  state.status === "disabled"
+    ? { ...state, channel }
+    : { status: "idle", currentVersion: state.currentVersion, channel };
 
 export const onCheckStart = (state: UpdateState): UpdateState => ({
   ...base(state),

@@ -13,6 +13,7 @@ const bridge: DesktopBridge = {
     check: () => ipcRenderer.invoke(IPC.updateCheck),
     download: () => ipcRenderer.invoke(IPC.updateDownload),
     install: () => ipcRenderer.invoke(IPC.updateInstall),
+    setChannel: (channel) => ipcRenderer.invoke(IPC.updateSetChannel, channel),
     onState: (listener) => {
       const handler = (_event: IpcRendererEvent, state: UpdateState) => listener(state);
       ipcRenderer.on(IPC.updateState, handler);

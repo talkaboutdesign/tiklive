@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { type UpdateChannel, updaterOptions } from "./channel.ts";
 
 export class UpdaterError extends Schema.TaggedError<UpdaterError>()("UpdaterError", {
   message: Schema.String,
@@ -20,6 +21,8 @@ export class Updater extends Context.Service<
     readonly currentVersion: string;
     /** Why updates are off (e.g. a dev build), or undefined when they're on. */
     readonly disabledReason: string | undefined;
+    /** Points the feed at a channel. Later checks look for updates there. */
+    readonly setChannel: (channel: UpdateChannel) => Effect.Effect<void>;
     /** Asks the feed for a newer version. Resolves to that version, or undefined when up to date. */
     readonly check: Effect.Effect<string | undefined, UpdaterError>;
     /** Downloads the version the last check found. Emits progress (0–100) and ends when done. */
@@ -52,6 +55,14 @@ export const electronLayer = (options: { readonly isPackaged: boolean; readonly 
       return Updater.of({
         currentVersion: options.currentVersion,
         disabledReason,
+        setChannel: (channel) =>
+          Effect.sync(() => {
+            const feed = updaterOptions(channel, options.currentVersion);
+            // Setting `channel` also turns allowDowngrade on, so the flags are set after it.
+            autoUpdater.channel = feed.channel;
+            autoUpdater.allowPrerelease = feed.allowPrerelease;
+            autoUpdater.allowDowngrade = feed.allowDowngrade;
+          }),
         check: Effect.tryPromise({
           try: () => autoUpdater.checkForUpdates(),
           catch: (cause) => new UpdaterError({ message: messageOf(cause) }),

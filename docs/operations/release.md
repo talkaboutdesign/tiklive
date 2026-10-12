@@ -33,10 +33,14 @@ the **Release** workflow (`release.yml`):
    for example `0.6.0-nightly.20261012173210` while `0.6.0` is pending. Nothing is committed: the changesets
    stay pending on `main` until a stable release.
 3. `tiklive` is published under the npm `nightly` dist-tag (`npx tiklive@nightly`). `latest` doesn't move.
-4. The commit is tagged `vX.Y.Z-nightly.<timestamp>` and gets a GitHub prerelease with the pending changelog.
-   Prereleases are never marked latest, so the desktop app's updater ignores them.
+4. The desktop app is built and signed from that commit (`release-desktop.yml`). With a nightly version,
+   electron-builder writes `nightly*.yml` update files instead of `latest*.yml`.
+5. The commit is tagged `vX.Y.Z-nightly.<timestamp>` and gets a GitHub prerelease with the pending changelog,
+   the installers and the `nightly*.yml` files. Prereleases are never marked latest.
 
-Nightlies don't include desktop installers yet.
+Desktop users choose their channel in **Settings** → **Update channel**. On Stable the app reads the latest
+release (`latest*.yml`). On Nightly it reads the newest `v*-nightly.*` prerelease (`nightly*.yml`). A nightly
+build defaults to Nightly. See [docs/user/desktop.md](../user/desktop.md#stable-or-nightly).
 
 To build a nightly of `main` without a new merge (for example to retry a failed one): Actions → **Release** →
 **Run workflow** on `main`, channel `nightly`.
@@ -63,7 +67,7 @@ To change what the stable release contains, change what's on `main` and wait for
 ### When something fails
 
 - **CI fails on a push:** no nightly was published. Fix it in a new PR.
-- **A nightly fails to publish:** run **Release** with channel `nightly`.
+- **A nightly fails to publish:** run **Release** with channel `nightly`. A new nightly version is cut each run.
 - **The version commit can't be merged into `main`** (a conflict): nothing was published. Fix `main`, wait for the
   next nightly, and promote that.
 - **npm publish fails after the version commit:** fix the cause, then use **Re-run failed jobs**, or run

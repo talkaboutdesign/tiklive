@@ -175,6 +175,21 @@
                   <span class="row-value" id="version">—</span>
                 </div>
               </div>
+              <div class="row" id="channel-row" hidden>
+                <div class="row-text">
+                  <div class="row-title">Update channel</div>
+                  <div class="row-desc">
+                    Stable gets tested releases. Nightly gets every change as soon as it's merged, so it can
+                    have bugs.
+                  </div>
+                </div>
+                <div class="row-control">
+                  <div class="segmented" role="radiogroup" aria-label="Update channel">
+                    <label><input type="radio" name="channel" value="latest" /> Stable</label>
+                    <label><input type="radio" name="channel" value="nightly" /> Nightly</label>
+                  </div>
+                </div>
+              </div>
               <div class="row" id="updates-row" hidden>
                 <div class="row-text">
                   <div class="row-title">Updates</div>
@@ -423,11 +438,35 @@
               return `tiklive ${s.currentVersion}. Not checked yet.`;
           }
         };
+        // Switching saves the channel and checks it right away. Not mid-download.
+        const channels = document.querySelectorAll('input[name="channel"]');
+        let changingChannel = false;
         const renderUpdate = (s) => {
           $("update-text").textContent = updateText(s);
           $("update-check").disabled = ["checking", "downloading", "disabled"].includes(s.status);
+          for (const radio of channels) {
+            if (!changingChannel) radio.checked = radio.value === s.channel;
+            radio.disabled = changingChannel || s.status === "downloading";
+          }
         };
         $("update-check").addEventListener("click", () => updates.check());
+        for (const radio of channels) {
+          radio.addEventListener("change", async () => {
+            if (!radio.checked) return;
+            changingChannel = true;
+            for (const other of channels) other.disabled = true;
+            try {
+              await updates.setChannel(radio.value);
+              toast(radio.value === "nightly" ? "Following nightly builds" : "Following stable releases");
+            } catch {
+              toast("Couldn't change the update channel. Try again.", { error: true });
+            } finally {
+              changingChannel = false;
+              renderUpdate(await updates.getState());
+            }
+          });
+        }
+        $("channel-row").hidden = false;
         let pushed = false;
         updates.onState((s) => {
           pushed = true;
