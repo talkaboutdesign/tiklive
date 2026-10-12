@@ -79,7 +79,9 @@ the streamer goes live.
 - **`--token`** requires a secret for the API and WebSocket. It is required when `--host` is not localhost.
 - Inputs are validated against the schemas. The simulate endpoint requires JSON, with a 64 KB body limit.
 - Each WebSocket can follow at most 20 streamers by default (`maxSubscriptionsPerSocket`). Slow subscribers
-  lose their oldest messages rather than making the server buffer without limit.
+  lose their oldest messages. The Node and Bun platform layers also disconnect sockets whose outgoing
+  buffer exceeds 1 MiB, so a slow overlay cannot accumulate an unlimited network send queue. The client
+  reconnects automatically; events dropped while it is behind cannot be recovered beyond recent replay.
 - Static files get security headers and a Content-Security-Policy. The Host and Origin checks apply to `/api`
   and `/ws` only, so don't put secrets in the static directory.
 
