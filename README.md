@@ -5,6 +5,9 @@ typed JSON events for stream overlays: chats, gifts, likes, follows, shares, joi
 It ships a browser client, starter overlays (chat, alerts, goal bar), a dashboard, and a demo mode, so you
 can build overlays without being live.
 
+**[Download the desktop app for macOS and Windows](https://github.com/talkaboutdesign/tiklive/releases/latest)**,
+or run `npx tiklive`.
+
 ## Why
 
 - No third-party signing service, no TikTok login, no headless browser. tiklive makes plain HTTPS calls to
