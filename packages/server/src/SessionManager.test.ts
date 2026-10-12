@@ -210,6 +210,32 @@ describe("SessionManager viewer points", () => {
     user: { userId, uniqueId: `u${userId}`, nickname: `User ${userId}`, profilePictureUrl: "" },
   });
 
+  it.effect("keeps earning points with empty rules and supplies the total when a rule is added", () => {
+    const points = PointsStore.layerMemory;
+    const rules = RulesStore.layerMemory();
+    const engine = RuleEngine.layer.pipe(Layer.provide(Layer.mergeAll(rules, FetchHttpClient.layer)));
+    const manager = SessionManager.layer().pipe(
+      Layer.provide(Layer.mergeAll(fakeTikTokWebLayer(), fakeWebSocketLayer().layer, points, engine)),
+    );
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const sessions = yield* SessionManager.SessionManager;
+        const store = yield* RulesStore.RulesStore;
+        const session = yield* sessions.acquire("someone");
+        yield* session.inject(follow("1"));
+        yield* store.replace(0, [{ ...DANCE, steps: [{ kind: "speak", text: "{points} points" }] }]);
+        const subscription = yield* session.subscribe;
+        yield* session.inject(chat("!dance"));
+        while (true) {
+          const message = yield* PubSub.take(subscription);
+          if (message._tag !== "Action") continue;
+          expect(message.action.steps).toEqual([{ kind: "speak", text: "51 points" }]);
+          break;
+        }
+      }).pipe(Effect.provide(Layer.mergeAll(manager, rules))),
+    );
+  });
+
   /** A RuleEngine that records the viewer's points as seen when it runs, and fires nothing. */
   const pointsSeenByRules = (seen: Array<number | undefined>) =>
     Layer.effect(
@@ -217,9 +243,10 @@ describe("SessionManager viewer points", () => {
       Effect.gen(function* () {
         const points = yield* PointsStore.PointsStore;
         return RuleEngine.RuleEngine.of({
-          fire: (username, event) =>
+          fire: (username, event, extra) =>
             Effect.gen(function* () {
               const viewer = yield* points.get(username, event.type === "follow" ? event.user.userId : "");
+              expect(extra?.points).toBe(Option.isSome(viewer) ? String(viewer.value.points) : undefined);
               seen.push(Option.getOrUndefined(Option.map(viewer, (v) => v.points)));
               return [];
             }),

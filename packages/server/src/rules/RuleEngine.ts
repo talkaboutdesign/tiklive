@@ -46,6 +46,13 @@ export class RuleEngine extends Context.Service<
       /** Room identity keeps per-stream state correct across session eviction. */
       roomId?: string,
     ) => Effect.Effect<ReadonlyArray<FiredAction>>;
+    /** Like `fire`, but resolves extra template values only when rules exist. Optional for custom engines. */
+    readonly fireWithExtras?: (
+      username: string,
+      event: LiveEvent,
+      extra: () => Effect.Effect<Vars>,
+      roomId?: string,
+    ) => Effect.Effect<ReadonlyArray<FiredAction>>;
     /**
      * Fires one rule with a made-up event that matches its trigger, ignoring `enabled`
      * and cooldowns, for the editor's Test button. None if no rule has this id.
@@ -152,17 +159,25 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
         }
       });
 
-    const fire = (
+    const fireWithExtras = (
       username: string,
       event: LiveEvent,
-      extra: Vars = {},
+      extra: () => Effect.Effect<Vars>,
       roomId?: string,
     ): Effect.Effect<ReadonlyArray<FiredAction>> =>
       Effect.gen(function* () {
         const { rules } = yield* store.get;
+        if (rules.length === 0) {
+          // Keep likes and stream identity current, so adding a rule mid-stream keeps its semantics.
+          return yield* Effect.sync(() => {
+            evaluate(rules, stateFor(username, roomId), event, 0);
+            return [];
+          });
+        }
+        const vars = yield* extra();
         const now = yield* Clock.currentTimeMillis;
         const firings = yield* Effect.try({
-          try: () => evaluate(rules, stateFor(username, roomId), event, now, extra),
+          try: () => evaluate(rules, stateFor(username, roomId), event, now, vars),
           catch: (cause) => cause,
         }).pipe(
           Effect.catch((cause) =>
@@ -179,6 +194,9 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
         }
         return actions;
       });
+
+    const fire = (username: string, event: LiveEvent, extra: Vars = {}, roomId?: string) =>
+      fireWithExtras(username, event, () => Effect.succeed(extra), roomId);
 
     const test = (_username: string, ruleId: string): Effect.Effect<Option.Option<FiredAction>> =>
       Effect.gen(function* () {
@@ -207,6 +225,6 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
         return Option.some(action);
       });
 
-    return RuleEngine.of({ fire, test });
+    return RuleEngine.of({ fire, fireWithExtras, test });
   }),
 );
