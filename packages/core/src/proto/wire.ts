@@ -9,12 +9,13 @@
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 
-export const enum WireType {
-  Varint = 0,
-  Fixed64 = 1,
-  LengthDelimited = 2,
-  Fixed32 = 5,
-}
+export const WireType = {
+  Varint: 0,
+  Fixed64: 1,
+  LengthDelimited: 2,
+  Fixed32: 5,
+} as const;
+export type WireType = (typeof WireType)[keyof typeof WireType];
 
 type FieldValue = bigint | Uint8Array;
 
@@ -23,8 +24,10 @@ export class ProtoDecodeError extends Error {}
 /** A parsed protobuf message with typed accessors by field number. */
 export class ProtoMessage {
   private readonly fields = new Map<number, FieldValue[]>();
+  readonly buffer: Uint8Array;
 
-  constructor(readonly buffer: Uint8Array) {
+  constructor(buffer: Uint8Array) {
+    this.buffer = buffer;
     let pos = 0;
     const buf = buffer;
 

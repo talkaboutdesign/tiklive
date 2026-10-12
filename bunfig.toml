@@ -1,0 +1,3 @@
+[install]
+# Supply-chain guard: don't install package versions published less than 3 days ago.
+minimumReleaseAge = 259200

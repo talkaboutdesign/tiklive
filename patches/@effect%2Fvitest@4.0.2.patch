@@ -1,0 +1,60 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 845cb4ced32bae844be9750f5ff390f8b15077eb..24ede42dac1350e679a03014866c3bae8d7463a3 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -10,14 +10,14 @@ import type * as Effect from "effect/Effect";
+ import type * as Layer from "effect/Layer";
+ import type * as Schema from "effect/Schema";
+ import type * as Scope from "effect/Scope";
+-import type * as V from "vitest";
++import type * as V from "vite-plus/test";
+ /**
+  * Re-exports the `vitest` API unchanged.
+  *
+  * @stability unstable
+  * @since 4.0.0
+  */
+-export * from "vitest";
++export * from "vite-plus/test";
+ /**
+  * Vitest test API without additional fixtures.
+  *
+diff --git a/dist/index.js b/dist/index.js
+index 178cc744c116d36f55bbb0263af9a2ea42f0294e..928929641624054366e742431423b738971992e8 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -5,7 +5,7 @@ import * as internal from "./internal/internal.js";
+  * @stability unstable
+  * @since 4.0.0
+  */
+-export * from "vitest";
++export * from "vite-plus/test";
+ /**
+  * Invokes the Effect Vitest equality-tester registration hook.
+  *
+diff --git a/dist/internal/internal.js b/dist/internal/internal.js
+index 7138319bb00fb82572338e74ddc8947aa7c2967e..4092c672a46fcfb8b464aec0df425706dc32ada7 100644
+--- a/dist/internal/internal.js
++++ b/dist/internal/internal.js
+@@ -12,7 +12,7 @@ import * as Schedule from "effect/Schedule";
+ import * as Scope from "effect/Scope";
+ import * as TestClock from "effect/testing/TestClock";
+ import * as TestConsole from "effect/testing/TestConsole";
+-import * as V from "vitest";
++import * as V from "vite-plus/test";
+ const getCurrentSuite = V.TestRunner.getCurrentSuite;
+ const runPromise = /*#__PURE__*/Effect.fnUntraced(function* (effect, _ctx) {
+   const exit = yield* Effect.exit(effect);
+diff --git a/dist/utils.js b/dist/utils.js
+index b97edbe54c33fc5dd343ff902414a1199c2664b5..7dfd64ae44ea8f62fc55f6bb4bd58120a16837d8 100644
+--- a/dist/utils.js
++++ b/dist/utils.js
+@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
+ import * as Predicate from "effect/Predicate";
+ import * as Result from "effect/Result";
+ import * as assert from "node:assert";
+-import { assert as vassert } from "vitest";
++import { assert as vassert } from "vite-plus/test";
+ // ----------------------------
+ // Primitives
+ // ----------------------------

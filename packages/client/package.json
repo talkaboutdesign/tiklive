@@ -1,0 +1,18 @@
+{
+  "name": "@tiklive/client",
+  "version": "0.1.0",
+  "description": "Typed browser/Node client for tiklive servers. Zero runtime dependencies.",
+  "license": "MIT",
+  "type": "module",
+  "repository": { "type": "git", "url": "https://github.com/talkaboutdesign/tiklive", "directory": "packages/client" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": ["dist", "src", "!src/**/*.test.ts"],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vp test run"
+  },
+  "dependencies": { "@tiklive/contracts": "workspace:*" },
+  "devDependencies": { "@effect/vitest": "catalog:" }
+}

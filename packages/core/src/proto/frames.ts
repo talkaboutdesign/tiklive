@@ -1,6 +1,6 @@
 import { gunzip } from 'node:zlib';
 import { promisify } from 'node:util';
-import { decode, ProtoWriter } from './wire.js';
+import { decode, ProtoWriter } from './wire.ts';
 
 const gunzipAsync = promisify(gunzip);
 const textEncoder = new TextEncoder();

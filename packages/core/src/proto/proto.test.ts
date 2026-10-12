@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from "@effect/vitest";
 import { gzipSync } from 'node:zlib';
-import { decode, ProtoWriter } from '../src/proto/wire.js';
+import { decode, ProtoWriter } from './wire.ts';
 import {
   decodeFetchResult,
   decodePushFrame,
@@ -8,8 +8,8 @@ import {
   encodeAck,
   encodeHeartbeat,
   encodePushFrame,
-} from '../src/proto/frames.js';
-import { decodeLiveEvent } from '../src/proto/messages.js';
+} from './frames.ts';
+import { decodeLiveEvent } from './messages.ts';
 
 const user = (id: string, handle: string, nickname: string) =>
   new ProtoWriter()
