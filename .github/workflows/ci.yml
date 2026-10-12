@@ -3,6 +3,9 @@ name: CI
 # Pushes to main run this through release.yml, which ships only if it passes.
 on:
   pull_request:
+  # Checks main after every merge. Cheap, unlike a release.
+  push:
+    branches: [main]
   workflow_call:
 
 permissions:

@@ -5,7 +5,8 @@
 tiklive ships as one npm package, `tiklive`, and one desktop app. Both get the same version. Releases use
 [Changesets](https://github.com/changesets/changesets) and GitHub Actions, on two channels, with no approvals:
 
-- **Nightly:** every merge to `main` with a changeset publishes a nightly on its own.
+- **Nightly:** built on a schedule, at most every six hours, when `main` has new commits and pending changesets.
+  Merging a PR doesn't build one by itself.
 - **Stable:** one button promotes the latest nightly.
 
 This follows [T3 Code's release flow](https://github.com/pingdotgg/t3code/blob/main/docs/operations/release.md).
@@ -25,10 +26,13 @@ A PR without a changeset (docs, CI, tests) doesn't release anything when it merg
 
 ## Nightly
 
-Only the maintainer can merge to `main`: they're the only collaborator with write access. Every push to `main` runs
-the **Release** workflow (`release.yml`):
+Only the maintainer can merge to `main`: they're the only collaborator with write access. CI (`ci.yml`) runs on
+every push to `main`, but releasing is separate. The **Release** workflow (`release.yml`) runs every hour, and its
+first job decides whether a nightly is due: the last nightly is at least six hours old and `main` has commits it
+doesn't have. Otherwise the run stops there, so a busy day of merges makes at most four nightlies, and a quiet day
+none. When one is due:
 
-1. CI (`ci.yml`) runs against the pushed commit. If it fails, nothing ships.
+1. CI runs against `main`'s head commit. If it fails, nothing ships.
 2. With pending changesets, `changeset version --snapshot nightly` versions them as a nightly of the next version,
    for example `0.6.0-nightly.20261012173210` while `0.6.0` is pending. Nothing is committed: the changesets
    stay pending on `main` until a stable release.
@@ -42,7 +46,7 @@ Desktop users choose their channel in **Settings** → **Update channel**. On St
 release (`latest*.yml`). On Nightly it reads the newest `v*-nightly.*` prerelease (`nightly*.yml`). A nightly
 build defaults to Nightly. See [docs/user/desktop.md](../user/desktop.md#stable-or-nightly).
 
-To build a nightly of `main` without a new merge (for example to retry a failed one): Actions → **Release** →
+To build a nightly of `main` right away (to ship sooner than the schedule, or to retry a failed one): Actions → **Release** →
 **Run workflow** on `main`, channel `nightly`.
 
 ## Stable
