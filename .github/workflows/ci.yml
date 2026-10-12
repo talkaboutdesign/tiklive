@@ -20,11 +20,11 @@ jobs:
     name: Typecheck and lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Read Bun version from package.json
         id: bun
         run: echo "version=$(node -p "require('./package.json').packageManager?.split('@')[1] ?? '1.4.3'")" >> "$GITHUB_OUTPUT"
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ steps.bun.outputs.version }}
       - run: bun install --frozen-lockfile
@@ -35,11 +35,11 @@ jobs:
     name: Tests (Bun)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Read Bun version from package.json
         id: bun
         run: echo "version=$(node -p "require('./package.json').packageManager?.split('@')[1] ?? '1.4.3'")" >> "$GITHUB_OUTPUT"
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ steps.bun.outputs.version }}
       - run: bun install --frozen-lockfile
@@ -49,14 +49,14 @@ jobs:
     name: Tests (Node)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
       - name: Read Bun version from package.json
         id: bun
         run: echo "version=$(node -p "require('./package.json').packageManager?.split('@')[1] ?? '1.4.3'")" >> "$GITHUB_OUTPUT"
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ steps.bun.outputs.version }}
       - run: bun install --frozen-lockfile
@@ -66,11 +66,11 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Read Bun version from package.json
         id: bun
         run: echo "version=$(node -p "require('./package.json').packageManager?.split('@')[1] ?? '1.4.3'")" >> "$GITHUB_OUTPUT"
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: ${{ steps.bun.outputs.version }}
       - run: bun install --frozen-lockfile
