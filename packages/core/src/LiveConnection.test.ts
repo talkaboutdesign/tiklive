@@ -208,6 +208,63 @@ describe("LiveConnection.connect", () => {
     }),
   );
 
+  it.effect("treats a silent socket as dropped after idleTimeout and reconnects", () =>
+    Effect.gen(function* () {
+      const { fiber, events, sockets } = yield* start({
+        roomId: ROOM_ID,
+        heartbeatInterval: "1 hour",
+        idleTimeout: "30 seconds",
+      });
+      yield* waitFor(() => events.length > 0, { label: "Connected" });
+
+      yield* TestClock.adjust("29 seconds");
+      expect(eventsOfTag(events, "Disconnected")).toEqual([]);
+
+      yield* TestClock.adjust("2 seconds");
+      yield* waitFor(() => eventsOfTag(events, "Disconnected").length > 0, { label: "idle disconnect" });
+      expect(events[1]).toMatchObject({
+        _tag: "Disconnected",
+        reason: "network",
+        willReconnect: true,
+        detail: "no data from TikTok for 30 seconds",
+      });
+
+      yield* waitFor(() => sockets.length === 2, { label: "reconnect socket", advance: "1 second" });
+      yield* waitFor(() => eventsOfTag(events, "Connected").length === 2, {
+        label: "second Connected",
+        advance: "1 second",
+      });
+      expect(events.map((e) => e._tag)).toEqual(["Connected", "Disconnected", "Connected"]);
+
+      yield* Fiber.interrupt(fiber);
+    }),
+  );
+
+  it.effect("keeps a socket open while frames arrive within idleTimeout", () =>
+    Effect.gen(function* () {
+      const ws = fakeWebSocketLayer();
+      const { fiber, events, sockets } = yield* start(
+        { roomId: ROOM_ID, heartbeatInterval: "1 hour", idleTimeout: "30 seconds" },
+        {},
+        ws,
+      );
+      yield* waitFor(() => events.length > 0, { label: "Connected" });
+      const socket = sockets[0]!;
+
+      for (let i = 1; i <= 5; i++) {
+        yield* TestClock.adjust("20 seconds");
+        socket.receive(chatFrame(String(i), `hi ${i}`, String(9000 + i)));
+        yield* waitFor(() => chatComments(events).length === i, { label: `chat ${i}` });
+      }
+
+      expect(chatComments(events)).toEqual(["hi 1", "hi 2", "hi 3", "hi 4", "hi 5"]);
+      expect(eventsOfTag(events, "Disconnected")).toEqual([]);
+      expect(sockets).toHaveLength(1);
+
+      yield* Fiber.interrupt(fiber);
+    }),
+  );
+
   it.effect("completes after a streamEnd control message", () =>
     Effect.gen(function* () {
       const ws = fakeWebSocketLayer();

@@ -72,6 +72,8 @@ export interface ConnectOptions {
   readonly reconnect?: false | { readonly maxAttempts?: number; readonly maxDelay?: Duration.Input };
   /** Default 10 seconds. */
   readonly heartbeatInterval?: Duration.Input;
+  /** Treat the socket as dropped when nothing arrives for this long. Default 60 seconds. */
+  readonly idleTimeout?: Duration.Input;
   /** Timeout for the room lookup and for each socket open. Default 15 seconds. */
   readonly connectTimeout?: Duration.Input;
 }
@@ -141,6 +143,7 @@ const run = (
     const web = yield* TikTokWeb;
     const hosts = options.wsHosts ?? DEFAULT_WS_HOSTS;
     const heartbeatInterval = Duration.fromInputUnsafe(options.heartbeatInterval ?? "10 seconds");
+    const idleTimeout = Duration.fromInputUnsafe(options.idleTimeout ?? "60 seconds");
     const connectTimeout = Duration.fromInputUnsafe(options.connectTimeout ?? "15 seconds");
     const reconnect = options.reconnect === false ? undefined : (options.reconnect ?? {});
     const maxAttempts = reconnect?.maxAttempts ?? 10;
@@ -181,8 +184,18 @@ const run = (
           );
 
           while (true) {
+            // Each pull gets its own timeout, so any frame resets the idle clock.
             const chunks = yield* reader.pull.pipe(
               Effect.mapError((error) => new Dropped({ detail: describeSocketError(error) })),
+              Effect.timeoutOrElse({
+                duration: idleTimeout,
+                orElse: () =>
+                  Effect.fail(
+                    new Dropped({
+                      detail: `no data from TikTok for ${Duration.toSeconds(idleTimeout)} seconds`,
+                    }),
+                  ),
+              }),
             );
             for (const chunk of chunks) {
               if (typeof chunk === "string") continue;

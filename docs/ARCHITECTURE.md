@@ -115,7 +115,8 @@ Each connection attempt does three things:
 3. **Socket.** Connects to `wss://webcast-ws.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/`
    and falls back to `webcast-ws.us.tiktok.com`. It sends the `ttwid` cookie and an
    `im_enter_room` frame. A heartbeat goes out every 10 seconds, and each frame with a log ID is
-   acked.
+   acked. If nothing arrives for 60 seconds (`idleTimeout`), the socket counts as dropped and the
+   stream reconnects.
 
 **Why there's no signing.** TikTok's website signs an `im/fetch` request (`X-Bogus`, `X-Gnarly`)
 before it opens the socket. The socket itself doesn't depend on that request. Skipping it is why
