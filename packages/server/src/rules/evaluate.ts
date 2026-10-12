@@ -38,11 +38,18 @@ export const emptyState = (): EngineState => ({
   joinsThisStream: new Set(),
 });
 
+/** Every template variable with its value for this event ("" when it doesn't apply). */
+export type TemplateValues = Record<TemplateVariable, string>;
+
 export interface Firing {
   readonly rule: Rule;
   readonly user?: LiveUser;
   /** Steps with templates filled in. */
   readonly steps: ReadonlyArray<RuleStep>;
+  /** The event's type (`like` for likes milestones). Goes in webhook payloads. */
+  readonly eventType: LiveEvent["type"];
+  /** The template values the steps were rendered with. Goes in webhook payloads. */
+  readonly vars: TemplateValues;
 }
 
 type Vars = Partial<Record<TemplateVariable, string>>;
@@ -72,19 +79,23 @@ const truncate = (text: string): string => {
   return last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut;
 };
 
-/** Replaces `{name}` for known variables present in `vars`. Anything else stays as typed. */
-export const renderTemplate = (text: string, vars: Vars): string =>
-  truncate(
-    text.replace(/\{(\w+)\}/g, (placeholder: string, name: string) => {
-      if (!isTemplateVariable(name)) return placeholder;
-      return vars[name] ?? placeholder;
-    }),
-  );
+/**
+ * Replaces `{name}` for known variables present in `vars`, passing each value through `encode`.
+ * Anything else stays as typed.
+ */
+const fill = (text: string, vars: Vars, encode: (value: string) => string = (value) => value): string =>
+  text.replace(/\{(\w+)\}/g, (placeholder: string, name: string) => {
+    if (!isTemplateVariable(name)) return placeholder;
+    const value = vars[name];
+    return value === undefined ? placeholder : encode(value);
+  });
+
+export const renderTemplate = (text: string, vars: Vars): string => truncate(fill(text, vars));
 
 /** Every template variable the event provides. Ones that don't apply are "". */
-const templateVars = (event: LiveEvent, extra: Vars): Vars => {
+export const templateVars = (event: LiveEvent, extra: Vars = {}): TemplateValues => {
   const user = userOf(event);
-  const vars: Record<TemplateVariable, string> = {
+  const vars: TemplateValues = {
     nickname: user ? user.nickname || user.uniqueId : "",
     username: user?.uniqueId ?? "",
     giftName: "",
@@ -116,22 +127,39 @@ const renderStep = (step: RuleStep, vars: Vars): RuleStep | undefined => {
     }
     case "media":
       return step.text === undefined ? step : { ...step, text: renderTemplate(step.text, vars) };
+    case "webhook":
+      // Values go into the URL percent-encoded, so they can't add a path segment, query or fragment.
+      return {
+        ...step,
+        url: fill(step.url, vars, encodeURIComponent),
+        ...(step.body === undefined ? {} : { body: fill(step.body, vars) }),
+      };
     default:
       return step;
   }
 };
 
 /**
- * The rule's steps with templates filled in for this event. Blank speak steps are
- * dropped. `extra` overrides the event's own variables (likes milestones need this).
+ * The rule's steps with templates filled in for this event, and the template values they
+ * were filled with. Blank speak steps are dropped. `extra` overrides the event's own
+ * variables (likes milestones need this).
  */
-export const renderSteps = (rule: Rule, event: LiveEvent, extra: Vars = {}): ReadonlyArray<RuleStep> => {
+export const renderRule = (
+  rule: Rule,
+  event: LiveEvent,
+  extra: Vars = {},
+): { readonly steps: ReadonlyArray<RuleStep>; readonly vars: TemplateValues } => {
   const vars = templateVars(event, extra);
-  return rule.steps.flatMap((step) => {
+  const steps = rule.steps.flatMap((step) => {
     const rendered = renderStep(step, vars);
     return rendered ? [rendered] : [];
   });
+  return { steps, vars };
 };
+
+/** The rule's steps with templates filled in for this event. See `renderRule`. */
+export const renderSteps = (rule: Rule, event: LiveEvent, extra: Vars = {}): ReadonlyArray<RuleStep> =>
+  renderRule(rule, event, extra).steps;
 
 /** Follows the streamer. Friends (mutual follows) count too. */
 const followsStreamer = (user: LiveUser): boolean =>
@@ -224,8 +252,18 @@ const recordFired = (rule: Rule, user: LiveUser | undefined, state: EngineState,
   if (user) state.lastFiredByUser.set(userKey(rule.id, user.userId), now);
 };
 
-const firing = (rule: Rule, user: LiveUser | undefined, steps: ReadonlyArray<RuleStep>): Firing =>
-  user ? { rule, user, steps } : { rule, steps };
+const firing = (
+  rule: Rule,
+  user: LiveUser | undefined,
+  event: LiveEvent,
+  rendered: ReturnType<typeof renderRule>,
+): Firing => ({
+  rule,
+  ...(user ? { user } : {}),
+  steps: rendered.steps,
+  eventType: event.type,
+  vars: rendered.vars,
+});
 
 /** Likes rules: one check per like event, firing for each newly reached milestone (capped). */
 const likeFirings = (
@@ -242,11 +280,11 @@ const likeFirings = (
   // Advance even when cooling down, so missed milestones don't pile up later.
   state.likeMilestones.set(key, reached);
   if (coolingDown(rule, event.user, state, now)) return [];
-  const steps = renderSteps(rule, event, { likes: String(reached * every) });
-  if (steps.length === 0) return [];
+  const rendered = renderRule(rule, event, { likes: String(reached * every) });
+  if (rendered.steps.length === 0) return [];
   recordFired(rule, event.user, state, now);
   const count = Math.min(reached - prev, MAX_MILESTONES);
-  return Array.from({ length: count }, () => firing(rule, event.user, steps));
+  return Array.from({ length: count }, () => firing(rule, event.user, event, rendered));
 };
 
 /** The rules that fire for this event, in rule order. Updates `state` (likes, cooldowns). */
@@ -278,8 +316,8 @@ export const evaluate = (
     const user = userOf(event);
     if (joinedAlready(rule, trigger, user, state)) continue;
     if (coolingDown(rule, user, state, now)) continue;
-    const steps = renderSteps(rule, event);
-    if (steps.length === 0) continue;
+    const rendered = renderRule(rule, event);
+    if (rendered.steps.length === 0) continue;
 
     // perGift: one firing per gift in the combo (at most 10), with the cooldown checked once.
     const copies =
@@ -290,7 +328,7 @@ export const evaluate = (
     if (trigger.type === "join" && trigger.oncePerStream !== false && user) {
       state.joinsThisStream.add(userKey(rule.id, user.userId));
     }
-    for (let i = 0; i < copies; i++) firings.push(firing(rule, user, steps));
+    for (let i = 0; i < copies; i++) firings.push(firing(rule, user, event, rendered));
   }
   return firings;
 };

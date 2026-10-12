@@ -46,7 +46,7 @@
  *   icon(name, size)              Inline SVG: dashboard | actions | overlays | settings | speaker |
  *                                 speakerOff | menu | external | video | filters | silence | volume | muted |
  *                                 mod | friend | gift | arrowDown | close | retry | media | mic | stop | play |
- *                                 pause | upload | pencil | trash.
+ *                                 pause | upload | pencil | trash | viewers | plus | minus.
  *   debounce(fn, ms)              Delayed call. Has .cancel().
  *   toast(message, { error })     Shows a short notice at the bottom. Auto-hides after 3 s.
  *
@@ -93,7 +93,7 @@
  *
  * Window
  *   mountShell({ page, crumbs, actions })
- *                                 page: "dashboard" | "actions" | "media" | "overlays" | "settings" (marks the
+ *                                 page: "dashboard" | "actions" | "media" | "viewers" | "overlays" | "settings" (marks the
  *                                 nav item). crumbs: string[] for the breadcrumb. actions: Node[]
  *                                 for the header's right side. Fills #sidebar and #page-header.
  *                                 Adds html.desktop-mac on macOS. Returns { setCrumbs(crumbs), setActions(nodes) }.
@@ -111,6 +111,7 @@ export const NAV = Object.freeze([
   { id: "dashboard", label: "Dashboard", href: "/", icon: "dashboard" },
   { id: "actions", label: "Actions", href: "/actions.html", icon: "actions" },
   { id: "media", label: "Media", href: "/media.html", icon: "media" },
+  { id: "viewers", label: "Viewers", href: "/viewers.html", icon: "viewers" },
   { id: "overlays", label: "Overlays", href: "/overlays.html", icon: "overlays" },
   { id: "settings", label: "Settings", href: "/settings.html", icon: "settings" },
 ]);
@@ -361,6 +362,18 @@ const SVG_ICONS = {
     ],
     ["path", { d: "m15 5 4 4" }],
   ],
+  // From Lucide (ISC license), https://lucide.dev
+  viewers: [
+    ["path", { d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" }],
+    ["path", { d: "M16 3.128a4 4 0 0 1 0 7.744" }],
+    ["path", { d: "M22 21v-2a4 4 0 0 0-3-3.87" }],
+    ["circle", { cx: 9, cy: 7, r: 4 }],
+  ],
+  plus: [
+    ["path", { d: "M5 12h14" }],
+    ["path", { d: "M12 5v14" }],
+  ],
+  minus: [["path", { d: "M5 12h14" }]],
   trash: [
     ["path", { d: "M10 11v6" }],
     ["path", { d: "M14 11v6" }],

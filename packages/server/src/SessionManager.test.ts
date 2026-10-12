@@ -5,10 +5,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { FiredAction, LiveEvent, Rule } from "@tiklive/contracts";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import { fakeTikTokWebLayer, fakeWebSocketLayer } from "@tiklive/core/testing";
+import * as PointsStore from "./points/PointsStore.ts";
 import * as RuleEngine from "./rules/RuleEngine.ts";
 import * as RulesStore from "./rules/RulesStore.ts";
 import * as SessionManager from "./SessionManager.ts";
@@ -25,7 +27,11 @@ const managerWithRulesLayer = (rules: ReadonlyArray<Rule>) =>
       Layer.mergeAll(
         fakeTikTokWebLayer({ live: true }),
         fakeWebSocketLayer().layer,
-        RuleEngine.layer.pipe(Layer.provide(RulesStore.layerMemory({ revision: 0, rules }))),
+        RuleEngine.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(RulesStore.layerMemory({ revision: 0, rules }), FetchHttpClient.layer),
+          ),
+        ),
       ),
     ),
   );
@@ -195,4 +201,72 @@ describe("SessionManager", () => {
       }).pipe(Effect.provide(managerLayer({ idleTimeout: "50 millis" }))),
     ),
   );
+});
+
+describe("SessionManager viewer points", () => {
+  const follow = (userId: string): LiveEvent => ({
+    type: "follow",
+    timestamp: 1_700_000_000_000,
+    user: { userId, uniqueId: `u${userId}`, nickname: `User ${userId}`, profilePictureUrl: "" },
+  });
+
+  /** A RuleEngine that records the viewer's points as seen when it runs, and fires nothing. */
+  const pointsSeenByRules = (seen: Array<number | undefined>) =>
+    Layer.effect(
+      RuleEngine.RuleEngine,
+      Effect.gen(function* () {
+        const points = yield* PointsStore.PointsStore;
+        return RuleEngine.RuleEngine.of({
+          fire: (username, event) =>
+            Effect.gen(function* () {
+              const viewer = yield* points.get(username, event.type === "follow" ? event.user.userId : "");
+              seen.push(Option.getOrUndefined(Option.map(viewer, (v) => v.points)));
+              return [];
+            }),
+          test: () => Effect.succeed(Option.none()),
+        });
+      }),
+    );
+
+  it.live("records points before the rules run on the same event", () => {
+    const seen: Array<number | undefined> = [];
+    const points = PointsStore.layerMemory;
+    const layer = SessionManager.layer({ idleTimeout: "10 seconds" }).pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          fakeTikTokWebLayer({ live: true }),
+          fakeWebSocketLayer().layer,
+          pointsSeenByRules(seen).pipe(Layer.provide(points)),
+          points,
+        ),
+      ),
+    );
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        const session = yield* manager.acquire("someone");
+        yield* waitUntil(session.status, (s) => s.state === "live", "live");
+        yield* session.inject(follow("7"));
+        // Follows are worth 50 points by default, so the rules must see 50, not nothing.
+        expect(seen).toEqual([50]);
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+
+  it.live("keeps points without a RuleEngine", () => {
+    const points = PointsStore.layerMemory;
+    const layer = SessionManager.layer({ idleTimeout: "10 seconds" }).pipe(
+      Layer.provide(Layer.mergeAll(fakeTikTokWebLayer({ live: true }), fakeWebSocketLayer().layer, points)),
+    );
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const manager = yield* SessionManager.SessionManager;
+        const session = yield* manager.acquire("someone");
+        yield* waitUntil(session.status, (s) => s.state === "live", "live");
+        yield* session.inject(follow("7"));
+        const store = yield* PointsStore.PointsStore;
+        expect(Option.getOrThrow(yield* store.get("someone", "7")).points).toBe(50);
+      }).pipe(Effect.provide(Layer.mergeAll(layer, points))),
+    );
+  });
 });

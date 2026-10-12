@@ -831,6 +831,33 @@ describe("GET and PUT /api/rules", () => {
     }),
   );
 
+  it.live("saves webhook steps and returns them unchanged, and rejects a non-http webhook URL", () =>
+    serve({}, async (base) => {
+      const hooks = {
+        ...danceRule,
+        steps: [
+          {
+            kind: "webhook",
+            url: "http://192.168.1.20:8080/hook?who={nickname}",
+            method: "PUT",
+            body: '{"n":1}',
+          },
+          { kind: "webhook", url: "https://hooks.example/x" },
+        ],
+      };
+      const saved = await saveRules(base, { revision: 0, rules: [hooks] });
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toEqual({ revision: 1, rules: [hooks] });
+
+      const got = await fetch(`${base.http}/api/rules`);
+      expect(await got.json()).toEqual({ revision: 1, rules: [hooks] });
+
+      const bad = { ...danceRule, steps: [{ kind: "webhook", url: "ftp://files.example/x" }] };
+      const rejected = await saveRules(base, { revision: 1, rules: [bad] });
+      expect(rejected.status).toBe(400);
+    }),
+  );
+
   it.live("returns 409 with the current revision when the save is based on an old one", () =>
     serve({}, async (base) => {
       await saveRules(base, { revision: 0, rules: [danceRule] });
@@ -1225,6 +1252,240 @@ describe("media library", () => {
       expect((await fetch(`${base.http}/api/media`)).status).toBe(401);
       // OBS loads these as plain <img> and <video> sources, without headers.
       expect((await fetch(`${base.http}${item.url}`)).status).toBe(200);
+    });
+  });
+});
+
+describe("viewer points API", () => {
+  const VIEWER = { userId: "7", uniqueId: "fan", nickname: "Fan", profilePictureUrl: "" };
+  const BIG = { userId: "8", uniqueId: "whale", nickname: "Whale", profilePictureUrl: "" };
+  const SESSION = "/api/sessions/alice";
+
+  /** Starts a session for `alice` (no network: fake TikTok) so events can be injected. */
+  const startAlice = (base: Base) => post(base, SESSION);
+  const simulate = (base: Base, body: unknown) => post(base, `${SESSION}/simulate`, body);
+  const follow = (base: Base, user = VIEWER) => simulate(base, { type: "follow", user });
+  const gift = (base: Base, user: typeof BIG, totalDiamonds: number) =>
+    simulate(base, {
+      type: "gift",
+      user,
+      giftId: 1,
+      giftName: "Rose",
+      giftImageUrl: "",
+      diamondCount: totalDiamonds,
+      repeatCount: 1,
+      streaking: false,
+      totalDiamonds,
+      groupId: "g",
+    });
+  const patch = (base: Base, userId: string, body: unknown, headers: Record<string, string> = {}) =>
+    fetch(`${base.http}${SESSION}/points/${userId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+  const putSettings = (base: Base, body: unknown) =>
+    fetch(`${base.http}${SESSION}/points/settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const board = async (base: Base, query = "") => {
+    const res = await fetch(`${base.http}${SESSION}/points${query}`);
+    return { status: res.status, body: (await res.json()) as Msg };
+  };
+  const DEFAULTS = {
+    perMessage: 1,
+    messageCooldownSeconds: 60,
+    likesPerPoint: 20,
+    perCoin: 10,
+    perFollow: 50,
+    perShare: 20,
+    perSubscribe: 200,
+    perJoin: 0,
+  };
+
+  it.live("starts with an empty leaderboard and the default settings, even with no session", () =>
+    serve({}, async (base) => {
+      const res = await board(base);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ settings: DEFAULTS, viewers: [], total: 0 });
+    }),
+  );
+
+  it.live("ranks viewers by points, pages them, and filters by name", () =>
+    serve({}, async (base) => {
+      await startAlice(base);
+      await follow(base); // 50
+      await gift(base, BIG, 30); // 300
+      await follow(base, { ...VIEWER, userId: "9", nickname: "Alicia", uniqueId: "ally" }); // 50
+
+      const all = await board(base);
+      expect(all.body.total).toBe(3);
+      expect(all.body.viewers.map((v: Msg) => v.userId)).toEqual(["8", "7", "9"]);
+      expect(all.body.viewers[0]).toMatchObject({ nickname: "Whale", points: 300, coins: 30, messages: 0 });
+
+      const page = await board(base, "?limit=1&offset=1");
+      expect(page.body).toMatchObject({ total: 3 });
+      expect(page.body.viewers.map((v: Msg) => v.userId)).toEqual(["7"]);
+
+      const filtered = await board(base, "?q=ALI");
+      expect(filtered.body.total).toBe(1);
+      expect(filtered.body.viewers.map((v: Msg) => v.nickname)).toEqual(["Alicia"]);
+    }),
+  );
+
+  it.live("rejects bad paging and search values with 400", () =>
+    serve({}, async (base) => {
+      for (const query of [
+        "?limit=0",
+        "?limit=201",
+        "?limit=2.5",
+        "?limit=abc",
+        "?offset=-1",
+        `?q=${"x".repeat(101)}`,
+      ]) {
+        const res = await board(base, query);
+        expect(res.status, query).toBe(400);
+        expect(res.body).toHaveProperty("error");
+      }
+      expect((await board(base, "?limit=200")).status).toBe(200);
+    }),
+  );
+
+  it.live("returns one viewer, or 404 when there is none", () =>
+    serve({}, async (base) => {
+      await startAlice(base);
+      await follow(base);
+      const found = await fetch(`${base.http}${SESSION}/points/7`);
+      expect(found.status).toBe(200);
+      expect(await found.json()).toMatchObject({ userId: "7", points: 50, uniqueId: "fan" });
+
+      const missing = await fetch(`${base.http}${SESSION}/points/404`);
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({ error: "No points for viewer 404 on @alice" });
+    }),
+  );
+
+  it.live("adjusts a viewer by delta or sets the total, never below 0", () =>
+    serve({}, async (base) => {
+      await startAlice(base);
+      await follow(base); // 50
+
+      const up = await patch(base, "7", { delta: 25 });
+      expect(up.status).toBe(200);
+      expect(await up.json()).toMatchObject({ userId: "7", points: 75 });
+
+      const down = await patch(base, "7", { delta: -1000 });
+      expect(await down.json()).toMatchObject({ points: 0 });
+
+      const set = await patch(base, "7", { set: 12 });
+      expect(await set.json()).toMatchObject({ points: 12 });
+      expect(await (await fetch(`${base.http}${SESSION}/points/7`)).json()).toMatchObject({ points: 12 });
+    }),
+  );
+
+  it.live("rejects adjustments with the wrong fields, and for unknown viewers", () =>
+    serve({}, async (base) => {
+      await startAlice(base);
+      await follow(base);
+      const bad = 'Body must be {"delta": <whole number>} or {"set": <whole number>}';
+      for (const body of [{}, { delta: 1, set: 2 }, { delta: "5" }, { delta: 1.5 }, { set: -1 }]) {
+        const res = await patch(base, "7", body);
+        expect(res.status, JSON.stringify(body)).toBe(400);
+        expect(await res.json()).toEqual({ error: bad });
+      }
+      const notJson = await fetch(`${base.http}${SESSION}/points/7`, {
+        method: "PATCH",
+        headers: { "content-type": "text/plain" },
+        body: '{"delta":1}',
+      });
+      expect(notJson.status).toBe(415);
+      expect((await patch(base, "404", { delta: 1 })).status).toBe(404);
+    }),
+  );
+
+  it.live("saves settings, and the leaderboard uses them", () =>
+    serve({}, async (base) => {
+      const saved = await putSettings(base, { ...DEFAULTS, perFollow: 5 });
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toEqual({ ...DEFAULTS, perFollow: 5 });
+      expect((await board(base)).body.settings).toEqual({ ...DEFAULTS, perFollow: 5 });
+
+      await startAlice(base);
+      await follow(base);
+      expect((await board(base)).body.viewers[0].points).toBe(5);
+    }),
+  );
+
+  it.live("rejects invalid settings with a short message naming the field", () =>
+    serve({}, async (base) => {
+      const res = await putSettings(base, { ...DEFAULTS, perMessage: -1 });
+      expect(res.status).toBe(400);
+      const { error } = (await res.json()) as Msg;
+      expect(error).toContain("perMessage");
+      expect((await putSettings(base, { perMessage: 1 })).status).toBe(400);
+      const notJson = await fetch(`${base.http}${SESSION}/points/settings`, {
+        method: "PUT",
+        headers: { "content-type": "text/plain" },
+        body: JSON.stringify(DEFAULTS),
+      });
+      expect(notJson.status).toBe(415);
+    }),
+  );
+
+  it.live("answers 405 for methods a route doesn't take, and never reads settings as a viewer", () =>
+    serve({}, async (base) => {
+      expect((await fetch(`${base.http}${SESSION}/points/settings`)).status).toBe(405);
+      expect((await fetch(`${base.http}${SESSION}/points`, { method: "POST" })).status).toBe(405);
+      expect((await fetch(`${base.http}${SESSION}/points/7`, { method: "PUT" })).status).toBe(405);
+    }),
+  );
+
+  it.live("resets every viewer and keeps the settings", () =>
+    serve({}, async (base) => {
+      await putSettings(base, { ...DEFAULTS, perFollow: 9 });
+      await startAlice(base);
+      await follow(base);
+      const reset = await fetch(`${base.http}${SESSION}/points`, { method: "DELETE" });
+      expect(reset.status).toBe(200);
+      expect(await reset.json()).toEqual({ ok: true });
+      const after = await board(base);
+      expect(after.body).toEqual({ settings: { ...DEFAULTS, perFollow: 9 }, viewers: [], total: 0 });
+    }),
+  );
+
+  it.live("rejects invalid usernames with 400", () =>
+    serve({}, async (base) => {
+      const res = await fetch(`${base.http}/api/sessions/${encodeURIComponent("not valid!")}/points`);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: "Invalid username" });
+    }),
+  );
+
+  it.live("needs the token, like the rest of the API", () =>
+    serve({ token: "secret" }, async (base) => {
+      expect((await fetch(`${base.http}${SESSION}/points`)).status).toBe(401);
+      expect((await fetch(`${base.http}${SESSION}/points?token=secret`)).status).toBe(200);
+      const res = await fetch(`${base.http}${SESSION}/points/settings`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", authorization: "Bearer nope" },
+        body: JSON.stringify(DEFAULTS),
+      });
+      expect(res.status).toBe(401);
+    }),
+  );
+
+  it.live("answers 500 when the points can't be saved", () => {
+    // A regular file where the data directory should be: nothing can be written.
+    const root = mkdtempSync(join(tmpdir(), "tiklive-points-"));
+    tmpDirs.push(root);
+    const notADir = join(root, "not-a-dir");
+    writeFileSync(notADir, "x");
+    return serve({ dataDir: notADir }, async (base) => {
+      const res = await putSettings(base, { ...DEFAULTS, perFollow: 1 });
+      expect(res.status).toBe(500);
+      expect(await res.json()).toHaveProperty("error");
     });
   });
 });

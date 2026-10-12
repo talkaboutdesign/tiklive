@@ -14,6 +14,8 @@ import {
   LiveEventType,
   MAX_MEDIA_BYTES,
   normalizeUsername,
+  PointsAdjustRequest,
+  PointsSettings,
   PROTOCOL_VERSION,
   SaveRulesRequest,
   Username,
@@ -36,6 +38,7 @@ import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { PointsStore } from "./points/PointsStore.ts";
 import { MediaStore } from "./rules/MediaStore.ts";
 import { RuleEngine } from "./rules/RuleEngine.ts";
 import { RulesStore } from "./rules/RulesStore.ts";
@@ -128,6 +131,8 @@ const MAX_TEST_BODY = 16 * 1024;
 /** Largest JSON body accepted by `POST /api/media/import`. */
 const MAX_IMPORT_BODY = 16 * 1024;
 const MAX_RENAME_BODY = 4 * 1024;
+/** Largest JSON body accepted by the points settings and adjust endpoints. */
+const MAX_POINTS_BODY = 4 * 1024;
 
 const MEDIA_STATUS = { unsupported: 415, tooLarge: 413, disabled: 503, io: 500 } as const;
 
@@ -471,7 +476,8 @@ export const routes = (options: HttpOptions = {}) => {
             const parsed = yield* readJson(request, MAX_RENAME_BODY);
             if (!parsed.ok) return parsed.response;
             const body = Schema.decodeUnknownExit(RenameMediaRequest)(parsed.value);
-            if (body._tag === "Failure") return jsonError(400, 'Body must be {"name": "<1 to 200 characters>"}');
+            if (body._tag === "Failure")
+              return jsonError(400, 'Body must be {"name": "<1 to 200 characters>"}');
             return yield* media.rename(id, body.value.name).pipe(
               Effect.map((item) =>
                 Option.isSome(item) ? json(item.value) : jsonError(404, `No media with id ${id}`),
@@ -503,6 +509,120 @@ export const routes = (options: HttpOptions = {}) => {
         headers: MEDIA_HEADERS,
       }).pipe(Effect.orElseSucceed(() => jsonError(404, "Not found")));
     }),
+  );
+
+  // ---- Viewer points ----
+  // Points belong to the streamer, not to a running session, so these work whether or not they're live.
+
+  /** A whole number from a query parameter in [min, max]. Absent means `fallback`. Undefined when invalid. */
+  const pageNumber = (raw: string | null, fallback: number, min: number, max: number) => {
+    if (raw === null) return fallback;
+    if (!/^\d+$/.test(raw)) return undefined;
+    const value = Number(raw);
+    return value >= min && value <= max ? value : undefined;
+  };
+
+  const pointsRoute = HttpRouter.add(
+    "*",
+    "/api/sessions/:username/points",
+    guarded((request, url) =>
+      Effect.gen(function* () {
+        const params = yield* HttpRouter.params;
+        const username = parseUsername(params.username ?? "");
+        if (!username) return jsonError(400, "Invalid username");
+        const points = yield* PointsStore;
+        switch (request.method) {
+          case "GET": {
+            const limit = pageNumber(url.searchParams.get("limit"), 50, 1, 200);
+            const offset = pageNumber(url.searchParams.get("offset"), 0, 0, 1_000_000_000);
+            if (limit === undefined || offset === undefined) {
+              return jsonError(400, "limit must be 1 to 200, and offset a whole number of 0 or more");
+            }
+            const query = url.searchParams.get("q") ?? "";
+            if (query.length > 100) return jsonError(400, "q must be 100 characters or fewer");
+            return json(yield* points.leaderboard(username, { limit, offset, query }));
+          }
+          case "DELETE":
+            return yield* points.reset(username).pipe(
+              Effect.as(json({ ok: true })),
+              Effect.catchTag("PointsWriteError", (error) => Effect.succeed(jsonError(500, error.message))),
+            );
+          default:
+            return jsonError(405, "Method not allowed");
+        }
+      }),
+    ),
+  );
+
+  // Registered as its own route so `settings` is matched here, not as a viewer id.
+  const pointsSettingsRoute = HttpRouter.add(
+    "*",
+    "/api/sessions/:username/points/settings",
+    guarded((request) =>
+      Effect.gen(function* () {
+        if (request.method !== "PUT") return jsonError(405, "Method not allowed");
+        const params = yield* HttpRouter.params;
+        const username = parseUsername(params.username ?? "");
+        if (!username) return jsonError(400, "Invalid username");
+        const parsed = yield* readJson(request, MAX_POINTS_BODY);
+        if (!parsed.ok) return parsed.response;
+        const body = Schema.decodeUnknownExit(PointsSettings)(parsed.value);
+        if (body._tag === "Failure") {
+          const problem = Exit.findErrorOption(body);
+          return jsonError(
+            400,
+            Option.isSome(problem) ? firstProblem(problem.value.message) : "Invalid settings",
+          );
+        }
+        const points = yield* PointsStore;
+        return yield* points.updateSettings(username, body.value).pipe(
+          Effect.map((saved) => json(saved)),
+          Effect.catchTag("PointsWriteError", (error) => Effect.succeed(jsonError(500, error.message))),
+        );
+      }),
+    ),
+  );
+
+  const pointsViewerRoute = HttpRouter.add(
+    "*",
+    "/api/sessions/:username/points/:userId",
+    guarded((request) =>
+      Effect.gen(function* () {
+        const params = yield* HttpRouter.params;
+        const username = parseUsername(params.username ?? "");
+        if (!username) return jsonError(400, "Invalid username");
+        const userId = params.userId ?? "";
+        const points = yield* PointsStore;
+        switch (request.method) {
+          case "GET": {
+            const viewer = yield* points.get(username, userId);
+            return Option.isSome(viewer)
+              ? json(viewer.value)
+              : jsonError(404, `No points for viewer ${userId} on @${username}`);
+          }
+          case "PATCH": {
+            const parsed = yield* readJson(request, MAX_POINTS_BODY);
+            if (!parsed.ok) return parsed.response;
+            const bad = 'Body must be {"delta": <whole number>} or {"set": <whole number>}';
+            const body = Schema.decodeUnknownExit(PointsAdjustRequest)(parsed.value);
+            if (body._tag === "Failure") return jsonError(400, bad);
+            const { delta, set } = body.value;
+            if ((delta === undefined) === (set === undefined)) return jsonError(400, bad);
+            const change = delta !== undefined ? { delta } : { set: set! };
+            return yield* points.adjust(username, userId, change).pipe(
+              Effect.map((viewer) =>
+                Option.isSome(viewer)
+                  ? json(viewer.value)
+                  : jsonError(404, `No points for viewer ${userId} on @${username}`),
+              ),
+              Effect.catchTag("PointsWriteError", (error) => Effect.succeed(jsonError(500, error.message))),
+            );
+          }
+          default:
+            return jsonError(405, "Method not allowed");
+        }
+      }),
+    ),
   );
 
   // ---- Sound search (MyInstants) ----
@@ -804,6 +924,9 @@ export const routes = (options: HttpOptions = {}) => {
     ruleTestRoute,
     mediaRoute,
     mediaItemRoute,
+    pointsRoute,
+    pointsSettingsRoute,
+    pointsViewerRoute,
     soundSearchRoute,
     importRoute,
     giftCatalog,

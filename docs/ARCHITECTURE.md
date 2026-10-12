@@ -180,7 +180,7 @@ They contain no session data. The API and WebSocket are the protected surface.
 ## Server composition (`server/server`)
 
 `Server.layer(options)` takes the `HttpRouter` routes and provides `SessionManager`, `RulesStore`,
-`MediaStore` and one `RuleEngine` shared by the sessions and the routes. `SessionManager` needs a
+`MediaStore`, `PointsStore` and one `RuleEngine` shared by the sessions and the routes. `SessionManager` needs a
 TikTok connection layer. By default that's `LiveConnection.layer()`, which uses the runtime's global
 `fetch` and `WebSocket`. `ServerOptions.tiktok` replaces it, which is how you add a proxy or a fake in tests.
 
@@ -196,6 +196,10 @@ and players (`/overlays/actions.html`) only play what they're sent.
   save replaces the whole list and bumps a revision number. A save based on an older revision fails, so two
   open editor tabs can't overwrite each other. Writes go to a temporary file and are then renamed. A file
   that doesn't decode is moved aside and the server starts with no rules.
+- `PointsStore` (`points/PointsStore.ts`) keeps viewer points per streamer, in `<dataDir>/points/<streamer>.json`
+  or memory. `SessionManager` records each event there before the rules run on it, so a rule sees the
+  viewer's new total. Event writes are batched (at most about every 5 seconds, and once more on stop). Settings,
+  adjustments and resets are written before they take effect.
 - `MediaStore` keeps uploads in `<dataDir>/media/` with an `index.json`. `/media/:file` only serves names in
   the index, so a request can't reach other paths.
 - `SoundSearch` (`rules/SoundSearch.ts`) finds sounds on MyInstants. Browsers can't call the site (no CORS), so the
@@ -203,7 +207,9 @@ and players (`/overlays/actions.html`) only play what they're sent.
   library, so overlays never depend on myinstants.com. Downloads are limited to MyInstants sound URLs, and
   redirects are refused, so the server isn't an open proxy.
 - `RuleEngine` runs `evaluate` (`rules/evaluate.ts`, pure) for each event. It keeps cooldowns and like
-  counters per streamer, in memory. `SessionManager` passes it to each session when it's in context, and
+  counters per streamer, in memory. It also sends the `webhook` steps of the actions it fires (`rules/webhook.ts`
+  builds the requests). These go from the server, not the browser, so they can reach LAN addresses. They run in
+  fibers owned by the layer's scope, at most 4 at once, each with a 5 second timeout and no retries. `SessionManager` passes it to each session when it's in context, and
   `Session` publishes the results as `Action` messages after the event. Test events from `/simulate` and
   demo events go through the same path.
 - The WebSocket forwards `Action` messages only to subscriptions with `actions: true`. They skip the

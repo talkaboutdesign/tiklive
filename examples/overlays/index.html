@@ -1290,6 +1290,27 @@
       // ---- State ----
 
       let activeName = ""; // the streamer the dashboard shows, or "" on onboarding
+      // Viewer points for the streamer on screen, by user id. Loaded with the leaderboard every 15 s,
+      // not per message: a chat row shows the viewer's points when they are among the top 200.
+      const pointsByUser = new Map();
+      const pointsText = (points) => `· ${compact.format(points)} pts`;
+      async function refreshPoints() {
+        const name = activeName;
+        if (!name) return;
+        try {
+          const board = await api(`/api/sessions/${encodeURIComponent(name)}/points?limit=200`);
+          if (name !== activeName) return;
+          pointsByUser.clear();
+          for (const viewer of board.viewers) pointsByUser.set(viewer.userId, viewer.points);
+          for (const node of document.querySelectorAll("[data-points-user]")) {
+            const points = pointsByUser.get(node.dataset.pointsUser);
+            node.hidden = points === undefined;
+            node.textContent = points === undefined ? "" : pointsText(points);
+          }
+        } catch {
+          // Keep the points we have. The next refresh tries again.
+        }
+      }
       let live = null; // the current events connection
       let lastStatus = null;
       let buffer = []; // { id, event } for chat, gift, subscribe and follow events
@@ -1551,6 +1572,8 @@
           };
         live = client;
         activeName = name;
+        pointsByUser.clear();
+        refreshPoints();
         buffer = [];
         pending = 0;
         giftLog = [];
@@ -1862,6 +1885,15 @@
               typeof u.followerCount === "number"
                 ? el("span", { class: "row-count" }, `${compact.format(u.followerCount)} followers`)
                 : null,
+              el(
+                "span",
+                {
+                  class: "row-count",
+                  "data-points-user": u.userId,
+                  hidden: !pointsByUser.has(u.userId),
+                },
+                pointsByUser.has(u.userId) ? pointsText(pointsByUser.get(u.userId)) : "",
+              ),
             ),
             body,
           ),
@@ -2272,6 +2304,7 @@
       setInterval(() => {
         if (lastStatus?.state === "live") renderStatusLine(lastStatus);
       }, 30000);
+      setInterval(refreshPoints, 15000);
 
       // ---- Resizable side column ----
 

@@ -2,7 +2,10 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import {
   ClientMessage,
+  DEFAULT_POINTS_SETTINGS,
   GiftInfo,
+  PointsAdjustRequest,
+  PointsSettings,
   LIVE_EVENT_TYPES,
   LiveEvent,
   normalizeUsername,
@@ -188,6 +191,7 @@ describe("actions", () => {
       { kind: "media", url: "https://img.example/a.gif", duration: 3, text: "Hi {nickname}", volume: 1 },
       { kind: "speak", text: "{nickname} says {comment}", voice: "Samantha", rate: 1.2, volume: 0.8 },
       { kind: "obsScene", scene: "Dance", revertAfter: 30 },
+      { kind: "webhook", url: "http://192.168.1.20:8080/hook/{nickname}", method: "PUT", body: "{}" },
     ];
     const full = { ...baseRule, cooldown: 10, userCooldown: 60, steps };
     expect(decodeRule(full)).toEqual(full);
@@ -228,6 +232,60 @@ describe("actions", () => {
     expect(() => decode({ ...baseRule, steps: [{ kind: "explode" }] })).toThrow();
   });
 
+  it("decodes webhook steps, with the method and body optional", () => {
+    const decode = Schema.decodeUnknownSync(Rule);
+    const withStep = (step: unknown) => ({ ...baseRule, steps: [step] });
+    expect(decode(withStep({ kind: "webhook", url: "https://hooks.example/x" })).steps).toEqual([
+      { kind: "webhook", url: "https://hooks.example/x" },
+    ]);
+    for (const method of ["POST", "GET", "PUT"]) {
+      expect(decode(withStep({ kind: "webhook", url: "https://h.example/", method })).steps[0]).toMatchObject(
+        {
+          method,
+        },
+      );
+    }
+    // Templates are fine in the path and query.
+    expect(
+      decode(withStep({ kind: "webhook", url: "https://h.example/{username}?n={nickname}" })).steps,
+    ).toHaveLength(1);
+    expect(
+      decode(withStep({ kind: "webhook", url: "https://h.example/", body: "x".repeat(4000) })).steps,
+    ).toHaveLength(1);
+  });
+
+  it("rejects webhook URLs that aren't http(s), don't parse, or are too long", () => {
+    const decode = Schema.decodeUnknownSync(Rule);
+    const decodeUrl = (url: string) => decode({ ...baseRule, steps: [{ kind: "webhook", url }] });
+    for (const url of [
+      "ftp://files.example/x",
+      "javascript:alert(1)",
+      "//hooks.example/x",
+      "hooks.example/x",
+      " https://hooks.example/x",
+      "https://",
+      `https://h.example/${"a".repeat(2048)}`,
+    ]) {
+      expect(() => decodeUrl(url), url).toThrow();
+    }
+    expect(
+      decodeUrl("https://h.example/" + "a".repeat(2048 - "https://h.example/".length)).steps,
+    ).toHaveLength(1);
+  });
+
+  it("rejects webhook methods other than POST, GET and PUT, and bodies over 4000 characters", () => {
+    const decode = Schema.decodeUnknownSync(Rule);
+    const withStep = (step: unknown) => ({ ...baseRule, steps: [step] });
+    expect(() =>
+      decode(withStep({ kind: "webhook", url: "https://h.example/", method: "DELETE" })),
+    ).toThrow();
+    expect(() => decode(withStep({ kind: "webhook", url: "https://h.example/", method: "get" }))).toThrow();
+    expect(() =>
+      decode(withStep({ kind: "webhook", url: "https://h.example/", body: "x".repeat(4001) })),
+    ).toThrow();
+    expect(() => decode(withStep({ kind: "webhook" }))).toThrow();
+  });
+
   it("validates rule sets", () => {
     const decode = Schema.decodeUnknownSync(RuleSet);
     expect(decode({ revision: 0, rules: [] })).toEqual({ revision: 0, rules: [] });
@@ -260,5 +318,27 @@ describe("actions", () => {
     expect(() =>
       Schema.decodeUnknownSync(ServerMessage)({ type: "action", username: "demo", action: { id: "a1" } }),
     ).toThrow();
+  });
+});
+
+describe("viewer points", () => {
+  it("accepts the default settings and rejects fractions, negatives and out-of-range values", () => {
+    expect(Schema.is(PointsSettings)(DEFAULT_POINTS_SETTINGS)).toBe(true);
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, perMessage: 1.5 })).toBe(false);
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, perFollow: -1 })).toBe(false);
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, likesPerPoint: 0 })).toBe(false);
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, messageCooldownSeconds: 86_401 })).toBe(
+      false,
+    );
+    expect(Schema.is(PointsSettings)({ ...DEFAULT_POINTS_SETTINGS, perJoin: Infinity })).toBe(false);
+    expect(Schema.is(PointsSettings)({ perMessage: 1 })).toBe(false);
+  });
+
+  it("accepts a whole-number delta or set, within bounds", () => {
+    expect(Schema.is(PointsAdjustRequest)({ delta: -5 })).toBe(true);
+    expect(Schema.is(PointsAdjustRequest)({ set: 0 })).toBe(true);
+    expect(Schema.is(PointsAdjustRequest)({ delta: 1.5 })).toBe(false);
+    expect(Schema.is(PointsAdjustRequest)({ set: -1 })).toBe(false);
+    expect(Schema.is(PointsAdjustRequest)({ delta: 2_000_000_000 })).toBe(false);
   });
 });

@@ -150,6 +150,8 @@
         media: enabled("visuals"),
         speak: enabled("speech"),
         obsScene: enabled("obs"),
+        // Webhooks are sent by the tiklive server, not the page (CSP and CORS), so the player skips them.
+        webhook: false,
       };
 
       const stage = document.getElementById("stage");
