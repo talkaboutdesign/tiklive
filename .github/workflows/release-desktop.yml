@@ -93,6 +93,30 @@ jobs:
           done
 
           if [[ "$PLATFORM" == "mac" && -n "${CSC_LINK:-}" && -n "${CSC_KEY_PASSWORD:-}" ]]; then
+            # Import the certificate into our own keychain (as T3 Code does) instead of
+            # letting electron-builder do it: its temporary keychain fails to unlock on
+            # GitHub's macOS runners ("SecKeychainUnlock: ... passphrase ... not correct").
+            keychain="$RUNNER_TEMP/tiklive-signing.keychain-db"
+            keychain_password="$(openssl rand -hex 16)"
+            echo "::add-mask::$keychain_password"
+            cert_path="$RUNNER_TEMP/tiklive-signing.p12"
+            printf '%s' "$CSC_LINK" | base64 --decode > "$cert_path"
+            security create-keychain -p "$keychain_password" "$keychain"
+            security set-keychain-settings -lut 21600 "$keychain"
+            security unlock-keychain -p "$keychain_password" "$keychain"
+            security import "$cert_path" -k "$keychain" -P "$CSC_KEY_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" >/dev/null
+            security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+            rm -f "$cert_path"
+            identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"Developer ID Application: \([^"]*\)".*/\1/p' | head -n 1)"
+            if [[ -z "$identity" ]]; then
+              echo "No Developer ID Application identity found in CSC_LINK." >&2
+              exit 1
+            fi
+            # Sign with that identity from the keychain search list.
+            unset CSC_LINK CSC_KEY_PASSWORD
+            export CSC_NAME="$identity"
+
             if [[ -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" ]]; then
               # electron-builder wants a path to the .p8, not its contents.
               key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
