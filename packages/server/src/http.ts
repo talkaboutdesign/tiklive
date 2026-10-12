@@ -747,15 +747,15 @@ export const routes = (options: HttpOptions = {}) => {
                   const session = yield* manager.acquire(username);
                   const updates = yield* session.subscribe;
                   yield* send({ type: "status", username, status: yield* session.status });
-                  // An event published after `subscribe` but before `recentEvents` is in both the replay and the
-                  // queue. The queued copy is the same object, so the overlap is matched by identity, not msgId:
-                  // injected msgIds aren't unique, and events without a msgId would otherwise be sent twice.
-                  // Queued copies come before anything published later, so the overlap ends at the first event
-                  // that isn't in it.
-                  const overlap = new Set<LiveEvent>();
+                  // Only publications retained in this snapshot overlap the queue. Earlier queued events
+                  // may have been evicted from history; later publications can reuse an event object or id.
+                  let firstSeq = 1;
+                  let lastSeq = 0;
                   if (replay) {
-                    for (const event of yield* session.recentEvents) {
-                      overlap.add(event);
+                    const snapshot = yield* session.replaySnapshot;
+                    firstSeq = snapshot.firstSeq;
+                    lastSeq = snapshot.lastSeq;
+                    for (const event of snapshot.events) {
                       if (wants(event)) yield* send({ type: "event", username, event, replay: true });
                     }
                   }
@@ -766,11 +766,13 @@ export const routes = (options: HttpOptions = {}) => {
                         yield* send({ type: "status", username, status: message.status });
                         break;
                       case "Event":
-                        if (overlap.delete(message.event)) break;
-                        // Likes and viewer counts are never in the replay (see Session.ts), so they can't be in
-                        // the overlap, and they don't end it either.
-                        if (message.event.type !== "like" && message.event.type !== "viewers")
-                          overlap.clear();
+                        if (
+                          message.seq >= firstSeq &&
+                          message.seq <= lastSeq &&
+                          message.event.type !== "like" &&
+                          message.event.type !== "viewers"
+                        )
+                          break;
                         if (wants(message.event))
                           yield* send({ type: "event", username, event: message.event });
                         break;

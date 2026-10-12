@@ -184,6 +184,59 @@ describe("Session with a live streamer", () => {
     ),
   );
 
+  it.effect("snapshots publication boundaries without changing recentEvents", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make("someone", { historySize: 2 });
+        const subscription = yield* session.subscribe;
+        expect(yield* session.replaySnapshot).toEqual({ events: [], firstSeq: 1, lastSeq: 0 });
+
+        const reused = chat("same object");
+        yield* session.inject(reused);
+        yield* session.inject(like(1, 1));
+        yield* session.inject(viewers(10));
+        yield* session.inject(reused);
+        const snapshot = yield* session.replaySnapshot;
+        expect(snapshot).toEqual({ events: [reused, reused], firstSeq: 1, lastSeq: 4 });
+        expect(yield* session.recentEvents).toEqual(snapshot.events);
+
+        const later = chat("later");
+        yield* session.inject(later);
+        expect(yield* session.replaySnapshot).toEqual({ events: [reused, later], firstSeq: 4, lastSeq: 5 });
+        expect(snapshot).toEqual({ events: [reused, reused], firstSeq: 1, lastSeq: 4 });
+
+        const messages = yield* readUntil(
+          subscription,
+          (read) => read.filter((m) => m._tag === "Event").length === 5,
+        );
+        expect(messages.filter((m) => m._tag === "Event").map((m) => [m.event.type, m.seq])).toEqual([
+          ["chat", 1],
+          ["like", 2],
+          ["viewers", 3],
+          ["chat", 4],
+          ["chat", 5],
+        ]);
+      }).pipe(Effect.provide(liveLayer())),
+    ),
+  );
+
+  it.effect("keeps sliding delivery when the subscriber buffer fills", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make("someone", { historySize: 0, subscriberBuffer: 2 });
+        const subscription = yield* session.subscribe;
+        yield* session.inject(chat("evicted"));
+        yield* session.inject(chat("retained"));
+        yield* session.inject(chat("last"));
+        const messages = yield* readUntil(subscription, (read) =>
+          read.some((m) => m._tag === "Event" && m.seq === 3),
+        );
+        expect(messages.filter((m) => m._tag === "Event").map((m) => m.seq)).toEqual([2, 3]);
+        expect(yield* session.replaySnapshot).toEqual({ events: [], firstSeq: 4, lastSeq: 3 });
+      }).pipe(Effect.provide(liveLayer())),
+    ),
+  );
+
   it.live("delivers injected events to subscribers in order", () =>
     Effect.scoped(
       Effect.gen(function* () {

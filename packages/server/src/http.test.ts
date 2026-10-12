@@ -25,6 +25,7 @@ import { TikTokRequestError, TikTokWeb } from "@tiklive/core";
 import { fakeTikTokWebLayer, fakeWebSocketLayer } from "@tiklive/core/testing";
 import type { LiveEvent, SoundSearchResponse } from "@tiklive/contracts";
 import * as Server from "./server.ts";
+import type * as Session from "./Session.ts";
 import type { ServerOptions } from "./server.ts";
 import { routes } from "./http.ts";
 import * as MediaStore from "./rules/MediaStore.ts";
@@ -65,10 +66,18 @@ interface Base {
 
 /**
  * Like `serverLayer`, but the first `/ws` subscription to `demo` gets `raced` published, in order, right after
- * it subscribes, before the route reads the replay snapshot. Each event is then both in the replay and in the
+ * it subscribes, before the route reads the replay snapshot. Retained replayable events are then also in the
  * subscriber's queue. `Server.layer` builds its own SessionManager, so the routes are composed here.
  */
-const racingServerLayer = (httpServer: HttpNodeServer, raced: ReadonlyArray<LiveEvent>) => {
+const racingServerLayer = (
+  httpServer: HttpNodeServer,
+  raced: ReadonlyArray<LiveEvent>,
+  options: {
+    readonly beforeSubscribe?: ReadonlyArray<LiveEvent>;
+    readonly onSession?: (session: Session.Session) => void;
+    readonly historySize?: number;
+  } = {},
+) => {
   const tiktok = fakeTikTok();
   const rules = RulesStore.layerMemory();
   const points = PointsStore.layerMemory;
@@ -77,14 +86,18 @@ const racingServerLayer = (httpServer: HttpNodeServer, raced: ReadonlyArray<Live
   const sessions = Layer.effect(
     SessionManager,
     Effect.gen(function* () {
-      const manager = yield* makeSessionManager({});
+      const manager = yield* makeSessionManager({ session: { historySize: options.historySize ?? 50 } });
       return SessionManager.of({
         ...manager,
         acquire: (username) =>
           manager.acquire(username).pipe(
+            Effect.tap((session) => Effect.sync(() => options.onSession?.(session))),
             Effect.map((session) => ({
               ...session,
-              subscribe: session.subscribe.pipe(
+              subscribe: Effect.andThen(
+                Effect.forEach(options.beforeSubscribe ?? [], session.inject, { discard: true }),
+                session.subscribe,
+              ).pipe(
                 Effect.tap(() =>
                   Effect.suspend(() => {
                     if (racedOnce) return Effect.void;
@@ -798,6 +811,160 @@ describe("WebSocket protocol", () => {
       },
     );
   });
+
+  it.live("delivers both publications when inject reuses the same object across the snapshot", () => {
+    const event: LiveEvent = { type: "follow", timestamp: Date.now(), user: USER, msgId: "reused-object" };
+    let session: Session.Session;
+    return serveWith(
+      (httpServer) =>
+        racingServerLayer(httpServer, [], {
+          beforeSubscribe: [event],
+          onSession: (value) => {
+            session = value;
+          },
+        }),
+      async (base) => {
+        const open: Array<Client> = [];
+        try {
+          const client = await connect(`${base.ws}/ws?username=demo&replay=1`, open);
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === event.msgId && m.replay === true,
+            "first publication replayed",
+          );
+          await Effect.runPromise(session.inject(event));
+          await simulateFollow(base, "after-reused-object");
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "after-reused-object",
+            "queue drained",
+          );
+          expect(
+            eventMessages(client)
+              .filter((m) => m.event.msgId === event.msgId)
+              .map((m) => m.replay === true),
+          ).toEqual([true, false]);
+        } finally {
+          closeAll(open);
+        }
+      },
+    );
+  });
+
+  it.live("delivers each publication once when the subscribe window exceeds historySize", () => {
+    const raced: ReadonlyArray<LiveEvent> = Array.from({ length: 75 }, (_, i) => ({
+      type: "follow",
+      timestamp: Date.now(),
+      user: USER,
+      msgId: `overflow-${i}`,
+    }));
+    return serveWith(
+      (httpServer) => racingServerLayer(httpServer, raced),
+      async (base) => {
+        const open: Array<Client> = [];
+        try {
+          const client = await connect(`${base.ws}/ws?username=demo&replay=1`, open);
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "overflow-74" && m.replay === true,
+            "history replayed",
+          );
+          await simulateFollow(base, "after-overflow");
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "after-overflow",
+            "queue drained",
+          );
+          const received = eventMessages(client).filter((m) => m.event.msgId?.startsWith("overflow-"));
+          expect(received).toHaveLength(raced.length);
+          for (const [i, event] of raced.entries()) {
+            const copies = received.filter((m) => m.event.msgId === event.msgId);
+            expect(copies).toHaveLength(1);
+            expect(copies[0]!.replay === true).toBe(i >= 25);
+          }
+        } finally {
+          closeAll(open);
+        }
+      },
+    );
+  });
+
+  it.live("delivers likes and viewers inside the snapshot window live with an events filter", () => {
+    const raced: ReadonlyArray<LiveEvent> = [
+      { type: "follow", timestamp: Date.now(), user: USER, msgId: "filtered-follow" },
+      {
+        type: "like",
+        timestamp: Date.now(),
+        user: USER,
+        likeCount: 1,
+        totalLikeCount: 1,
+        msgId: "window-like",
+      },
+      { type: "viewers", timestamp: Date.now(), viewerCount: 1, topViewers: [], msgId: "window-viewers" },
+      { type: "follow", timestamp: Date.now(), user: USER, msgId: "filtered-last" },
+    ];
+    return serveWith(
+      (httpServer) => racingServerLayer(httpServer, raced),
+      async (base) => {
+        const open: Array<Client> = [];
+        try {
+          const client = await connect(`${base.ws}/ws?username=demo&replay=1&events=like,viewers,chat`, open);
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "window-viewers",
+            "viewer update",
+          );
+          await post(base, "/api/sessions/demo/simulate", {
+            type: "chat",
+            user: USER,
+            comment: "done",
+            emotes: [],
+            msgId: "after-filtered-window",
+          });
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "after-filtered-window",
+            "queue drained",
+          );
+          expect(
+            eventMessages(client)
+              .filter((m) => raced.some((e) => e.msgId === m.event.msgId))
+              .map((m) => [m.event.msgId, m.replay === true]),
+          ).toEqual([
+            ["window-like", false],
+            ["window-viewers", false],
+          ]);
+        } finally {
+          closeAll(open);
+        }
+      },
+    );
+  });
+
+  for (const query of ["", "&replay=1"]) {
+    it.live(`delivers every queued event with empty history (query: ${query || "no replay"})`, () => {
+      const event: LiveEvent = { type: "follow", timestamp: Date.now(), user: USER, msgId: "empty-history" };
+      return serveWith(
+        (httpServer) => racingServerLayer(httpServer, [event, event], { historySize: 0 }),
+        async (base) => {
+          const open: Array<Client> = [];
+          try {
+            const client = await connect(`${base.ws}/ws?username=demo${query}`, open);
+            await client.waitFor(
+              (m) => m.type === "event" && m.event.msgId === event.msgId,
+              "queued publication",
+            );
+            await simulateFollow(base, "after-empty-history");
+            await client.waitFor(
+              (m) => m.type === "event" && m.event.msgId === "after-empty-history",
+              "queue drained",
+            );
+            expect(
+              eventMessages(client)
+                .filter((m) => m.event.msgId === event.msgId)
+                .map((m) => m.replay === true),
+            ).toEqual([false, false]);
+          } finally {
+            closeAll(open);
+          }
+        },
+      );
+    });
+  }
 
   it.live("delivers a different event that reuses a replayed msgId", () =>
     serve({}, async (base) => {

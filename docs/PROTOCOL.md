@@ -89,13 +89,19 @@ With `replay: true`, the server sends its last **50** events for that streamer (
 history size). Likes and viewer-count updates are never kept in history, because they're too
 frequent to be useful when replayed.
 
-The server never sends an event twice on one subscription. An event that arrives while the subscription
-is being set up is sent once, as a replay, and not again as live.
+On one subscription, each publication matching the `events` filter is delivered once, either in the replay
+or live, subject to the sliding-buffer limit for slow subscribers. The server subscribes before taking the
+history snapshot, then skips queued publications already included in that snapshot. Publications evicted
+from history during setup still go out live, as do likes and viewer-count updates. Reusing an event object
+or `msgId` in separate publications does not merge them. With `replay: false`, all queued events go out live.
+
+Replay is sent oldest first, before the live queue is drained. Queued events evicted from history and likes
+or viewer-count updates can therefore arrive after newer replayed events.
 
 The browser client (`TikLive`) re-sends `replay: true` on every reconnect, so events missed during
-the gap arrive. It skips a **replayed** event (`replay: true`) whose `msgId` it has already delivered,
-so a reconnect doesn't show old events twice. Live events are never filtered. Events without a `msgId`,
-or with `msgId` `"0"`, are never skipped.
+the gap can arrive if they are still in history. It skips a **replayed** event (`replay: true`) whose `msgId`
+it has already delivered, so a reconnect doesn't show old events twice. Live events are never filtered.
+Missing, empty, and `"0"` ids are never skipped.
 
 ### Shortcut URL
 
