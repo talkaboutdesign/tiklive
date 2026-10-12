@@ -2,7 +2,8 @@ name: Release
 
 # On every push to main, changesets/action either opens/updates a
 # "Release: version packages" PR (when there are pending changesets), or —
-# once that PR is merged — publishes the new versions to npm and creates a
+# once that PR is merged — stages the new versions on npm (a maintainer approves
+# them with 2FA) and creates a
 # GitHub Release.
 
 on:
@@ -55,7 +56,7 @@ jobs:
         uses: changesets/action@v1
         with:
           version: bun run version-packages
-          publish: bun run release
+          publish: bun run release --stage
           title: "Release: version packages"
           commit: "Release: version packages"
           createGithubReleases: false
