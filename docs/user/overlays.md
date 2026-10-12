@@ -1,7 +1,9 @@
 # Overlays
 
-The example overlays are plain HTML pages with no build step. The server serves them at `/overlays/`, and the
-dashboard is at `/`. They're in [`examples/overlays`](../../examples/overlays) if you want to copy one.
+The example overlays are plain HTML pages with no build step. The server serves them at `/overlays/`. The easiest
+way to get one is the **Overlays** page (sidebar → Overlays, or `/overlays.html`). It shows every overlay with a
+live preview, and you can copy its URL, change its options, and send test events to see the previews react. The
+overlays are in [`examples/overlays`](../../examples/overlays) if you want to copy one.
 
 Every overlay takes `username` (required, unless you use `demo`) and `token` (only if the server runs with
 `--token`). The other options are listed below.
@@ -9,12 +11,25 @@ Every overlay takes `username` (required, unless you use `demo`) and `token` (on
 ## Set up OBS
 
 1. Run tiklive, with the desktop app or `npx tiklive`.
-2. In OBS, add a **Browser Source** and paste an overlay URL, for example
-   `http://127.0.0.1:8080/overlays/chat.html?username=yourname`.
+2. In OBS, add a **Browser Source** and paste an overlay URL. Copy it from the Overlays page, or write it by hand,
+   for example `http://127.0.0.1:8080/overlays/chat.html?username=yourname`.
 3. Set the source size to something like 1920×1080. Tick **Shutdown source when not visible** if you don't
    want the connection to stay open while the source is hidden.
 
 To check an overlay without going live, use `username=demo`. It shows fake events.
+
+## Overlays page
+
+Open **Overlays** in the sidebar. Each overlay has a card with a live preview (the overlay at its real size, scaled
+down):
+
+- **Copy URL** copies the OBS URL for that overlay.
+- **Customize** opens the overlay's options. Changing one updates the preview and the URL. The URL includes only the
+  options you've changed from the defaults below, plus `username` and `token`.
+- **Send test event** (top right) sends a fake chat message, gift, follow, share, subscribe or like to your
+  username, so you can see the previews react without going live.
+
+Your options are saved in this browser, so they're still there after a reload. The previews are always silent.
 
 ## Chat: `/overlays/chat.html`
 
@@ -87,9 +102,9 @@ The player depends on how you run tiklive:
 
 Example: `/overlays/actions.html?username=yourname&speech=0&volume=0.8`
 
-The desktop app's link on the Actions page is the same URL with `&sounds=0&speech=0` added. Tick **OBS plays sounds
-and speech too** there if you want OBS to play them instead, and turn off app sound in the app's header so they
-don't play twice.
+In the desktop app, the Actions player's URL on the Overlays page is the same URL with `&sounds=0&speech=0`
+added. Tick **OBS plays sounds and speech too** there if you want OBS to play them instead, and turn off app sound in
+the app's sidebar so they don't play twice.
 
 OBS setup tips:
 
@@ -108,17 +123,16 @@ appears when that happens. OBS doesn't need it.
 
 The first time you open the dashboard, it asks for your TikTok username. tiklive saves it in this browser, so
 later visits go straight to the dashboard. You don't need to be live for this: tiklive waits and connects when
-you go live. Use **Change** in the header to switch to another username.
+you go live. To switch to another username, use **Settings** in the sidebar.
 
 The dashboard shows your status (live, offline, connecting or error), viewer and engagement totals, and a
-filterable event log. The overlay URLs are on the right, with copy and open buttons. The Alerts overlay has a
-minimum-coins setting, and the goal bar has a metric and a target. Changing one updates its URL.
+filterable event log. The overlay URLs and their options are on the [Overlays page](#overlays-page).
 
-The test buttons send fake events to every overlay connected to your username. They're enabled once connected.
+**Send test event** sends a fake event to every overlay connected to your username. It's enabled once connected.
 
 Two cases don't save anything. `?username=` in the URL connects for that visit only. `demo` (typed in the form,
 or from "Try the demo") shows fake events and is never saved. If the server runs with `--token`, open the
-dashboard with `?token=` and the token is added to the overlay URLs.
+dashboard with `?token=`. The sidebar carries it to the Overlays page, and the overlay URLs include it.
 
 ## Write your own overlay
 

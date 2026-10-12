@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Overlays · tiklive</title>
+    <script>
+      try {
+        var t = localStorage.getItem("tiklive.theme");
+        document.documentElement.dataset.theme = t === "light" || t === "dark" ? t : "system";
+      } catch {}
+    </script>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/app/app.css" />
+    <style>
+      .intro {
+        margin: 0 0 16px 4px;
+        color: var(--muted);
+      }
+      .overlay-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+      }
+      @media (min-width: 900px) {
+        .overlay-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .overlay-card {
+        overflow: hidden;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      .overlay-body {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 14px 16px 16px;
+      }
+      .card-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .overlay-body .row-desc {
+        margin-bottom: 10px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      /* Previews: the overlay renders at 1920x1080 and is scaled to the box width (--scale, set in JS). */
+      .preview {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        overflow: hidden;
+        background: repeating-conic-gradient(#272a35 0% 25%, #1d1f27 0% 50%) 0 0 / 24px 24px;
+      }
+      .preview iframe {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 1920px;
+        height: 1080px;
+        border: 0;
+        transform-origin: 0 0;
+        transform: scale(var(--scale, 0.2));
+        pointer-events: none;
+        /* A dark page would otherwise paint the frame's canvas white instead of the checkerboard. */
+        color-scheme: light;
+      }
+      .preview-hint {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 0 16px;
+        color: #9ca0b4;
+        font-size: 13px;
+        text-align: center;
+      }
+      .detail-preview {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+      }
+      .detail-desc {
+        margin: 10px 0 28px 4px;
+      }
+
+      /* Settings rows */
+      .num {
+        width: 96px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .text-input {
+        width: 220px;
+      }
+      .select-input {
+        width: 180px;
+      }
+      .link {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .link:hover {
+        text-decoration: underline;
+      }
+      .tips {
+        margin: 6px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .tips li + li {
+        margin-top: 3px;
+      }
+
+      /* OBS browser source */
+      .url-block {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px 18px;
+      }
+      .url-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .url-row .input {
+        flex: 1;
+        min-width: 0;
+        font-size: 12.5px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      /* Breadcrumb link back to the list */
+      .crumbs a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .crumbs a:hover {
+        color: var(--text);
+      }
+
+      /* Send test event menu */
+      .menu-wrap {
+        position: relative;
+      }
+      .menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 200px;
+        padding: 4px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        box-shadow: var(--shadow);
+      }
+      .menu button {
+        display: flex;
+        align-items: center;
+        height: 30px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 6px;
+        background: none;
+        color: var(--text);
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .menu button:hover,
+      .menu button:focus-visible {
+        background: var(--hover);
+      }
+
+      .empty p {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside id="sidebar"></aside>
+      <main id="main">
+        <header id="page-header"></header>
+        <div class="page" id="page">
+          <h1 class="sr-only">Overlays</h1>
+
+          <div class="empty" id="empty" hidden>
+            <p>Set your TikTok username to get overlay URLs and previews.</p>
+            <a class="btn btn-primary btn-small" id="empty-link" href="/">Set username on the dashboard</a>
+          </div>
+
+          <section id="list" hidden>
+            <p class="intro">Add these to OBS as Browser Sources (1920×1080). Each one updates live.</p>
+            <div class="overlay-grid" id="overlay-grid"></div>
+          </section>
+
+          <section id="detail" hidden></section>
+        </div>
+      </main>
+    </div>
+
+    <script type="module">
+      import {
+        mountShell,
+        el,
+        icon,
+        api,
+        debounce,
+        toast,
+        token,
+        getUsername,
+        onUsernameChange,
+        isDesktop,
+        safeUrl,
+        withToken,
+      } from "/app/shell.js";
+
+      // The OBS canvas size. Previews render at this size and scale down to fit their box.
+      const CANVAS_WIDTH = 1920;
+      const OPTIONS_KEY = "tiklive.overlayOptions";
+      const METRIC_OPTIONS = [
+        ["likes", "Likes"],
+        ["diamonds", "Coins"],
+        ["follows", "Follows"],
+        ["shares", "Shares"],
+        ["viewers", "Viewers"],
+      ];
+      // Same labels as goal.html uses when there's no ?label=.
+      const GOAL_LABELS = {
+        likes: "Like goal",
+        diamonds: "Coin goal",
+        follows: "Follower goal",
+        shares: "Share goal",
+        viewers: "Viewer goal",
+      };
+
+      // Each overlay: the page it lives at, and its settings. A field with a param becomes a URL param
+      // when its value differs from def (or always: true). Switches write 1 when on for a default-off
+      // option, and 0 when off for a default-on option. Static rows are built by hand.
+      const OVERLAYS = {
+        chat: {
+          name: "Chat",
+          path: "/overlays/chat.html",
+          desc: "Live chat messages, with optional joins, gifts and follows.",
+          sections: [
+            {
+              title: "Messages",
+              rows: [
+                {
+                  kind: "number",
+                  key: "max",
+                  param: "max",
+                  title: "Messages on screen",
+                  desc: "How many messages stay in the overlay.",
+                  def: 12,
+                  min: 1,
+                  max: 50,
+                },
+                {
+                  kind: "number",
+                  key: "fade",
+                  param: "fade",
+                  title: "Fade after",
+                  desc: "Seconds before a message fades out. 0 keeps them on screen.",
+                  def: 30,
+                  min: 0,
+                  max: 3600,
+                  unit: "seconds",
+                },
+              ],
+            },
+            {
+              title: "Show in chat",
+              rows: [
+                {
+                  kind: "switch",
+                  key: "joins",
+                  param: "joins",
+                  title: "Joins",
+                  desc: "Viewers joining the stream.",
+                  def: false,
+                },
+                {
+                  kind: "switch",
+                  key: "gifts",
+                  param: "gifts",
+                  title: "Gifts",
+                  desc: "Gifts, once the streak ends.",
+                  def: false,
+                },
+                {
+                  kind: "switch",
+                  key: "follows",
+                  param: "follows",
+                  title: "Follows",
+                  desc: "New followers.",
+                  def: false,
+                },
+              ],
+            },
+          ],
+        },
+        alerts: {
+          name: "Alerts",
+          path: "/overlays/alerts.html",
+          desc: "Gift, follow, subscribe and share pop-ups, one at a time.",
+          sections: [
+            {
+              title: "Timing",
+              rows: [
+                {
+                  kind: "number",
+                  key: "min",
+                  param: "min",
+                  title: "Minimum coins for gift alerts",
+                  desc: "Gifts worth fewer coins don't get an alert.",
+                  def: 1,
+                  min: 0,
+                  max: 100000,
+                  unit: "coins",
+                },
+                {
+                  kind: "number",
+                  key: "duration",
+                  param: "duration",
+                  title: "Seconds per alert",
+                  desc: "How long each alert stays on screen.",
+                  def: 5,
+                  min: 1,
+                  max: 60,
+                  unit: "seconds",
+                },
+              ],
+            },
+            {
+              title: "Alert types",
+              rows: [
+                {
+                  kind: "switch",
+                  key: "follows",
+                  param: "follows",
+                  title: "Follow alerts",
+                  desc: "A viewer follows the stream.",
+                  def: true,
+                },
+                {
+                  kind: "switch",
+                  key: "subs",
+                  param: "subs",
+                  title: "Subscribe alerts",
+                  desc: "A viewer subscribes.",
+                  def: true,
+                },
+                {
+                  kind: "switch",
+                  key: "shares",
+                  param: "shares",
+                  title: "Share alerts",
+                  desc: "A viewer shares the stream.",
+                  def: true,
+                },
+              ],
+            },
+          ],
+        },
+        goal: {
+          name: "Goal bar",
+          path: "/overlays/goal.html",
+          desc: "A progress bar toward a like, coin, follower, share or viewer goal.",
+          sections: [
+            {
+              title: "Goal",
+              rows: [
+                {
+                  kind: "select",
+                  key: "metric",
+                  param: "metric",
+                  title: "Metric",
+                  desc: "What the bar counts.",
+                  def: "likes",
+                  always: true,
+                  options: METRIC_OPTIONS,
+                },
+                {
+                  kind: "number",
+                  key: "target",
+                  param: "target",
+                  title: "Target",
+                  desc: "The value the bar fills up to.",
+                  def: 10000,
+                  min: 1,
+                  max: 1000000000,
+                  always: true,
+                },
+                {
+                  kind: "text",
+                  key: "label",
+                  param: "label",
+                  title: "Label",
+                  desc: "Shown above the bar. Leave empty for the metric's name.",
+                  def: "",
+                  maxLength: 60,
+                  placeholder: (values) => GOAL_LABELS[values.metric] ?? "",
+                },
+              ],
+            },
+          ],
+        },
+        actions: {
+          name: "Actions player",
+          path: "/overlays/actions.html",
+          desc: "Plays the sounds, images, videos, speech and scene switches from your actions.",
+          idle: "Pictures and videos appear here when an action plays.",
+          sections: [
+            {
+              title: "Playback",
+              rows: [
+                {
+                  kind: "static",
+                  build: () =>
+                    el(
+                      "div",
+                      { class: "row" },
+                      el(
+                        "div",
+                        { class: "row-text" },
+                        el("div", { class: "row-title" }, "Actions"),
+                        el(
+                          "div",
+                          { class: "row-desc" },
+                          "Plays the actions you set up on the ",
+                          el("a", { class: "link", href: withToken("/actions.html") }, "Actions page"),
+                          ".",
+                        ),
+                      ),
+                    ),
+                },
+                {
+                  kind: "switch",
+                  key: "obsSound",
+                  title: "OBS plays sounds and speech too",
+                  desc: "The app already plays sounds and speech. Turn this on only if app sound is off.",
+                  def: false,
+                  when: () => isDesktop,
+                },
+              ],
+            },
+            {
+              title: "OBS",
+              rows: [
+                {
+                  kind: "static",
+                  build: () =>
+                    el(
+                      "div",
+                      { class: "row" },
+                      el(
+                        "div",
+                        { class: "row-text" },
+                        el("div", { class: "row-title" }, "Setup tips"),
+                        el(
+                          "ul",
+                          { class: "tips" },
+                          el(
+                            "li",
+                            {},
+                            "Set the Browser Source size to 1920×1080. Media appears in the middle.",
+                          ),
+                          el(
+                            "li",
+                            {},
+                            "To switch scenes, set Page permissions to Advanced access to OBS. Without it, scene steps are skipped.",
+                          ),
+                          isDesktop
+                            ? null
+                            : el(
+                                "li",
+                                {},
+                                "In a browser setup, tick Control audio via OBS so sounds and speech go through OBS.",
+                              ),
+                        ),
+                      ),
+                    ),
+                },
+              ],
+            },
+          ],
+          // Sounds and speech stay out of the link when the app plays them. Previews always stay silent.
+          extra: (values, { preview }) =>
+            preview || (isDesktop && !values.obsSound)
+              ? [
+                  ["sounds", "0"],
+                  ["speech", "0"],
+                ]
+              : [],
+        },
+      };
+
+      const TEST_USER = {
+        userId: "0",
+        uniqueId: "test_user",
+        nickname: "Test User",
+        profilePictureUrl: "https://api.dicebear.com/9.x/thumbs/svg?seed=test",
+      };
+      // Bodies per events.ts, as the dashboard sent them. `user` and `timestamp` are added on send.
+      const TEST_EVENTS = [
+        { label: "Chat message", type: "chat", body: { comment: "This is a test message!", emotes: [] } },
+        {
+          label: "Gift (5× Rose)",
+          type: "gift",
+          body: {
+            giftId: 5655,
+            giftName: "Rose",
+            giftImageUrl:
+              "https://p16-webcast.tiktokcdn.com/img/maliva/webcast-va/eba3a9bb85c33e017f3648eaf88d7189~tplv-obj.webp",
+            diamondCount: 1,
+            repeatCount: 5,
+            streaking: false,
+            totalDiamonds: 5,
+            groupId: "0",
+          },
+        },
+        { label: "Follow", type: "follow", body: {} },
+        { label: "Share", type: "share", body: {} },
+        { label: "Subscribe", type: "subscribe", body: { subMonth: 1 } },
+        { label: "Likes", type: "like", body: { likeCount: 10, totalLikeCount: 10 } },
+      ];
+
+      const $ = (id) => document.getElementById(id);
+      const emptyEl = $("empty");
+      const listEl = $("list");
+      const gridEl = $("overlay-grid");
+      const detailEl = $("detail");
+      $("empty-link").href = withToken("/");
+
+      // ---------- Options: the effective value of every field, saved as the non-default ones ----------
+
+      const allFields = (id) =>
+        OVERLAYS[id].sections.flatMap((section) => section.rows).filter((row) => row.kind !== "static");
+
+      function coerce(field, value) {
+        switch (field.kind) {
+          case "number":
+            return typeof value === "number" && value >= field.min && value <= field.max ? value : field.def;
+          case "switch":
+            return typeof value === "boolean" ? value : field.def;
+          case "select":
+            return field.options.some(([v]) => v === value) ? value : field.def;
+          default:
+            return typeof value === "string" ? value.slice(0, field.maxLength ?? 200) : field.def;
+        }
+      }
+
+      function loadState() {
+        let saved = {};
+        try {
+          const parsed = JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? "null");
+          if (parsed && typeof parsed === "object") saved = parsed;
+        } catch {
+          saved = {};
+        }
+        const out = {};
+        for (const id of Object.keys(OVERLAYS)) {
+          out[id] = {};
+          for (const field of allFields(id)) out[id][field.key] = coerce(field, saved[id]?.[field.key]);
+        }
+        return out;
+      }
+
+      const state = loadState();
+
+      function saveState() {
+        const out = {};
+        for (const id of Object.keys(OVERLAYS)) {
+          const changed = {};
+          for (const field of allFields(id)) {
+            if (state[id][field.key] !== field.def) changed[field.key] = state[id][field.key];
+          }
+          if (Object.keys(changed).length > 0) out[id] = changed;
+        }
+        try {
+          localStorage.setItem(OPTIONS_KEY, JSON.stringify(out));
+        } catch {
+          // Storage is unavailable: the options still work for this visit.
+        }
+      }
+
+      // ---------- URLs and previews ----------
+
+      function queryFor(id, { preview = false } = {}) {
+        const values = state[id];
+        const params = [["username", getUsername()]];
+        if (token) params.push(["token", token]);
+        for (const field of allFields(id)) {
+          if (!field.param) continue;
+          const value = values[field.key];
+          if (!field.always && value === field.def) continue;
+          params.push([field.param, field.kind === "switch" ? (value ? "1" : "0") : String(value)]);
+        }
+        if (OVERLAYS[id].extra) params.push(...OVERLAYS[id].extra(values, { preview }));
+        return new URLSearchParams(params).toString();
+      }
+
+      const obsUrl = (id) => `${location.origin}${OVERLAYS[id].path}?${queryFor(id)}`;
+      const previewUrl = (id) => `${OVERLAYS[id].path}?${queryFor(id, { preview: true })}`;
+
+      // Changing a loaded frame's src adds a history entry, so Back would step through previews instead of
+      // the page. location.replace swaps the frame's page without one. Only a real URL change reloads.
+      function setSrc(frame, path) {
+        const url = safeUrl(path);
+        if (!url || frame.dataset.url === url) return;
+        frame.dataset.url = url;
+        if (frame.dataset.loaded) frame.contentWindow.location.replace(url);
+        else frame.setAttribute("src", url);
+      }
+
+      // Hidden previews are emptied, so they don't keep a connection open.
+      function unload(frame) {
+        if (!frame.dataset.url) return;
+        frame.dataset.url = "";
+        if (frame.dataset.loaded) frame.contentWindow.location.replace("about:blank");
+      }
+
+      // Each preview's box gets --scale from its width, so the 1920x1080 page fits it.
+      const fit = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          entry.target.style.setProperty("--scale", String(entry.contentRect.width / CANVAS_WIDTH));
+        }
+      });
+
+      function previewBox(id, wide = false) {
+        const frame = el("iframe", {
+          title: `${OVERLAYS[id].name} preview`,
+          tabindex: "-1",
+          loading: wide ? undefined : "lazy",
+        });
+        frame.addEventListener("load", () => {
+          frame.dataset.loaded = "1";
+        });
+        const idle = OVERLAYS[id].idle ? el("span", { class: "preview-hint" }, OVERLAYS[id].idle) : null;
+        // The idle text sits behind the frame, so it shows only where the overlay is empty.
+        const box = el("div", { class: wide ? "preview detail-preview" : "preview" }, idle, frame);
+        fit.observe(box);
+        return { box, frame };
+      }
+
+      let listName = "";
+      let listFrames = [];
+      let detailKey = "";
+      let detailFrames = [];
+      let detailRefresh = () => {};
+
+      function syncPreviews() {
+        const visible = [...(listEl.hidden ? [] : listFrames), ...(detailEl.hidden ? [] : detailFrames)];
+        for (const { id, frame } of visible) setSrc(frame, previewUrl(id));
+      }
+      // Option edits reload the preview after a pause, so typing doesn't reload it on every key.
+      const schedulePreviews = debounce(syncPreviews, 400);
+
+      function commit(id, key, value) {
+        state[id][key] = value;
+        saveState();
+        detailRefresh();
+        schedulePreviews();
+      }
+
+      // ---------- Copy ----------
+
+      function copyButton(getText, label) {
+        let timer;
+        const button = el("button", { type: "button", class: "btn btn-small" }, label);
+        button.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(getText());
+            button.textContent = "Copied";
+            clearTimeout(timer);
+            timer = setTimeout(() => (button.textContent = label), 1500);
+          } catch {
+            toast("Couldn't copy. Select the URL and copy it yourself.", { error: true });
+          }
+        });
+        return button;
+      }
+
+      // ---------- List ----------
+
+      function overlayCard(id) {
+        const overlay = OVERLAYS[id];
+        const { box, frame } = previewBox(id);
+        listFrames.push({ id, frame });
+        return el(
+          "article",
+          { class: "overlay-card" },
+          box,
+          el(
+            "div",
+            { class: "overlay-body" },
+            el("h2", { class: "card-title" }, overlay.name),
+            el("p", { class: "row-desc" }, overlay.desc),
+            el(
+              "div",
+              { class: "actions" },
+              copyButton(() => obsUrl(id), "Copy URL"),
+              el("a", { class: "btn btn-small", href: `#${id}` }, "Customize"),
+            ),
+          ),
+        );
+      }
+
+      function buildList() {
+        listFrames = [];
+        gridEl.replaceChildren(...Object.keys(OVERLAYS).map((id) => overlayCard(id)));
+      }
+
+      // ---------- Detail ----------
+
+      function parseNumber(raw, field) {
+        if (raw.trim() === "") return null;
+        const n = Number(raw);
+        if (!Number.isFinite(n)) return null;
+        return Math.min(field.max, Math.max(field.min, Math.round(n)));
+      }
+
+      function fieldRow(id, field, refreshers) {
+        const current = () => state[id][field.key];
+        const text = el(
+          "div",
+          { class: "row-text" },
+          el("div", { class: "row-title" }, field.title),
+          el("div", { class: "row-desc" }, field.desc),
+        );
+
+        if (field.kind === "switch") {
+          const toggle = el("button", {
+            type: "button",
+            class: "switch",
+            role: "switch",
+            "aria-label": field.title,
+          });
+          const paint = () => toggle.setAttribute("aria-checked", String(current()));
+          paint();
+          toggle.addEventListener("click", () => {
+            commit(id, field.key, !current());
+            paint();
+          });
+          return el("div", { class: "row" }, text, el("div", { class: "row-control" }, toggle));
+        }
+
+        if (field.kind === "select") {
+          const select = el(
+            "select",
+            { class: "select select-input", "aria-label": field.title },
+            ...field.options.map(([value, label]) => el("option", { value }, label)),
+          );
+          select.value = current();
+          select.addEventListener("change", () => commit(id, field.key, select.value));
+          return el("div", { class: "row" }, text, el("div", { class: "row-control" }, select));
+        }
+
+        if (field.kind === "number") {
+          const input = el("input", {
+            class: "input num",
+            type: "number",
+            inputmode: "numeric",
+            step: "1",
+            min: field.min,
+            max: field.max,
+            "aria-label": field.title,
+          });
+          input.value = String(current());
+          // Valid input applies as you type. A cleared or out-of-range value snaps back on blur.
+          input.addEventListener("input", () => {
+            const n = parseNumber(input.value, field);
+            if (n !== null) commit(id, field.key, n);
+          });
+          input.addEventListener("change", () => {
+            input.value = String(current());
+          });
+          return el(
+            "div",
+            { class: "row" },
+            text,
+            el(
+              "div",
+              { class: "row-control" },
+              input,
+              field.unit ? el("span", { class: "muted" }, field.unit) : null,
+            ),
+          );
+        }
+
+        const input = el("input", {
+          class: "input text-input",
+          type: "text",
+          maxlength: String(field.maxLength ?? 200),
+          autocomplete: "off",
+          "aria-label": field.title,
+        });
+        input.value = current();
+        if (field.placeholder) refreshers.push(() => (input.placeholder = field.placeholder(state[id])));
+        input.addEventListener("input", () => commit(id, field.key, input.value.trim()));
+        return el("div", { class: "row" }, text, el("div", { class: "row-control" }, input));
+      }
+
+      function buildDetail(id) {
+        const overlay = OVERLAYS[id];
+        const { box, frame } = previewBox(id, true);
+        detailFrames = [{ id, frame }];
+        const refreshers = [];
+
+        const urlInput = el("input", {
+          class: "input",
+          type: "text",
+          readonly: true,
+          "aria-label": `${overlay.name} browser source URL`,
+        });
+        urlInput.addEventListener("focus", () => urlInput.select());
+        const open = el(
+          "a",
+          { class: "btn btn-small", target: "_blank", rel: "noopener" },
+          "Open",
+          icon("external", 13),
+        );
+
+        detailRefresh = () => {
+          const url = obsUrl(id);
+          urlInput.value = url;
+          open.setAttribute("href", safeUrl(url));
+          for (const refresh of refreshers) refresh();
+        };
+
+        detailEl.replaceChildren(
+          box,
+          el("p", { class: "hint detail-desc" }, overlay.desc),
+          ...overlay.sections.map((section) =>
+            el(
+              "section",
+              { class: "section" },
+              el("h2", { class: "section-title" }, section.title),
+              el(
+                "div",
+                { class: "group" },
+                ...section.rows
+                  .filter((row) => !row.when || row.when())
+                  .map((row) => (row.kind === "static" ? row.build() : fieldRow(id, row, refreshers))),
+              ),
+            ),
+          ),
+          el(
+            "section",
+            { class: "section" },
+            el("h2", { class: "section-title" }, "OBS browser source"),
+            el(
+              "div",
+              { class: "group url-block" },
+              el(
+                "div",
+                { class: "url-row" },
+                urlInput,
+                copyButton(() => urlInput.value, "Copy"),
+                open,
+              ),
+              el(
+                "p",
+                { class: "hint" },
+                "In OBS, add a Browser Source and paste this URL. Size it 1920×1080.",
+              ),
+            ),
+          ),
+        );
+        detailRefresh();
+      }
+
+      // ---------- Send test event ----------
+
+      async function sendTest(event) {
+        const name = getUsername();
+        if (!name) return;
+        try {
+          await api(`/api/sessions/${encodeURIComponent(name)}/simulate`, {
+            method: "POST",
+            json: { ...event.body, type: event.type, user: TEST_USER, timestamp: Date.now() },
+          });
+          toast(`Sent ${event.label}. Your previews show it.`);
+        } catch (err) {
+          toast(`Test event failed: ${err.message}`, { error: true });
+        }
+      }
+
+      function buildTestMenu() {
+        const trigger = el(
+          "button",
+          { type: "button", class: "btn btn-small", "aria-haspopup": "menu", "aria-expanded": "false" },
+          icon("actions", 14),
+          "Send test event",
+        );
+        const menu = el(
+          "div",
+          { class: "menu", role: "menu", "aria-label": "Test events", hidden: true },
+          ...TEST_EVENTS.map((event) => {
+            const item = el("button", { type: "button", role: "menuitem" }, event.label);
+            item.addEventListener("click", () => {
+              setOpen(false);
+              sendTest(event);
+            });
+            return item;
+          }),
+        );
+        const wrap = el("div", { class: "menu-wrap" }, trigger, menu);
+
+        const setOpen = (open, focus = true) => {
+          menu.hidden = !open;
+          trigger.setAttribute("aria-expanded", String(open));
+          if (open && focus) menu.querySelector("button")?.focus();
+        };
+        trigger.addEventListener("click", () => setOpen(menu.hidden));
+        menu.addEventListener("keydown", (event) => {
+          if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+          event.preventDefault();
+          const items = [...menu.querySelectorAll("button")];
+          const step = event.key === "ArrowDown" ? 1 : items.length - 1;
+          const at = items.indexOf(document.activeElement);
+          items[(at + step) % items.length]?.focus();
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && !menu.hidden) {
+            setOpen(false);
+            trigger.focus();
+          }
+        });
+        document.addEventListener("pointerdown", (event) => {
+          if (!menu.hidden && !wrap.contains(event.target)) setOpen(false, false);
+        });
+        wrap.addEventListener("focusout", (event) => {
+          if (!wrap.contains(event.relatedTarget)) setOpen(false, false);
+        });
+        return wrap;
+      }
+
+      // ---------- Routing: #chat, #alerts, #goal, #actions open a detail view; no hash is the list ----------
+
+      const hashId = () => {
+        const id = location.hash.slice(1);
+        return Object.hasOwn(OVERLAYS, id) ? id : "";
+      };
+
+      const testWrap = buildTestMenu();
+      const shell = mountShell({ page: "overlays", crumbs: ["Overlays"], actions: [testWrap] });
+
+      function setCrumbs(id) {
+        if (!id) {
+          shell.setCrumbs(["Overlays"]);
+          return;
+        }
+        shell.setCrumbs(["Overlays", OVERLAYS[id].name]);
+        // The shell renders crumbs as text, so the first one becomes a link back to the list.
+        const back = el("a", { href: "#" }, "Overlays");
+        back.addEventListener("click", (event) => {
+          event.preventDefault();
+          history.pushState(null, "", `${location.pathname}${location.search}`);
+          route();
+        });
+        document.querySelector(".crumbs li")?.replaceChildren(back);
+      }
+
+      function route() {
+        const name = getUsername();
+        const id = hashId();
+        const onList = Boolean(name) && !id;
+        const onDetail = Boolean(name) && Boolean(id);
+
+        testWrap.hidden = !name;
+        emptyEl.hidden = Boolean(name);
+        setCrumbs(id);
+        if (!name) listName = "";
+
+        if (onList && listName !== name) {
+          buildList();
+          listName = name;
+        }
+        if (onDetail && detailKey !== `${id}|${name}`) {
+          buildDetail(id);
+          detailKey = `${id}|${name}`;
+        }
+        if (!onDetail) detailKey = "";
+
+        listEl.hidden = !onList;
+        detailEl.hidden = !onDetail;
+        if (!onList) for (const { frame } of listFrames) unload(frame);
+        if (!onDetail) for (const { frame } of detailFrames) unload(frame);
+        syncPreviews();
+      }
+
+      window.addEventListener("hashchange", route);
+      window.addEventListener("popstate", route);
+      onUsernameChange(route);
+      route();
+    </script>
+  </body>
+</html>

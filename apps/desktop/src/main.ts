@@ -67,6 +67,12 @@ let playerWindow: BrowserWindow | undefined;
 let quitting = false;
 const playerRestarts: Array<number> = [];
 
+// macOS: the native title bar is hidden and the traffic lights sit in the sidebar's top area (see examples/overlays/app/app.css).
+const macTitleBar: Electron.BrowserWindowConstructorOptions =
+  process.platform === "darwin"
+    ? { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 18 } }
+    : {};
+
 const createWindow = () => {
   const window = new BrowserWindow({
     width: 1280,
@@ -74,6 +80,7 @@ const createWindow = () => {
     minWidth: 720,
     minHeight: 480,
     title: "tiklive",
+    ...macTitleBar,
     show: false,
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),

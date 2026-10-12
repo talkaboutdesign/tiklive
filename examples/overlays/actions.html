@@ -2,573 +2,303 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>tiklive actions</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Actions · tiklive</title>
+    <script>
+      try {
+        var t = localStorage.getItem("tiklive.theme");
+        document.documentElement.dataset.theme = t === "light" || t === "dark" ? t : "system";
+      } catch {}
+    </script>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/app/app.css" />
     <style>
-      :root {
-        color-scheme: dark;
-        --bg: #0f1016;
-        --panel: #181a24;
-        --line: #2a2d3c;
-        --muted: #8b8fa7;
-        --accent: #ff4f8b;
-        --text: #e9e9f1;
-        --error: #ff8a8a;
-        --ok: #8ee6a8;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      [hidden] {
-        display: none !important;
-      }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--text);
-        font:
-          15px/1.45 system-ui,
-          -apple-system,
-          "Segoe UI",
-          sans-serif;
-      }
-      p {
-        margin: 0;
-      }
-      h1,
-      h2,
-      h3 {
-        font-weight: 600;
-      }
-      h2 {
-        margin: 0 0 12px;
-        font-size: 13px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-      }
-      h3 {
-        margin: 0;
-        font-size: 14px;
-      }
-      :focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 1px;
-      }
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-      .logo {
-        font-size: 20px;
-        font-weight: 800;
-        letter-spacing: -0.01em;
-      }
-      .logo span {
-        color: var(--accent);
-      }
-      .muted {
-        color: var(--muted);
-      }
-      .hint {
-        margin-top: 8px;
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .field-error {
-        margin-top: 6px;
-        color: var(--error);
-        font-size: 13px;
-      }
-      .field-error:empty {
-        display: none;
-      }
-      [aria-invalid="true"] {
-        border-color: var(--error) !important;
-      }
+      /* Actions page parts. The shell (app.css) supplies the tokens, sidebar, rows, buttons and inputs. */
 
-      /* Buttons and inputs */
-      button,
-      .button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 6px;
-        padding: 8px 14px;
-        font: inherit;
-        font-weight: 500;
+      .section-note {
+        margin: -2px 0 8px 4px;
+      }
+      .section-note a {
+        color: inherit;
+        text-decoration: underline;
+        text-decoration-color: var(--faint);
+        text-underline-offset: 3px;
+      }
+      .section-note a:hover {
         color: var(--text);
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
+      }
+      .quiet-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 12px;
+        margin: 10px 4px 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .link-btn {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-size: 13px;
+        text-decoration: underline;
+        text-decoration-color: var(--faint);
+        text-underline-offset: 3px;
         cursor: pointer;
-        text-decoration: none;
       }
-      button:hover:not(:disabled),
-      .button:hover {
-        border-color: var(--muted);
+      .link-btn:hover:not(:disabled) {
+        color: var(--text);
+        text-decoration-color: currentColor;
       }
-      button:disabled {
+      .link-btn:disabled {
         opacity: 0.5;
         cursor: default;
       }
-      button.primary {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: #fff;
-        font-weight: 600;
-      }
-      button.primary:hover:not(:disabled) {
-        filter: brightness(1.08);
-      }
-      button.ghost {
-        background: transparent;
-        border-color: transparent;
-        color: var(--muted);
-      }
-      button.ghost:hover:not(:disabled) {
-        border-color: var(--line);
-        color: var(--text);
-      }
-      button.danger:hover:not(:disabled) {
-        color: var(--error);
-        border-color: var(--error);
-      }
-      button.link {
-        background: none;
-        border: 0;
-        padding: 0;
-        color: var(--accent);
-        font-weight: 600;
-      }
-      button.link:hover:not(:disabled) {
-        text-decoration: underline;
-      }
-      button.small,
-      .button.small {
-        padding: 5px 10px;
-        font-size: 13px;
-      }
-      input,
-      select,
-      textarea {
-        font: inherit;
-        color: inherit;
-        padding: 8px 12px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-      }
-      input[type="range"] {
-        padding: 0;
-        accent-color: var(--accent);
-      }
-      input[type="checkbox"],
-      input[type="radio"] {
-        accent-color: var(--accent);
-      }
-      textarea {
-        width: 100%;
-        min-height: 72px;
-        resize: vertical;
-      }
-      .inline {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-      .inline input[type="number"] {
-        width: 110px;
-      }
-      .fields {
-        display: grid;
-        gap: 14px;
-      }
-      .field-label {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        font-size: 13px;
-        color: var(--muted);
-      }
-      .field-label input,
-      .field-label select,
-      .field-label textarea {
-        color: var(--text);
-      }
-      .check {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 14px;
-      }
-
-      /* Shell */
-      .top {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        padding: 12px 24px;
-        background: var(--bg);
-        border-bottom: 1px solid var(--line);
-      }
-      .nav {
-        display: flex;
-        gap: 4px;
-      }
-      .nav a {
-        padding: 6px 12px;
-        color: var(--muted);
-        border: 1px solid transparent;
-        border-radius: 10px;
-        text-decoration: none;
-        font-weight: 500;
-      }
-      .nav a:hover {
-        color: var(--text);
-      }
-      .nav a[aria-current="page"] {
-        color: var(--text);
-        background: var(--panel);
-        border: 1px solid var(--line);
-      }
-      .top-right {
-        margin-left: auto;
+      .load-error {
         display: flex;
         flex-wrap: wrap;
-        justify-content: flex-end;
         align-items: center;
         gap: 12px;
-        min-width: 0;
-      }
-      /* Desktop app only: sound controls for the Actions player (hidden in a normal browser) */
-      .app-sound {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 8px;
-        min-width: 0;
-      }
-      .app-toggle {
-        padding: 6px 8px;
-        color: var(--muted);
-      }
-      .app-toggle[aria-pressed="true"] {
-        color: var(--text);
-      }
-      .app-volume {
-        flex: none;
-        width: 90px;
-        margin: 0;
-        padding: 0;
-        background: none;
-        border: 0;
-        accent-color: var(--accent);
-        cursor: pointer;
-      }
-      .app-now {
-        display: flex;
-        flex: none;
-        align-items: center;
-        gap: 6px;
-        min-width: 0;
-        padding: 3px 4px 3px 12px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
+        margin-bottom: 28px;
+        color: var(--danger);
         font-size: 13px;
-      }
-      .app-now-text {
-        min-width: 0;
-        max-width: 220px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .app-now button {
-        flex: none;
-        padding: 3px 9px;
-        font-size: 13px;
-      }
-      .app-offline {
-        color: var(--muted);
-        font-size: 13px;
-        white-space: nowrap;
       }
 
-      .account {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        min-width: 0;
-        padding: 4px 12px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        font-weight: 600;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      main {
-        display: grid;
-        gap: 16px;
-        max-width: 960px;
-        margin: 0 auto;
-        padding: 16px 24px 48px;
-      }
-      #app {
-        display: grid;
-        gap: 16px;
-      }
-      .card {
-        padding: 16px 18px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 14px;
-      }
-      .card-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
-      }
-      .card-head h2 {
-        margin: 0;
-      }
-      .card > p + p {
-        margin-top: 8px;
-      }
-      details.card > summary {
-        cursor: pointer;
-        font-size: 13px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-        font-weight: 600;
-      }
-      details.card[open] > summary {
-        margin-bottom: 12px;
-      }
-      details.card > summary::-webkit-details-marker {
-        color: var(--muted);
-      }
-      .tips {
-        margin: 10px 0 0;
-        padding-left: 20px;
-        color: var(--muted);
-        font-size: 14px;
-      }
-      .tips li + li {
-        margin-top: 4px;
-      }
-      .url-row {
-        display: flex;
-        gap: 6px;
-      }
-      .url-row .url {
-        flex: 1;
-        min-width: 0;
-        padding: 6px 8px;
-        color: var(--muted);
-        font-size: 12px;
-      }
-      .url-row + .check {
-        margin-top: 10px;
-      }
-      .url-row button,
-      .url-row .button {
-        padding: 6px 12px;
-        font-size: 13px;
-      }
-      .page-gate {
-        max-width: 440px;
-        margin: 80px auto;
-        padding: 28px;
-        text-align: center;
-      }
-      .page-gate p + p {
-        margin-top: 14px;
-      }
-
-      /* Rules list */
+      /* Actions list */
       .rules {
         list-style: none;
         margin: 0;
         padding: 0;
+        overflow: visible; /* the "..." menu opens over the next row */
       }
       .rule {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 0;
-        border-top: 1px solid var(--line);
+        gap: 16px;
       }
-      .rule:first-child {
-        border-top: 0;
-      }
-      .rule.off .rule-main {
-        opacity: 0.5;
-      }
-      .rule-name {
-        font-weight: 600;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .rule-sum {
-        color: var(--muted);
-        font-size: 13px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .rule-main {
-        min-width: 0;
-      }
-      .rule-actions {
+      .rule-open {
         display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: 6px;
+        flex: 1 1 auto;
+        min-width: 0;
+        margin: 0;
+        padding: 2px 0;
+        border: 0;
+        border-radius: 6px;
+        background: none;
+        color: inherit;
+        text-align: left;
       }
-      .switch {
-        position: relative;
-        width: 38px;
-        height: 22px;
+      .rule-open .row-title,
+      .rule-open .row-desc {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .rule-open:hover .row-title {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      .rule.off .rule-open {
+        opacity: 0.55;
+      }
+      .rule .row-control {
+        gap: 10px;
+      }
+      .more {
+        width: 30px;
         padding: 0;
-        border-radius: 999px;
-        background: var(--line);
-        border-color: var(--line);
-        flex: none;
+        font-size: 16px;
+        line-height: 1;
+        letter-spacing: 0.08em;
       }
-      .switch::after {
-        content: "";
+      .more[aria-expanded="true"] {
+        background: var(--hover);
+        color: var(--text);
+      }
+      .menu-wrap {
+        position: relative;
+        display: flex;
+      }
+      .menu {
         position: absolute;
-        top: 3px;
-        left: 3px;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: var(--text);
-        transition: transform 0.15s ease;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 20;
+        display: grid;
+        min-width: 168px;
+        padding: 4px;
+        background: var(--surface);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        box-shadow: var(--shadow);
       }
-      .switch[aria-checked="true"] {
-        background: var(--accent);
-        border-color: var(--accent);
+      .menu button {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        height: 30px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 6px;
+        background: none;
+        color: var(--text);
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
       }
-      .switch[aria-checked="true"]::after {
-        transform: translateX(16px);
-        background: #fff;
+      .menu button:hover,
+      .menu button:focus-visible {
+        background: var(--hover);
+        outline: none;
       }
-      .templates {
+      .menu button.danger {
+        color: var(--danger);
+      }
+      .menu-sep {
+        height: 1px;
+        margin: 4px 6px;
+        background: var(--line);
+      }
+
+      /* Empty state: the four templates */
+      .start {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+      }
+      .template-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
-        margin-top: 12px;
       }
-      .template {
+      .tcard {
         display: grid;
-        justify-items: start;
         gap: 4px;
-        padding: 12px;
+        min-width: 0;
+        padding: 14px;
+        background: var(--field);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+        color: var(--text);
         text-align: left;
-        background: var(--bg);
+        cursor: pointer;
+        transition:
+          border-color 0.12s ease,
+          background-color 0.12s ease;
       }
-      .template span {
+      .tcard:hover:not(:disabled) {
+        background: var(--hover);
+        border-color: var(--line-strong);
+      }
+      .tcard:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .tcard-name {
+        font-weight: 600;
+      }
+      .tcard-sum {
         color: var(--muted);
         font-size: 13px;
+        line-height: 1.4;
       }
-      .more-templates {
-        margin-top: 12px;
-        color: var(--muted);
-        font-size: 13px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px 10px;
-        align-items: center;
+      @container (max-width: 560px) {
+        .template-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
 
       /* Activity */
       .feed {
-        list-style: none;
+        max-height: 360px;
         margin: 0;
         padding: 0;
-        max-height: 360px;
         overflow-y: auto;
-        font-size: 14px;
+        list-style: none;
       }
       .feed li {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 6px 0;
-        border-top: 1px solid #1f2230;
+        gap: 12px;
+        min-height: 44px;
+        padding: 8px 18px;
       }
-      .feed li:first-child {
-        border-top: 0;
+      .feed li + li {
+        border-top: 1px solid var(--line);
       }
       .feed .time {
         flex: none;
+        width: 56px;
         color: var(--muted);
-        font-size: 12px;
+        font-size: 13px;
         font-variant-numeric: tabular-nums;
       }
-      .feed .fired-name {
-        font-weight: 600;
+      .feed .fired {
+        flex: 0 1 auto;
+        min-width: 0;
         overflow: hidden;
+        font-weight: 500;
         text-overflow: ellipsis;
         white-space: nowrap;
-        min-width: 0;
       }
       .feed .who {
-        color: var(--muted);
+        flex: 1 1 auto;
+        min-width: 0;
         overflow: hidden;
+        color: var(--muted);
+        font-size: 13px;
         text-overflow: ellipsis;
         white-space: nowrap;
-        min-width: 0;
       }
-      .badge {
-        flex: none;
-        padding: 1px 8px;
-        border-radius: 999px;
-        font-size: 11px;
-        font-weight: 700;
-        text-transform: uppercase;
-        background: #22517a;
-      }
-      .empty {
+      .feed-empty {
+        margin: 0;
+        padding: 16px 18px;
         color: var(--muted);
-        font-size: 14px;
       }
 
-      /* Media library */
-      .lib-toolbar {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin-bottom: 10px;
+      /* Media library: a details element styled as a group */
+      .lib-details > summary {
+        list-style: none;
+        cursor: pointer;
+      }
+      .lib-details > summary::-webkit-details-marker {
+        display: none;
+      }
+      .lib-details > summary .chev {
+        flex: none;
+        color: var(--muted);
+        transition: transform 0.15s ease;
+      }
+      .lib-details[open] > summary {
+        border-bottom: 1px solid var(--line);
+      }
+      .lib-details[open] > summary .chev {
+        transform: rotate(180deg);
+      }
+      .lib-body {
+        padding: 14px 18px 18px;
       }
       .lib {
-        border: 1px dashed transparent;
-        border-radius: 12px;
+        display: grid;
+        gap: 10px;
+        min-width: 0;
         padding: 6px;
+        border: 1px dashed transparent;
+        border-radius: var(--radius-sm);
         transition: border-color 0.1s ease;
+      }
+      .lib-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
       }
       .lib.drag,
       .sound-panel.drag {
         border-color: var(--accent);
-        background: color-mix(in srgb, var(--accent) 8%, transparent);
+        background: var(--accent-soft);
       }
       .lib-grid {
         display: grid;
@@ -584,11 +314,11 @@
         display: flex;
         flex-direction: column;
         gap: 6px;
-        padding: 6px;
-        background: var(--bg);
-        border: 1px solid var(--line);
-        border-radius: 10px;
         min-width: 0;
+        padding: 6px;
+        background: var(--field);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
       }
       .lib-item.selected {
         border-color: var(--accent);
@@ -608,11 +338,11 @@
         display: grid;
         place-items: center;
         height: 72px;
+        overflow: hidden;
         border-radius: 8px;
-        background: #11131b;
+        background: var(--bg);
         color: var(--muted);
         font-size: 12px;
-        overflow: hidden;
       }
       .lib-thumb img {
         max-width: 100%;
@@ -620,155 +350,226 @@
         object-fit: contain;
       }
       .lib-name {
-        font-size: 12px;
         overflow: hidden;
+        font-size: 12.5px;
         text-overflow: ellipsis;
         white-space: nowrap;
-        text-align: left;
       }
       .lib-meta {
         display: flex;
-        justify-content: space-between;
         align-items: center;
+        justify-content: space-between;
         gap: 4px;
         color: var(--muted);
-        font-size: 11px;
-      }
-      .lib-meta button {
-        padding: 2px 6px;
-        font-size: 11px;
+        font-size: 11.5px;
       }
       .lib-paste {
         display: flex;
         gap: 6px;
-        margin-top: 10px;
+        margin-top: 2px;
       }
-      .lib-paste input {
+      .lib-paste .input {
         flex: 1;
-        min-width: 0;
       }
 
       /* Editor dialog */
-      dialog {
-        width: min(720px, calc(100vw - 32px));
-        max-height: calc(100vh - 32px);
+      dialog.editor {
+        width: min(740px, calc(100vw - 32px));
+        max-height: calc(100vh - 48px);
         padding: 0;
         color: var(--text);
-        background: var(--panel);
+        background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 14px;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
       }
-      dialog::backdrop {
-        background: rgba(5, 6, 10, 0.7);
-      }
-      .dialog-form {
+      dialog.editor[open] {
         display: flex;
         flex-direction: column;
-        max-height: calc(100vh - 32px);
       }
-      .dialog-head {
+      dialog.editor::backdrop {
+        background: rgba(8, 8, 14, 0.45);
+      }
+      .editor-form {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .ed-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 14px 20px;
+        gap: 12px;
+        padding: 14px 22px;
         border-bottom: 1px solid var(--line);
       }
-      .dialog-body {
+      .ed-title {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .ed-body {
+        display: grid;
         flex: 1;
+        gap: 22px;
+        min-height: 0;
+        padding: 18px 22px;
         overflow-y: auto;
-        padding: 16px 20px;
-        display: grid;
-        gap: 20px;
       }
-      .dialog-foot {
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 10px;
-        padding: 12px 20px;
+      .ed-body .section-title {
+        margin-bottom: 8px;
+      }
+      .ed-pad {
+        display: grid;
+        gap: 12px;
+        padding: 14px 16px;
+      }
+      .ed-sub {
+        display: grid;
+        gap: 12px;
+        padding: 14px 16px;
         border-top: 1px solid var(--line);
-        background: var(--panel);
       }
-      .dialog-foot .foot-error {
-        margin-right: auto;
-        color: var(--error);
-        font-size: 13px;
-      }
-      .section h3 {
-        margin-bottom: 8px;
-      }
-      .section-head {
+      .ed-foot {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 8px;
-      }
-      .section-head h3 {
-        margin: 0;
-      }
-      .tiles {
-        display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        justify-content: flex-end;
         gap: 8px;
-        margin: 0;
-        padding: 0;
-        border: 0;
+        padding: 12px 22px;
+        border-top: 1px solid var(--line);
+        background: var(--surface);
       }
-      .tile {
-        display: grid;
-        place-items: center;
-        gap: 2px;
-        padding: 10px 6px;
-        background: var(--bg);
+      .ed-foot .foot-error {
+        margin-right: auto;
+        color: var(--danger);
         font-size: 13px;
-        text-align: center;
       }
-      .tile b {
-        font-size: 20px;
-        line-height: 1;
-      }
-      .tile[aria-checked="true"] {
-        border-color: var(--accent);
-        background: color-mix(in srgb, var(--accent) 14%, transparent);
-      }
-      .option-block {
-        display: grid;
-        gap: 10px;
-        margin-top: 10px;
-        padding: 12px;
-        background: var(--bg);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-      }
-      .gift-opts {
-        display: grid;
-        gap: 10px;
-      }
-      .option-block fieldset {
+      .field-error {
         margin: 0;
-        padding: 0;
-        border: 0;
+        color: var(--danger);
+        font-size: 13px;
+      }
+      .field-error:empty {
+        display: none;
+      }
+      [aria-invalid="true"] {
+        border-color: var(--danger) !important;
+      }
+      .fields {
         display: grid;
         gap: 6px;
+        min-width: 0;
       }
-      .option-block legend {
-        padding: 0;
-        margin-bottom: 4px;
+      .field-label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
         color: var(--muted);
         font-size: 13px;
       }
-      .radio-row {
+      .field-label > .input,
+      .field-label > .select,
+      .field-label > .textarea,
+      .field-label > .range-row {
+        color: var(--text);
+      }
+      .field-caption {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .inline {
         display: flex;
         flex-wrap: wrap;
-        gap: 12px;
-        font-size: 14px;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 13px;
       }
-      .radio-row label {
+      .inline .input {
+        width: 130px;
+      }
+      .row-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .segmented {
+        max-width: 100%;
+        overflow-x: auto;
+      }
+      .segmented label {
+        height: 28px;
+      }
+      .switch-row {
         display: flex;
         align-items: center;
-        gap: 6px;
+        justify-content: space-between;
+        gap: 16px;
       }
+      .switch-row .row-text {
+        min-width: 0;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .chips .var {
+        height: 24px;
+        padding: 0 8px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      .range-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .range-row .range {
+        flex: 1;
+        min-width: 0;
+      }
+      .range-row output {
+        min-width: 52px;
+        color: var(--muted);
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+
+      /* Steps */
+      .steps-list {
+        display: grid;
+        gap: 10px;
+      }
+      .step {
+        display: grid;
+        gap: 12px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+      }
+      .step-head {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .step-head .kind {
+        margin-right: auto;
+        font-weight: 600;
+      }
+      .add-steps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      /* Trigger options */
       .gift-picker {
         display: grid;
         gap: 8px;
@@ -778,20 +579,23 @@
         grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
         gap: 6px;
         max-height: 220px;
-        overflow-y: auto;
         padding: 2px;
+        overflow-y: auto;
       }
       .gift {
         display: grid;
         justify-items: center;
         gap: 2px;
         padding: 8px 6px;
-        background: var(--panel);
+        background: var(--field);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
         font-size: 12px;
         text-align: center;
       }
       .gift[aria-pressed="true"] {
         border-color: var(--accent);
+        background: var(--accent-soft);
       }
       .gift img {
         width: 40px;
@@ -808,79 +612,18 @@
         color: var(--muted);
         font-size: 11px;
       }
-      .steps-list {
+
+      /* Media and sound pickers */
+      .media-pick,
+      .sound-pick {
         display: grid;
-        gap: 10px;
-      }
-      .step {
-        display: grid;
-        gap: 10px;
-        padding: 12px;
-        background: var(--bg);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-      }
-      .step-head {
-        display: flex;
-        align-items: center;
         gap: 8px;
-      }
-      .step-head .kind {
-        margin-right: auto;
-        font-weight: 600;
-      }
-      .step-head button {
-        padding: 4px 8px;
-        font-size: 12px;
-      }
-      .add-steps {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 10px;
-      }
-      .add-steps button {
-        font-size: 13px;
-      }
-      .chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-        font-size: 12px;
-        color: var(--muted);
-      }
-      .chips button.var {
-        padding: 2px 8px;
-        font-size: 12px;
-        font-family: ui-monospace, Menlo, monospace;
-      }
-      .row-2 {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-      }
-      .range-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .range-row input[type="range"] {
-        flex: 1;
         min-width: 0;
       }
-      .range-row output {
-        min-width: 56px;
-        text-align: right;
-        font-variant-numeric: tabular-nums;
-        font-size: 13px;
-      }
-      .media-pick {
+      .media-current,
+      .sound-current {
         display: grid;
-        gap: 8px;
-      }
-      .media-current {
-        display: flex;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         align-items: center;
         gap: 10px;
         min-width: 0;
@@ -890,33 +633,61 @@
         height: 40px;
         object-fit: cover;
         border-radius: 6px;
-        background: #11131b;
+        background: var(--field);
       }
-      .media-current .mname {
+      .media-current .mname,
+      .sound-current .mname {
         min-width: 0;
         overflow: hidden;
+        font-size: 14px;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: 14px;
       }
-      .media-current .mname.none {
+      .mname.none {
         color: var(--muted);
       }
-      .media-panel {
+      .media-panel,
+      .sound-panel {
         display: grid;
-        gap: 8px;
-        padding: 10px;
-        background: var(--panel);
+        gap: 14px;
+        padding: 12px;
+        background: var(--field);
         border: 1px solid var(--line);
-        border-radius: 12px;
+        border-radius: var(--radius-sm);
+        transition: border-color 0.1s ease;
       }
       .sound-query {
         display: flex;
         gap: 6px;
       }
-      .sound-query input {
+      .sound-query .input {
         flex: 1;
         min-width: 0;
+      }
+      .sound-section {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+      }
+      .sound-heading {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+      .sound-intro {
+        display: grid;
+        gap: 8px;
+      }
+      .sound-intro .hint {
+        margin: 0;
+      }
+      .sound-status {
+        margin: 0;
+      }
+      .sound-status:empty {
+        display: none;
       }
       .sound-list {
         display: grid;
@@ -936,94 +707,27 @@
         border-radius: 8px;
       }
       .sound-row:hover {
-        background: var(--bg);
+        background: var(--hover);
       }
-      .sound-row button,
-      .sound-row .button {
-        padding: 4px 10px;
-        font-size: 13px;
+      .sound-row.selected {
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 1px var(--accent);
       }
-      .preview {
-        min-width: 34px;
+      .sound-row .btn {
+        padding: 0 8px;
+      }
+      .sound-row .preview {
+        width: 34px;
+        padding: 0;
+      }
+      .sound-row .field-error {
+        grid-column: 1 / -1;
       }
       .sound-title {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .sound-row .field-error {
-        grid-column: 1 / -1;
-        margin: 0;
-      }
-      .sound-more {
-        display: flex;
-        justify-content: center;
-      }
-      /* Sound picker: a search box, your sounds, then MyInstants, in one panel */
-      .sound-pick {
-        display: grid;
-        gap: 8px;
-      }
-      .sound-current {
-        display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 10px;
-        padding: 6px 8px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-      }
-      .sound-current .mname {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .sound-panel {
-        display: grid;
-        gap: 14px;
-        padding: 12px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        transition: border-color 0.1s ease;
-      }
-      .sound-section {
-        display: grid;
-        gap: 8px;
-        min-width: 0;
-      }
-      .sound-heading {
-        margin: 0;
-        font-size: 12px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--muted);
-      }
-      .sound-intro {
-        display: grid;
-        gap: 8px;
-      }
-      .sound-intro .hint {
-        margin-top: 0;
-      }
-      .sound-status {
-        margin-top: 0;
-      }
-      .sound-status:empty {
-        display: none;
-      }
-      .sound-note {
-        padding: 6px;
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .sound-row.selected {
-        background: color-mix(in srgb, var(--accent) 12%, transparent);
-        box-shadow: inset 0 0 0 1px var(--accent);
       }
       .sound-meta,
       .sound-action,
@@ -1038,9 +742,18 @@
         white-space: nowrap;
       }
       .sound-chosen {
-        color: var(--ok);
+        color: var(--success);
         font-size: 13px;
         white-space: nowrap;
+      }
+      .sound-note {
+        padding: 6px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .sound-more {
+        display: flex;
+        justify-content: center;
       }
       .sound-foot {
         display: flex;
@@ -1055,288 +768,210 @@
         .sound-meta {
           display: none;
         }
-      }
-
-      .toast {
-        position: fixed;
-        left: 50%;
-        bottom: 24px;
-        transform: translateX(-50%);
-        z-index: 30;
-        max-width: calc(100vw - 32px);
-        padding: 10px 16px;
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        font-size: 14px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      }
-      .toast.error {
-        border-color: var(--error);
-        color: var(--error);
-      }
-      .load-error {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 12px;
-        color: var(--error);
-      }
-
-      @media (max-width: 800px) {
-        .tiles {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-        }
-        .rule {
-          grid-template-columns: auto minmax(0, 1fr);
-        }
-        .rule-actions {
-          grid-column: 1 / -1;
-          justify-content: flex-start;
-        }
-        .templates {
-          grid-template-columns: minmax(0, 1fr);
-        }
-      }
-      @media (max-width: 560px) {
-        .top {
-          flex-wrap: wrap;
-          padding: 10px 16px;
-        }
-        main {
-          padding: 12px 16px 40px;
-        }
         .row-2 {
           grid-template-columns: minmax(0, 1fr);
-        }
-        .tiles {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
     </style>
   </head>
   <body>
-    <header class="top">
-      <div class="logo">tik<span>live</span></div>
-      <nav class="nav" aria-label="Pages">
-        <a id="nav-dashboard" href="/">Dashboard</a>
-        <a id="nav-actions" href="/actions.html" aria-current="page">Actions</a>
-      </nav>
-      <div class="top-right">
-        <div id="app-sound" class="app-sound" hidden>
-          <button
-            id="app-toggle"
-            class="ghost small app-toggle"
-            type="button"
-            aria-label="App sound"
-            aria-pressed="true"
-            title="Sounds and speech from the app: on/off"
-          >
-            <svg
-              id="app-icon-on"
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M11 5 6 9H3v6h3l5 4z" />
-              <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
-            </svg>
-            <svg
-              id="app-icon-off"
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              focusable="false"
-              hidden
-            >
-              <path d="M11 5 6 9H3v6h3l5 4z" />
-              <path d="m16 9 6 6m0-6-6 6" />
-            </svg>
-          </button>
-          <input
-            id="app-volume"
-            class="app-volume"
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            aria-label="App volume"
-          />
-          <div id="app-now" class="app-now" hidden>
-            <span id="app-now-text" class="app-now-text"></span>
-            <button id="app-skip" class="ghost small" type="button" title="Skip the action that's playing">
-              Skip
-            </button>
-            <button
-              id="app-clear"
-              class="ghost small"
-              type="button"
-              title="Drop the queue and stop what's playing"
-            >
-              Clear
-            </button>
+    <div class="app">
+      <aside id="sidebar"></aside>
+      <main id="main">
+        <header id="page-header"></header>
+        <div class="page" id="page">
+          <h1 class="sr-only">Actions</h1>
+
+          <div id="gate" class="empty" hidden>
+            <p>Set your TikTok username on the dashboard first.</p>
+            <p><a class="btn btn-primary btn-small" id="gate-link" href="/">Go to the dashboard</a></p>
           </div>
-          <span id="app-offline" class="app-offline" hidden>Sound player offline</span>
+
+          <div id="app" hidden>
+            <div class="card load-error" id="load-error" role="alert" hidden>
+              <span id="load-error-text">Couldn't load your actions.</span>
+              <button id="load-retry" type="button" class="btn btn-small">Retry</button>
+            </div>
+
+            <section class="section" aria-labelledby="sec-actions">
+              <h2 class="section-title" id="sec-actions">Actions</h2>
+              <p class="hint section-note">
+                To show images and videos on stream, add the Actions player from
+                <a id="overlays-link" href="/overlays.html#actions">Overlays</a>.
+              </p>
+              <ul id="rules" class="group rules" hidden></ul>
+              <div id="rules-empty" class="group start" hidden>
+                <div>
+                  <div class="row-title">No actions yet.</div>
+                  <p class="hint">Start from a template, or make your own with New action.</p>
+                </div>
+                <div id="templates" class="template-grid"></div>
+              </div>
+              <p id="more-templates" class="quiet-links" hidden></p>
+            </section>
+
+            <section class="section" aria-labelledby="sec-activity">
+              <h2 class="section-title" id="sec-activity">Activity</h2>
+              <div class="group">
+                <ol id="feed" class="feed" role="log" aria-live="polite" aria-label="Fired actions"></ol>
+                <p id="feed-empty" class="feed-empty">
+                  Fired actions show up here. This page doesn't play them; the player in OBS does.
+                </p>
+              </div>
+            </section>
+
+            <section class="section" aria-label="Media library">
+              <details id="library-card" class="group lib-details">
+                <summary class="row">
+                  <span class="row-text">
+                    <span class="row-title">Media library</span>
+                    <span class="row-desc"
+                      >Images, videos and sounds stored on this server for your actions.</span
+                    >
+                  </span>
+                  <span class="row-control">
+                    <svg
+                      class="chev"
+                      viewBox="0 0 24 24"
+                      width="16"
+                      height="16"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </span>
+                </summary>
+                <div class="lib-body" id="library-slot"></div>
+              </details>
+            </section>
+          </div>
         </div>
-        <div class="account" id="account" hidden></div>
-      </div>
-    </header>
+      </main>
+    </div>
 
-    <main>
-      <section id="gate" class="card page-gate" hidden>
-        <p>Set your TikTok username on the dashboard first.</p>
-        <p><a class="button primary" href="/">Go to the dashboard</a></p>
-      </section>
-
-      <div id="app" hidden>
-        <section id="load-error" class="card" hidden>
-          <div class="load-error" role="alert">
-            <span id="load-error-text">Couldn't load your actions.</span>
-            <button id="load-retry" type="button" class="small">Retry</button>
-          </div>
-        </section>
-
-        <div id="setup-slot"></div>
-
-        <section class="card" aria-labelledby="rules-title">
-          <div class="card-head">
-            <h2 id="rules-title">Actions</h2>
-            <button id="new" class="primary small" type="button">New action</button>
-          </div>
-          <ul id="rules" class="rules" hidden></ul>
-          <div id="rules-empty" hidden>
-            <p class="empty">No actions yet.</p>
-            <p class="hint">Start from a template, or make your own with New action.</p>
-            <div id="templates" class="templates"></div>
-          </div>
-          <div id="more-templates" class="more-templates" hidden></div>
-        </section>
-
-        <section class="card" aria-labelledby="activity-title">
-          <div class="card-head">
-            <h2 id="activity-title">Activity</h2>
-          </div>
-          <ol id="feed" class="feed" role="log" aria-live="polite" aria-label="Fired actions"></ol>
-          <p id="feed-empty" class="empty">
-            Fired actions show up here. This page doesn't play them; the player in OBS does.
-          </p>
-        </section>
-
-        <details id="library-card" class="card">
-          <summary>Media library</summary>
-          <div id="library-slot"></div>
-        </details>
-      </div>
-    </main>
-
-    <div id="toast" class="toast" role="status" hidden></div>
-
-    <dialog id="editor" aria-labelledby="editor-title">
-      <form id="editor-form" class="dialog-form" novalidate>
-        <div class="dialog-head">
-          <h2 id="editor-title" class="sr-only">New action</h2>
-          <span id="editor-heading" class="logo" style="font-size: 17px">New action</span>
-          <button id="editor-close" type="button" class="ghost small">Close</button>
+    <dialog id="editor" class="editor" aria-labelledby="editor-title">
+      <form id="editor-form" class="editor-form" novalidate>
+        <div class="ed-head">
+          <h2 id="editor-title" class="ed-title">New action</h2>
+          <button id="editor-close" type="button" class="btn btn-ghost btn-small">Close</button>
         </div>
-        <div class="dialog-body">
-          <section class="section">
-            <label class="field-label">
-              Name
+        <div class="ed-body">
+          <section aria-labelledby="name-title">
+            <h3 class="section-title" id="name-title">Name</h3>
+            <div class="group ed-pad">
               <input
                 id="f-name"
+                class="input"
                 data-key="name"
                 maxlength="100"
                 autocomplete="off"
                 placeholder="Leave empty to use the summary"
+                aria-labelledby="name-title"
               />
-            </label>
-            <p class="field-error" data-error="name"></p>
+              <p class="field-error" data-error="name"></p>
+            </div>
           </section>
 
-          <section class="section" aria-labelledby="when-title">
-            <h3 id="when-title">When…</h3>
-            <div id="tiles" class="tiles" role="radiogroup" aria-labelledby="when-title"></div>
-            <div id="trigger-opts" class="option-block"></div>
+          <section aria-labelledby="when-title">
+            <h3 class="section-title" id="when-title">When…</h3>
+            <div class="group">
+              <div class="ed-pad">
+                <div id="tiles" class="segmented" role="radiogroup" aria-labelledby="when-title"></div>
+              </div>
+              <div id="trigger-opts" class="ed-sub"></div>
+            </div>
           </section>
 
-          <section class="section" aria-labelledby="then-title">
-            <h3 id="then-title">Then…</h3>
+          <section aria-labelledby="then-title">
+            <h3 class="section-title" id="then-title">Then…</h3>
             <div id="steps-list" class="steps-list"></div>
             <p class="field-error" data-error="steps"></p>
             <div class="add-steps" role="group" aria-label="Add a step">
-              <button type="button" data-add="sound" data-key="steps">Play sound</button>
-              <button type="button" data-add="media">Show image or video</button>
-              <button type="button" data-add="speak">Say something</button>
-              <button type="button" data-add="obsScene">Switch OBS scene</button>
+              <button type="button" class="btn btn-small" data-add="sound" data-key="steps">
+                Play sound
+              </button>
+              <button type="button" class="btn btn-small" data-add="media">Show image or video</button>
+              <button type="button" class="btn btn-small" data-add="speak">Say something</button>
+              <button type="button" class="btn btn-small" data-add="obsScene">Switch OBS scene</button>
             </div>
           </section>
 
-          <section class="section">
-            <h3>Options</h3>
-            <div class="row-2">
-              <div class="fields">
-                <label class="field-label">
-                  Cooldown (seconds, anyone)
-                  <input
-                    id="f-cooldown"
-                    data-key="cooldown"
-                    type="number"
-                    min="0"
-                    max="86400"
-                    step="1"
-                    inputmode="numeric"
-                  />
-                </label>
-                <p class="hint">Stops the action firing again for anyone for this long. Empty for none.</p>
-                <p class="field-error" data-error="cooldown"></p>
-              </div>
-              <div class="fields">
-                <label class="field-label">
-                  Per-viewer cooldown (seconds)
-                  <input
-                    id="f-user-cooldown"
-                    data-key="userCooldown"
-                    type="number"
-                    min="0"
-                    max="86400"
-                    step="1"
-                    inputmode="numeric"
-                  />
-                </label>
-                <p class="hint">Stops the same viewer triggering it again for this long. Empty for none.</p>
-                <p class="field-error" data-error="userCooldown"></p>
+          <section aria-labelledby="options-title">
+            <h3 class="section-title" id="options-title">Options</h3>
+            <div class="group ed-pad">
+              <div class="row-2">
+                <div class="fields">
+                  <label class="field-label">
+                    Cooldown (seconds, anyone)
+                    <input
+                      id="f-cooldown"
+                      class="input"
+                      data-key="cooldown"
+                      type="number"
+                      min="0"
+                      max="86400"
+                      step="1"
+                      inputmode="numeric"
+                    />
+                  </label>
+                  <p class="hint">Stops the action firing again for anyone for this long. Empty for none.</p>
+                  <p class="field-error" data-error="cooldown"></p>
+                </div>
+                <div class="fields">
+                  <label class="field-label">
+                    Per-viewer cooldown (seconds)
+                    <input
+                      id="f-user-cooldown"
+                      class="input"
+                      data-key="userCooldown"
+                      type="number"
+                      min="0"
+                      max="86400"
+                      step="1"
+                      inputmode="numeric"
+                    />
+                  </label>
+                  <p class="hint">Stops the same viewer triggering it again for this long. Empty for none.</p>
+                  <p class="field-error" data-error="userCooldown"></p>
+                </div>
               </div>
             </div>
           </section>
         </div>
-        <div class="dialog-foot">
+        <div class="ed-foot">
           <span id="e-form" class="foot-error" role="alert"></span>
-          <button id="editor-cancel" type="button" class="ghost">Cancel</button>
-          <button type="submit" class="primary">Save</button>
+          <button id="editor-cancel" type="button" class="btn btn-ghost">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
         </div>
       </form>
     </dialog>
+
     <script type="module">
+      import { TikLive } from "/tiklive.js";
+      import {
+        api,
+        el,
+        getUsername,
+        img,
+        isDesktop,
+        mountShell,
+        onUsernameChange,
+        safeUrl,
+        toast,
+        token,
+        withToken,
+      } from "/app/shell.js";
+
       const $ = (id) => document.getElementById(id);
-      const params = new URLSearchParams(location.search);
-      const token = params.get("token") ?? "";
-      const STORAGE_KEY = "tiklive.username";
-      const USERNAME = /^[a-z0-9._]{1,32}$/;
       const MAX_STEPS = 10;
       const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+      const FEED_MAX = 30;
       const MEDIA_TYPES = {
         "image/png": "image",
         "image/jpeg": "image",
@@ -1360,12 +995,6 @@
         ["chat", "Chat"],
         ["likes", "Likes"],
       ];
-      const STEP_LABELS = {
-        sound: "Sound",
-        media: "Image / video",
-        speak: "Speech",
-        obsScene: "Scene",
-      };
       // Variables offered in "Say something", per trigger (see TEMPLATE_VARIABLES in contracts).
       const VARS_BY_TRIGGER = {
         always: ["nickname", "username"],
@@ -1407,122 +1036,43 @@
           steps: [{ kind: "speak", text: "We just hit {likes} likes!" }],
         },
       ];
-
-      let TikLive = null; // the client class, loaded below; null if /tiklive.js is missing
-      let ruleSet = { revision: 0, rules: [] }; // last state read from or saved to the server
-      let activity = null; // the activity connection, if any
-      let editor = null; // { draft, isNew, saved } while the editor is open
-
-      // Mirrors normalizeUsername() in packages/contracts/src/protocol.ts.
-      function normalizeUsername(input) {
-        const trimmed = input.trim();
-        const fromUrl = trimmed.match(/tiktok\.com\/@([^/?#]+)/i);
-        return (fromUrl?.[1] ?? trimmed).replace(/^@/, "").toLowerCase();
-      }
-
-      // localStorage can throw (private mode, storage disabled). The page still works without it.
-      function readSaved() {
-        try {
-          const saved = localStorage.getItem(STORAGE_KEY) ?? "";
-          return USERNAME.test(saved) ? saved : "";
-        } catch {
-          return "";
-        }
-      }
-
-      // Only http(s) URLs may reach an <img>; anything else renders as nothing.
-      // Relative urls (uploads are /media/...) resolve against this page; the result must still be http(s).
-      const safeUrl = (u) => {
-        try {
-          const url = new URL(String(u ?? ""), location.href);
-          return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
-        } catch {
-          return "";
-        }
+      const FROM_LABEL = { followers: "followers", subscribers: "subscribers", moderators: "moderators" };
+      const STEP_TITLES = {
+        sound: "Play sound",
+        media: "Show image or video",
+        speak: "Say something",
+        obsScene: "Switch OBS scene",
       };
+      const KIND_LABEL = { image: "Image", video: "Video", audio: "Sound" };
+      const NEEDS = { audio: "a sound", image: "an image", video: "a video" };
+      const SUGGESTIONS = ["airhorn", "applause", "bruh", "drumroll", "wow", "sad trombone"];
+      const AUDIO_ACCEPT = Object.keys(MEDIA_TYPES)
+        .filter((t) => MEDIA_TYPES[t] === "audio")
+        .join(",");
+      const MYINSTANTS_NOTE =
+        "Sounds from MyInstants are uploaded by its users. Make sure you're allowed to use a sound on your stream.";
 
-      // Small DOM builder: strings become text nodes, so nothing is parsed as HTML.
-      function el(tag, props = {}, ...children) {
-        const node = document.createElement(tag);
-        for (const [key, value] of Object.entries(props)) {
-          if (value === undefined || value === null || value === false) continue;
-          if (key === "class") node.className = value;
-          else node.setAttribute(key, String(value));
-        }
-        node.append(...children.filter((c) => c !== undefined && c !== null && c !== false));
-        return node;
-      }
+      let ruleSet = { revision: 0, rules: [] }; // last state read from or saved to the server
+      let loaded = false; // true once the rules have loaded; saves wait for it
+      let activity = null; // the activity connection, if any
+      let connectedName = ""; // the username the activity connection is for
+      let editor = null; // { draft, isNew, original, giftScope } while the editor is open
+      let username = getUsername();
 
-      function img(src, props = {}) {
-        const url = safeUrl(src);
-        if (!url) return null;
-        const node = el("img", { ...props, src: url, referrerpolicy: "no-referrer" });
-        node.addEventListener("error", () => {
-          node.style.visibility = "hidden";
-        });
-        return node;
-      }
+      const newButton = el(
+        "button",
+        { type: "button", id: "new", class: "btn btn-primary btn-small", disabled: true },
+        "New action",
+      );
+      mountShell({ page: "actions", crumbs: ["Actions"], actions: [newButton] });
 
-      // Only ?username= and the saved name are used here. The dashboard is where the name gets set.
-      const fromUrl = params.get("username") ?? "";
-      const username = (() => {
-        const name = fromUrl ? normalizeUsername(fromUrl) : readSaved();
-        return USERNAME.test(name) ? name : "";
-      })();
-
-      // Query string shared by the page's links: the token and, if it came from the URL, the username.
-      function linkQuery() {
-        const parts = [];
-        if (fromUrl && username) parts.push(`username=${encodeURIComponent(username)}`);
-        if (token) parts.push(`token=${encodeURIComponent(token)}`);
-        return parts.length ? `?${parts.join("&")}` : "";
-      }
-
-      class ApiError extends Error {
-        constructor(status, message, data) {
-          super(message);
-          this.status = status;
-          this.data = data;
-        }
-      }
-
-      // Calls the server's /api. Errors become ApiError with the server's message and body.
-      async function request(path, { method = "GET", json, body, headers = {} } = {}) {
-        const init = { method, headers: { ...headers } };
-        if (token) init.headers.Authorization = `Bearer ${token}`;
-        if (json !== undefined) {
-          init.headers["Content-Type"] = "application/json";
-          init.body = JSON.stringify(json);
-        } else if (body !== undefined) {
-          init.body = body;
-        }
-        const res = await fetch(path, init);
-        const text = await res.text();
-        let data = null;
-        try {
-          data = text ? JSON.parse(text) : null;
-        } catch {
-          data = null;
-        }
-        if (!res.ok) {
-          const message = data?.message ?? data?.error ?? (text || `HTTP ${res.status}`);
-          throw new ApiError(res.status, message, data);
-        }
-        return data;
-      }
-
-      function toast(message, isError = false) {
-        const node = $("toast");
-        node.textContent = message;
-        node.className = isError ? "toast error" : "toast";
-        node.hidden = false;
-        clearTimeout(toast.timer);
-        toast.timer = setTimeout(() => (node.hidden = true), 3000);
+      function newId() {
+        const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+        const bytes = crypto.getRandomValues(new Uint8Array(10));
+        return `r-${Array.from(bytes, (b) => chars[b % chars.length]).join("")}`;
       }
 
       // ---- summaries ----
-
-      const FROM_LABEL = { followers: "followers", subscribers: "subscribers", moderators: "moderators" };
 
       function triggerText(t) {
         switch (t.type) {
@@ -1571,118 +1121,7 @@
         return `${triggerText(rule.trigger)} → ${steps || "no steps"}`;
       }
 
-      // ---- setup card ----
-
-      // Shown on its own while there are no rules; folded into a <details> once there are.
-      let setupMode = null;
-      // Desktop app: whether OBS plays sounds and speech too. Not saved; the card starts with it off.
-      let obsPlaysSound = false;
-
-      // The desktop app plays sounds and speech itself, so its link leaves them out unless OBS plays them too.
-      function playerUrl(desktop) {
-        const quiet = desktop && !obsPlaysSound;
-        return `${location.origin}/overlays/actions.html?username=${encodeURIComponent(username)}${
-          token ? `&token=${encodeURIComponent(token)}` : ""
-        }${quiet ? "&sounds=0&speech=0" : ""}`;
-      }
-
-      function setupHint() {
-        return window.tikliveDesktop
-          ? "The app plays sounds and speech. Add this to OBS for images, GIFs, videos and scene switches."
-          : "Add this URL to OBS as a Browser Source.";
-      }
-
-      function setupContent() {
-        const desktop = Boolean(window.tikliveDesktop);
-        const input = el("input", { class: "url", readonly: true, "aria-label": "Player URL" });
-        const open = el("a", { class: "button small", target: "_blank", rel: "noopener" }, "Open");
-        const showUrl = () => {
-          input.value = playerUrl(desktop);
-          open.href = input.value;
-        };
-        showUrl();
-        const copy = el("button", { type: "button" }, "Copy");
-        let timer;
-        copy.onclick = async () => {
-          try {
-            await navigator.clipboard.writeText(input.value);
-            copy.textContent = "Copied";
-            clearTimeout(timer);
-            timer = setTimeout(() => (copy.textContent = "Copy"), 1500);
-          } catch {
-            input.select();
-          }
-        };
-        const row = el("div", { class: "url-row" }, input, copy, open);
-        if (desktop) {
-          // Checking this puts the sounds back in the link, for OBS to play them. Turn app sound off too.
-          const obsSound = el("input", { type: "checkbox" });
-          obsSound.checked = obsPlaysSound;
-          obsSound.onchange = () => {
-            obsPlaysSound = obsSound.checked;
-            showUrl();
-          };
-          return [
-            row,
-            el("label", { class: "check" }, obsSound, "OBS plays sounds and speech too"),
-            el("p", { class: "hint" }, "Then turn off app sound in the header, or they play twice."),
-            el(
-              "ul",
-              { class: "tips" },
-              el("li", {}, "In OBS, add a Browser Source, size 1920×1080."),
-              el("li", {}, "To switch scenes, set the source's Page permissions to Advanced access to OBS."),
-              el("li", {}, "The player is invisible until an action shows something."),
-            ),
-          ];
-        }
-        return [
-          row,
-          el(
-            "ul",
-            { class: "tips" },
-            el("li", {}, "In OBS, add a Browser Source, size 1920×1080, and tick Control audio via OBS."),
-            el("li", {}, "To switch scenes, set the source's Page permissions to Advanced access to OBS."),
-            el("li", {}, "The player stays invisible until an action plays."),
-          ),
-        ];
-      }
-
-      function renderSetup() {
-        const mode = ruleSet.rules.length > 0 ? "folded" : "open";
-        if (mode === setupMode) return;
-        setupMode = mode;
-        if (mode === "folded") {
-          $("setup-slot").replaceChildren(
-            el(
-              "details",
-              { class: "card" },
-              el("summary", {}, "OBS player setup"),
-              el("p", { class: "hint" }, setupHint()),
-              ...setupContent(),
-            ),
-          );
-        } else {
-          $("setup-slot").replaceChildren(
-            el(
-              "section",
-              { class: "card", "aria-labelledby": "setup-title" },
-              el("h2", { id: "setup-title" }, "Add the actions player to OBS"),
-              el("p", { class: "hint" }, setupHint()),
-              ...setupContent(),
-            ),
-          );
-        }
-      }
-
       // ---- saving ----
-
-      function newId() {
-        const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-        const bytes = crypto.getRandomValues(new Uint8Array(10));
-        return `r-${Array.from(bytes, (b) => chars[b % chars.length]).join("")}`;
-      }
-
-      let loaded = false;
 
       // Saves the list that `apply` builds from the current one. On a 409 (someone else saved
       // first) it re-reads the list, applies the same edit again and retries once.
@@ -1690,7 +1129,7 @@
         if (!loaded) throw new Error("Your actions haven't loaded yet. Retry first.");
         for (let attempt = 0; ; attempt++) {
           try {
-            ruleSet = await request("/api/rules", {
+            ruleSet = await api("/api/rules", {
               method: "PUT",
               json: { revision: ruleSet.revision, rules: apply(ruleSet.rules) },
             });
@@ -1698,7 +1137,7 @@
             return;
           } catch (err) {
             if (err.status !== 409 || attempt > 0) throw err;
-            ruleSet = await request("/api/rules");
+            ruleSet = await api("/api/rules");
           }
         }
       }
@@ -1712,7 +1151,7 @@
         try {
           await task();
         } catch (err) {
-          toast(`${failure} ${err.message}`, true);
+          toast(`${failure} ${err.message}`, { error: true });
         }
       }
 
@@ -1739,13 +1178,13 @@
 
       async function testRule(rule) {
         try {
-          await request(`/api/rules/${encodeURIComponent(rule.id)}/test`, {
+          await api(`/api/rules/${encodeURIComponent(rule.id)}/test`, {
             method: "POST",
             json: { username },
           });
           toast("Sent to the player");
         } catch (err) {
-          toast(err.message, true);
+          toast(err.message, { error: true });
         }
       }
 
@@ -1759,14 +1198,91 @@
 
       // ---- rules list ----
 
-      function ruleButton(label, rule, onClick, extra = "") {
+      // The "..." menu of a row. Only one menu is open at a time; Escape and Tab close it.
+      let openMenu = null; // { trigger, menu }
+
+      function closeMenu(restoreFocus = false) {
+        if (!openMenu) return;
+        const { trigger, menu } = openMenu;
+        openMenu = null;
+        menu.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+        if (restoreFocus) trigger.focus();
+      }
+
+      function openMenuFor(trigger, menu) {
+        closeMenu();
+        menu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+        openMenu = { trigger, menu };
+        menu.querySelector('[role="menuitem"]')?.focus();
+      }
+
+      document.addEventListener("pointerdown", (event) => {
+        if (openMenu && !openMenu.trigger.parentElement.contains(event.target)) closeMenu();
+      });
+
+      function menuItem(label, onSelect, danger = false) {
         const button = el(
           "button",
-          { type: "button", class: `small ${extra}`.trim(), "aria-label": `${label} ${rule.name}` },
+          { type: "button", role: "menuitem", class: danger ? "danger" : false },
           label,
         );
-        button.onclick = onClick;
+        button.onclick = () => {
+          closeMenu();
+          onSelect();
+        };
         return button;
+      }
+
+      function moreMenu(rule) {
+        const more = el(
+          "button",
+          {
+            type: "button",
+            class: "btn btn-ghost btn-small more",
+            "aria-label": `More for ${rule.name}`,
+            "aria-haspopup": "menu",
+            "aria-expanded": "false",
+          },
+          "⋯",
+        );
+        const menu = el(
+          "div",
+          { class: "menu", role: "menu", "aria-label": `Actions for ${rule.name}`, hidden: true },
+          menuItem("Test", () => testRule(rule)),
+          menuItem("Edit", () => openEditor(rule)),
+          menuItem("Duplicate", () => duplicateRule(rule)),
+          el("div", { class: "menu-sep", role: "separator" }),
+          menuItem("Delete", () => deleteRule(rule), true),
+        );
+        more.onclick = () => (menu.hidden ? openMenuFor(more, menu) : closeMenu());
+        menu.addEventListener("keydown", (event) => {
+          const items = [...menu.querySelectorAll('[role="menuitem"]')];
+          const at = items.indexOf(document.activeElement);
+          if (event.key === "Escape") {
+            event.preventDefault();
+            closeMenu(true);
+          } else if (event.key === "Tab") {
+            closeMenu();
+          } else if (
+            event.key === "ArrowDown" ||
+            event.key === "ArrowUp" ||
+            event.key === "Home" ||
+            event.key === "End"
+          ) {
+            event.preventDefault();
+            const last = items.length - 1;
+            const next =
+              event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? last
+                  : (at + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+            items[next]?.focus();
+          }
+        });
+        return el("div", { class: "menu-wrap" }, more, menu);
       }
 
       function ruleRow(rule) {
@@ -1778,79 +1294,73 @@
           "aria-label": `${rule.name} enabled`,
         });
         toggle.onclick = () => toggleRule(rule.id);
+        const open = el(
+          "button",
+          { type: "button", class: "row-text rule-open", title: "Edit" },
+          el("span", { class: "row-title" }, rule.name),
+          el("span", { class: "row-desc" }, summarize(rule)),
+        );
+        open.onclick = () => openEditor(rule);
         return el(
           "li",
-          { class: rule.enabled ? "rule" : "rule off" },
-          toggle,
-          el(
-            "div",
-            { class: "rule-main" },
-            el("div", { class: "rule-name" }, rule.name),
-            el("div", { class: "rule-sum" }, summarize(rule)),
-          ),
-          el(
-            "div",
-            { class: "rule-actions" },
-            ruleButton("Test", rule, () => testRule(rule), "ghost"),
-            ruleButton("Edit", rule, () => openEditor(rule), "ghost"),
-            ruleButton("Duplicate", rule, () => duplicateRule(rule), "ghost"),
-            ruleButton("Delete", rule, () => deleteRule(rule), "ghost danger"),
-          ),
+          { class: rule.enabled ? "row rule" : "row rule off" },
+          open,
+          el("div", { class: "row-control" }, toggle, moreMenu(rule)),
         );
       }
 
       function renderRules() {
+        closeMenu();
         const rules = ruleSet.rules;
         $("rules").replaceChildren(...rules.map(ruleRow));
         $("rules").hidden = rules.length === 0;
-        $("rules-empty").hidden = rules.length > 0;
-        $("more-templates").hidden = rules.length === 0;
-        renderSetup();
+        $("rules-empty").hidden = !loaded || rules.length > 0;
+        $("more-templates").hidden = !loaded || rules.length === 0;
         syncEnabled();
       }
 
       // Buttons that save need the list loaded first, or a save would overwrite it.
       function syncEnabled() {
-        $("new").disabled = !loaded;
+        newButton.disabled = !loaded;
         for (const button of document.querySelectorAll("#templates button, #more-templates button")) {
           button.disabled = !loaded;
         }
       }
 
-      function templateButton(template) {
+      function templateCard(template) {
         const button = el(
           "button",
-          { type: "button", class: "template" },
-          el("b", {}, template.name),
-          el("span", {}, summarize({ ...template, enabled: true })),
+          { type: "button", class: "tcard" },
+          el("span", { class: "tcard-name" }, template.name),
+          el("span", { class: "tcard-sum" }, summarize({ ...template, enabled: true })),
         );
         button.onclick = () => useTemplate(template);
         return button;
       }
 
       function buildTemplates() {
-        $("templates").replaceChildren(...TEMPLATES.map(templateButton));
+        $("templates").replaceChildren(...TEMPLATES.map(templateCard));
         $("more-templates").replaceChildren(
           el("span", {}, "Start from a template:"),
           ...TEMPLATES.map((t) => {
-            const button = el("button", { type: "button", class: "link small" }, t.name);
+            const button = el("button", { type: "button", class: "link-btn" }, t.name);
             button.onclick = () => useTemplate(t);
             return button;
           }),
         );
       }
 
-      // ---- loading ----
+      // ---- loading and username ----
 
       async function loadRules() {
         $("load-error").hidden = true;
         try {
-          ruleSet = await request("/api/rules");
+          ruleSet = await api("/api/rules");
           loaded = true;
           renderRules();
         } catch (err) {
           loaded = false;
-          syncEnabled();
+          renderRules();
           $("load-error-text").textContent =
             err.status === 404
               ? "This tiklive server doesn't have actions yet. Update tiklive, then retry."
@@ -1860,9 +1370,40 @@
       }
       $("load-retry").onclick = loadRules;
 
-      // ---- activity ----
+      // The activity feed is one connection. It also keeps the streamer's session running, so Test works.
+      function connectActivity() {
+        activity?.close();
+        activity = new TikLive({ username, token, events: [], actions: true });
+        activity.on("action", (action) => addFeed(action));
+      }
 
-      const FEED_MAX = 30;
+      // Runs when the page loads and when the username changes (in this window or another tab).
+      function useUsername() {
+        const has = username !== "";
+        $("gate").hidden = has;
+        $("app").hidden = !has;
+        newButton.hidden = !has;
+        if (username === connectedName) return;
+        connectedName = username;
+        if (editor) {
+          editor = null;
+          $("editor").close();
+          toast("The editor closed because the username changed.");
+        }
+        activity?.close();
+        activity = null;
+        $("feed").replaceChildren();
+        $("feed-empty").hidden = false;
+        loaded = false;
+        ruleSet = { revision: 0, rules: [] };
+        renderRules();
+        if (!has) return;
+        connectActivity();
+        loadRules();
+        loadMedia();
+      }
+
+      // ---- activity ----
 
       function addFeed(action) {
         const feed = $("feed");
@@ -1877,51 +1418,13 @@
               { class: "time" },
               new Date(when).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             ),
-            el("span", { class: "fired-name" }, action.ruleName ?? ""),
-            who ? el("span", { class: "who" }, `by ${who}`) : null,
+            el("span", { class: "fired" }, action.ruleName ?? ""),
+            el("span", { class: "who" }, who ? `by ${who}` : ""),
             action.test ? el("span", { class: "badge" }, "test") : null,
           ),
         );
         while (feed.children.length > FEED_MAX) feed.lastElementChild.remove();
         $("feed-empty").hidden = true;
-      }
-
-      // One connection for the page. It also keeps the streamer's session running, so Test works.
-      function connectActivity() {
-        activity?.close?.();
-        activity = null;
-        if (!TikLive) {
-          $("feed-empty").textContent = "Live activity needs /tiklive.js. Run bun run build on the server.";
-          return;
-        }
-        activity = new TikLive({ username, token, events: [], actions: true });
-        activity.on("action", (action) => addFeed(action));
-      }
-
-      // ---- boot ----
-
-      const clientReady = import("/tiklive.js").then(
-        (m) => m.TikLive,
-        () => null,
-      );
-
-      async function boot() {
-        $("nav-dashboard").href = `/${linkQuery()}`;
-        $("nav-actions").href = `/actions.html${linkQuery()}`;
-        if (!username) {
-          $("gate").hidden = false;
-          return;
-        }
-        $("app").hidden = false;
-        $("account").hidden = false;
-        $("account").textContent = `@${username}`;
-        buildTemplates();
-        syncEnabled();
-        renderSetup();
-        TikLive = await clientReady;
-        connectActivity();
-        await loadRules();
-        buildLibrary();
       }
 
       // ---- editor: shell ----
@@ -1941,6 +1444,7 @@
       }
 
       function openEditor(rule) {
+        closeMenu();
         const draft = rule
           ? structuredClone(rule)
           : { id: newId(), name: "", enabled: true, trigger: { type: "gift" }, steps: [] };
@@ -1950,8 +1454,7 @@
           original: JSON.stringify(draft),
           giftScope: draft.trigger.giftId !== undefined ? "one" : "any",
         };
-        $("editor-heading").textContent = editor.isNew ? "New action" : "Edit action";
-        $("editor-title").textContent = $("editor-heading").textContent;
+        $("editor-title").textContent = editor.isNew ? "New action" : "Edit action";
         $("f-name").value = draft.name;
         $("f-cooldown").value = draft.cooldown ?? "";
         $("f-user-cooldown").value = draft.userCooldown ?? "";
@@ -2000,25 +1503,17 @@
         }
       }
 
+      // The trigger is a radio group in a .segmented control, so arrow keys work as in any radio group.
       function renderTiles() {
         const current = editor.draft.trigger.type;
         $("tiles").replaceChildren(
           ...TRIGGERS.map(([type, label]) => {
-            const selected = type === current;
-            const tile = el(
-              "button",
-              {
-                type: "button",
-                role: "radio",
-                class: "tile",
-                "data-type": type,
-                "aria-checked": String(selected),
-                tabindex: selected ? "0" : "-1",
-              },
-              label,
-            );
-            tile.onclick = () => selectTrigger(type);
-            return tile;
+            const input = el("input", { type: "radio", name: "trigger", value: type });
+            input.checked = type === current;
+            input.onchange = () => {
+              if (input.checked) selectTrigger(type);
+            };
+            return el("label", {}, input, label);
           }),
         );
       }
@@ -2031,23 +1526,8 @@
         renderTiles();
         renderTriggerOpts();
         renderSteps();
-        if (hadFocus) $("tiles").querySelector(`[data-type="${type}"]`)?.focus();
+        if (hadFocus) $("tiles").querySelector(`input[value="${type}"]`)?.focus();
       }
-
-      // Arrow keys move through the tiles and select, as in a radio group.
-      $("tiles").addEventListener("keydown", (e) => {
-        const keys = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-        const types = TRIGGERS.map(([type]) => type);
-        const at = types.indexOf(editor.draft.trigger.type);
-        let next = null;
-        if (e.key in keys) next = types[(at + keys[e.key] + types.length) % types.length];
-        else if (e.key === "Home") next = types[0];
-        else if (e.key === "End") next = types[types.length - 1];
-        if (!next) return;
-        e.preventDefault();
-        selectTrigger(next);
-        $("tiles").querySelector(`[data-type="${next}"]`)?.focus();
-      });
 
       function renderTriggerOpts() {
         const t = editor.draft.trigger;
@@ -2114,6 +1594,7 @@
 
         const min = el("input", {
           type: "number",
+          class: "input",
           min: "0",
           max: "1000000000",
           step: "1",
@@ -2123,26 +1604,49 @@
         });
         min.value = t.minCoins ?? "";
         min.oninput = () => setNumber(t, "minCoins", min.value);
-        const perGift = el("input", { type: "checkbox" });
-        perGift.checked = Boolean(t.perGift);
-        perGift.onchange = () => {
-          if (perGift.checked) t.perGift = true;
-          else delete t.perGift;
+
+        const perGift = el("button", {
+          type: "button",
+          role: "switch",
+          class: "switch",
+          "aria-checked": String(Boolean(t.perGift)),
+          "aria-label": "Repeat for each gift in a combo",
+        });
+        perGift.onclick = () => {
+          if (t.perGift) delete t.perGift;
+          else t.perGift = true;
+          perGift.setAttribute("aria-checked", String(Boolean(t.perGift)));
         };
+
         return [
+          el("span", { class: "field-caption", id: "which-gift" }, "Which gift"),
           el(
             "div",
-            { class: "gift-opts" },
-            el(
-              "fieldset",
-              {},
-              el("legend", {}, "Which gift"),
-              el("div", { class: "radio-row" }, anyRadio, oneRadio),
-            ),
-            picker,
+            { class: "segmented", role: "radiogroup", "aria-labelledby": "which-gift" },
+            anyRadio,
+            oneRadio,
+          ),
+          picker,
+          el(
+            "div",
+            { class: "fields" },
             el("label", { class: "field-label" }, "Minimum coins for the combo (optional)", min),
             el("p", { class: "field-error", "data-error": "minCoins" }),
-            el("label", { class: "check" }, perGift, "Repeat for each gift in a combo (up to 10)"),
+          ),
+          el(
+            "div",
+            { class: "switch-row" },
+            el(
+              "div",
+              { class: "row-text" },
+              el("span", { class: "row-title" }, "Repeat for each gift in a combo"),
+              el(
+                "span",
+                { class: "row-desc" },
+                "Runs once per gift, up to 10 times. Otherwise it runs once per combo.",
+              ),
+            ),
+            perGift,
           ),
         ];
       }
@@ -2165,7 +1669,7 @@
         giftsLoading = true;
         giftsFailed = false;
         try {
-          gifts = (await request("/api/gifts")).gifts ?? [];
+          gifts = (await api("/api/gifts")).gifts ?? [];
         } catch {
           giftsFailed = true;
         }
@@ -2176,6 +1680,7 @@
       function giftPicker(t) {
         const search = el("input", {
           type: "search",
+          class: "input",
           placeholder: "Search gifts",
           "aria-label": "Search gifts",
           autocomplete: "off",
@@ -2189,7 +1694,7 @@
         const draw = () => {
           selected.textContent = t.giftName ? `Selected: ${t.giftName}` : "No gift chosen yet.";
           if (giftsFailed) {
-            const retry = el("button", { type: "button", class: "small" }, "Retry");
+            const retry = el("button", { type: "button", class: "btn btn-small" }, "Retry");
             retry.onclick = () => {
               giftsFailed = false;
               loadGifts();
@@ -2239,13 +1744,14 @@
       function chatFields(t) {
         const match = el(
           "select",
-          { "aria-label": "Match" },
+          { class: "select", "aria-label": "Match" },
           el("option", { value: "command" }, "Command (first word, e.g. !dance)"),
           el("option", { value: "contains" }, "Contains text"),
           el("option", { value: "any" }, "Any message"),
         );
         match.value = t.match;
         const text = el("input", {
+          class: "input",
           maxlength: "100",
           placeholder: "!dance",
           autocomplete: "off",
@@ -2262,7 +1768,7 @@
         text.oninput = () => (t.text = text.value);
         const from = el(
           "select",
-          { "aria-label": "From" },
+          { class: "select", "aria-label": "From" },
           el("option", { value: "everyone" }, "Everyone"),
           el("option", { value: "followers" }, "Followers"),
           el("option", { value: "subscribers" }, "Subscribers"),
@@ -2285,6 +1791,7 @@
       function likesFields(t) {
         const every = el("input", {
           type: "number",
+          class: "input",
           min: "1",
           max: "1000000000",
           step: "1",
@@ -2305,13 +1812,6 @@
       }
 
       // ---- editor: then ----
-
-      const STEP_TITLES = {
-        sound: "Play sound",
-        media: "Show image or video",
-        speak: "Say something",
-        obsScene: "Switch OBS scene",
-      };
 
       const isVideoUrl = (url) => /\.(mp4|webm)(\?|$)/i.test(url ?? "");
 
@@ -2371,10 +1871,15 @@
         focusStep(Math.min(i, editor.draft.steps.length - 1));
       }
 
-      function stepButton(label, index, disabled, onClick) {
+      function stepButton(label, index, disabled, onClick, danger = false) {
         const button = el(
           "button",
-          { type: "button", disabled, "aria-label": `${label} step ${index + 1}` },
+          {
+            type: "button",
+            class: danger ? "btn btn-ghost btn-small btn-danger" : "btn btn-ghost btn-small",
+            disabled,
+            "aria-label": `${label} step ${index + 1}`,
+          },
           label,
         );
         button.onclick = onClick;
@@ -2389,7 +1894,7 @@
           el("span", { class: "kind", tabindex: "-1" }, `${i + 1}. ${STEP_TITLES[step.kind]}`),
           stepButton("Up", i, i === 0, () => moveStep(i, -1)),
           stepButton("Down", i, i === last, () => moveStep(i, 1)),
-          stepButton("Remove", i, false, () => removeStep(i)),
+          stepButton("Remove", i, false, () => removeStep(i), true),
         );
         const body =
           step.kind === "sound"
@@ -2415,6 +1920,7 @@
       function numberInput({ label, key, min, max, step = "1", placeholder = "", value, onChange }) {
         const input = el("input", {
           type: "number",
+          class: "input",
           min,
           max,
           step,
@@ -2430,7 +1936,14 @@
 
       // Volume slider, 0 to 100 %. Stored as 0 to 1, and left out at 100 %.
       function volumeField(step, label) {
-        const range = el("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": label });
+        const range = el("input", {
+          type: "range",
+          class: "range",
+          min: "0",
+          max: "100",
+          step: "1",
+          "aria-label": label,
+        });
         const out = el("output");
         const current = Math.round((step.volume ?? 1) * 100);
         range.value = String(current);
@@ -2460,7 +1973,7 @@
           { class: "chips" },
           el("span", {}, "Insert:"),
           ...varsFor(editor.draft.trigger.type).map((name) => {
-            const chip = el("button", { type: "button", class: "var" }, `{${name}}`);
+            const chip = el("button", { type: "button", class: "btn btn-small var" }, `{${name}}`);
             chip.onclick = () => insertAt(input, `{${name}}`);
             return chip;
           }),
@@ -2477,6 +1990,7 @@
 
       function mediaFields(step, i) {
         const caption = el("input", {
+          class: "input",
           maxlength: "300",
           autocomplete: "off",
           "aria-label": "Caption",
@@ -2519,6 +2033,7 @@
 
       function speakFields(step, i) {
         const text = el("textarea", {
+          class: "textarea",
           maxlength: "300",
           placeholder: "Thanks for the follow, {nickname}!",
           "aria-label": "What to say",
@@ -2527,7 +2042,14 @@
         text.value = step.text ?? "";
         text.oninput = () => (step.text = text.value);
         const voice = voiceSelect(step);
-        const rate = el("input", { type: "range", min: "0.5", max: "2", step: "0.1", "aria-label": "Speed" });
+        const rate = el("input", {
+          type: "range",
+          class: "range",
+          min: "0.5",
+          max: "2",
+          step: "0.1",
+          "aria-label": "Speed",
+        });
         const rateOut = el("output");
         rate.value = String(step.rate ?? 1);
         rateOut.textContent = `${Number(rate.value).toFixed(1)}×`;
@@ -2537,7 +2059,7 @@
           if (v === 1) delete step.rate;
           else step.rate = v;
         };
-        const preview = el("button", { type: "button", class: "small" }, "Preview");
+        const preview = el("button", { type: "button", class: "btn btn-small" }, "Preview");
         preview.onclick = () => previewSpeech(step);
         return [
           el(
@@ -2571,7 +2093,7 @@
       }
 
       function voiceSelect(step) {
-        const select = el("select", { "aria-label": "Voice", "data-voice": "" });
+        const select = el("select", { class: "select", "aria-label": "Voice", "data-voice": "" });
         fillVoices(select, step.voice ?? "");
         select.onchange = () => {
           if (select.value) step.voice = select.value;
@@ -2588,8 +2110,8 @@
 
       function previewSpeech(step) {
         const text = (step.text ?? "").replace(/\{(\w+)\}/g, (m, name) => SAMPLE[name] ?? m);
-        if (!text.trim()) return toast("Type something to say first.", true);
-        if (!("speechSynthesis" in window)) return toast("This browser can't speak.", true);
+        if (!text.trim()) return toast("Type something to say first.", { error: true });
+        if (!("speechSynthesis" in window)) return toast("This browser can't speak.", { error: true });
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = step.rate ?? 1;
@@ -2602,6 +2124,7 @@
 
       function sceneFields(step, i) {
         const scene = el("input", {
+          class: "input",
           maxlength: "200",
           autocomplete: "off",
           placeholder: "Dance",
@@ -2637,8 +2160,6 @@
 
       // ---- media library ----
 
-      const KIND_LABEL = { image: "Image", video: "Video", audio: "Sound" };
-      const NEEDS = { audio: "a sound", image: "an image", video: "a video" };
       let mediaList = []; // newest first, from /api/media
       let mediaFailed = false;
       let mediaLoaded = false; // true once /api/media has answered, successfully or not
@@ -2653,7 +2174,7 @@
 
       async function loadMedia() {
         try {
-          mediaList = (await request("/api/media")).media ?? [];
+          mediaList = (await api("/api/media")).media ?? [];
           mediaFailed = false;
         } catch {
           mediaFailed = true;
@@ -2687,7 +2208,7 @@
         }
         view.setStatus("Uploading…");
         try {
-          const item = await request("/api/media", {
+          const item = await api("/api/media", {
             method: "POST",
             body: file,
             headers: { "Content-Type": file.type, "X-File-Name": encodeURIComponent(file.name) },
@@ -2705,11 +2226,11 @@
       async function deleteMedia(item) {
         if (!confirm(`Delete ${item.name}? Rules that use it will stop working.`)) return;
         try {
-          await request(`/api/media/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+          await api(`/api/media/${encodeURIComponent(item.id)}`, { method: "DELETE" });
           mediaList = mediaList.filter((m) => m.id !== item.id);
           renderMediaViews();
         } catch (err) {
-          toast(`Couldn't delete ${item.name}. ${err.message}`, true);
+          toast(`Couldn't delete ${item.name}. ${err.message}`, { error: true });
         }
       }
 
@@ -2747,7 +2268,7 @@
         const status = el("p", { class: "hint", role: "status" });
         const grid = el("div", { class: "lib-grid" });
         const fileInput = el("input", { type: "file", accept, hidden: true, "aria-label": "Upload a file" });
-        const upload = el("button", { type: "button", class: "small" }, "Upload");
+        const upload = el("button", { type: "button", class: "btn btn-small" }, "Upload");
         upload.onclick = () => fileInput.click();
         const node = el(
           "div",
@@ -2762,7 +2283,7 @@
           setStatus: (message) => (status.textContent = message),
           render: () => {
             if (mediaFailed) {
-              const retry = el("button", { type: "button", class: "small" }, "Retry");
+              const retry = el("button", { type: "button", class: "btn btn-small" }, "Retry");
               retry.onclick = loadMedia;
               grid.replaceChildren(el("p", { class: "hint" }, "Couldn't load your media. ", retry));
               return;
@@ -2810,7 +2331,11 @@
         if (view.onPick) body.onclick = () => view.onPick(item.url);
         const remove = el(
           "button",
-          { type: "button", class: "ghost danger", "aria-label": `Delete ${item.name}` },
+          {
+            type: "button",
+            class: "btn btn-ghost btn-small btn-danger",
+            "aria-label": `Delete ${item.name}`,
+          },
           "Delete",
         );
         remove.onclick = () => deleteMedia(item);
@@ -2830,11 +2355,12 @@
       function pasteRow(view, label = "Or paste a link") {
         const input = el("input", {
           type: "url",
+          class: "input",
           placeholder: "https://…",
           autocomplete: "off",
           "aria-label": "Link to a file",
         });
-        const use = el("button", { type: "button", class: "small" }, "Use link");
+        const use = el("button", { type: "button", class: "btn btn-small" }, "Use link");
         use.onclick = () => {
           const link = input.value.trim();
           if (!isHttpLink(link)) return view.setStatus("Enter a link that starts with https:// or http://.");
@@ -2847,7 +2373,11 @@
       function mediaPicker(step, i, filter) {
         const key = `s${i}.url`;
         const panel = el("div", { class: "media-panel", hidden: true });
-        const choose = el("button", { type: "button", "data-key": key, "aria-expanded": "false" }, "Choose…");
+        const choose = el(
+          "button",
+          { type: "button", class: "btn btn-small", "data-key": key, "aria-expanded": "false" },
+          "Choose…",
+        );
         choose.onclick = () => {
           const opening = panel.hidden;
           choose.setAttribute("aria-expanded", String(opening));
@@ -2897,17 +2427,11 @@
       // Library card at the bottom of the page.
       function buildLibrary() {
         $("library-slot").replaceChildren(libraryPanel().node);
-        loadMedia();
       }
 
       // ---- sound picker ----
       // One panel, no tabs: a search box, your saved sounds, then MyInstants. Upload and paste-a-link sit
       // at the bottom. Image and video steps keep the grid in mediaPicker.
-
-      const SUGGESTIONS = ["airhorn", "applause", "bruh", "drumroll", "wow", "sad trombone"];
-      const AUDIO_ACCEPT = Object.keys(MEDIA_TYPES)
-        .filter((t) => MEDIA_TYPES[t] === "audio")
-        .join(",");
 
       const playable = (url) => (url ? safeUrl(url) : "");
 
@@ -2917,7 +2441,7 @@
           "button",
           {
             type: "button",
-            class: "small preview",
+            class: "btn btn-small preview",
             "aria-label": `Preview ${name}`,
             "aria-pressed": "false",
             "data-preview": url,
@@ -2960,12 +2484,20 @@
         if (chosen) {
           action = el("span", { class: "sound-chosen" }, "✓ Selected");
         } else {
-          action = el("button", { type: "button", class: "small", "aria-label": `Use ${item.name}` }, "Use");
+          action = el(
+            "button",
+            { type: "button", class: "btn btn-small", "aria-label": `Use ${item.name}` },
+            "Use",
+          );
           action.onclick = () => onPick(item.url);
         }
         const remove = el(
           "button",
-          { type: "button", class: "ghost danger small", "aria-label": `Delete ${item.name}` },
+          {
+            type: "button",
+            class: "btn btn-ghost btn-small btn-danger",
+            "aria-label": `Delete ${item.name}`,
+          },
           "Delete",
         );
         remove.onclick = () => deleteMedia(item);
@@ -3005,7 +2537,7 @@
           const query = soundSearch.draft.trim().toLowerCase();
           const sounds = mediaList.filter((m) => m.kind === "audio");
           if (mediaFailed) {
-            const retry = el("button", { type: "button", class: "small" }, "Retry");
+            const retry = el("button", { type: "button", class: "btn btn-small" }, "Retry");
             retry.onclick = loadMedia;
             libList.replaceChildren(soundNote("Couldn't load your sounds. ", retry));
           } else if (!mediaLoaded) {
@@ -3033,7 +2565,7 @@
 
         const input = el("input", {
           type: "search",
-          class: "sound-search-input",
+          class: "input sound-search-input",
           placeholder: "Search your sounds and MyInstants",
           "aria-label": "Search your sounds and MyInstants",
           autocomplete: "off",
@@ -3051,7 +2583,7 @@
           e.preventDefault();
           submitSearch();
         };
-        const go = el("button", { type: "button", class: "small" }, "Search");
+        const go = el("button", { type: "button", class: "btn btn-small" }, "Search");
         go.onclick = submitSearch;
 
         const fileInput = el("input", {
@@ -3060,7 +2592,7 @@
           hidden: true,
           "aria-label": "Upload a sound file",
         });
-        const upload = el("button", { type: "button", class: "ghost small" }, "Upload a file");
+        const upload = el("button", { type: "button", class: "btn btn-ghost btn-small" }, "Upload a file");
         upload.onclick = () => fileInput.click();
         fileInput.onchange = () => {
           const file = fileInput.files?.[0];
@@ -3071,7 +2603,7 @@
         link.hidden = true;
         const paste = el(
           "button",
-          { type: "button", class: "ghost small", "aria-expanded": "false" },
+          { type: "button", class: "btn btn-ghost btn-small", "aria-expanded": "false" },
           "Paste a link",
         );
         paste.onclick = () => {
@@ -3116,7 +2648,7 @@
         if (step.url) {
           const change = el(
             "button",
-            { type: "button", class: "small", "data-key": key, "aria-expanded": "false" },
+            { type: "button", class: "btn btn-small", "data-key": key, "aria-expanded": "false" },
             "Change",
           );
           change.onclick = () => {
@@ -3140,12 +2672,9 @@
 
       // ---- sound picker: search MyInstants ----
 
-      const MYINSTANTS_NOTE =
-        "Sounds from MyInstants are uploaded by its users. Make sure you're allowed to use a sound on your stream.";
-
       // One preview player for the whole page. Its state is soundSearch, reset each time the editor opens.
       const searchAudio = new Audio();
-      const searchViews = new Set(); // { node, render } for each search tab
+      const searchViews = new Set(); // { node, render } for each search panel
 
       function newSoundSearch() {
         return {
@@ -3204,7 +2733,7 @@
           // Ignore it if a newer preview took over, or the error event already stopped this one.
           if (soundSearch.playing !== url) return;
           stopSearchPreview();
-          toast("Couldn't play that sound.", true);
+          toast("Couldn't play that sound.", { error: true });
         });
       }
 
@@ -3212,7 +2741,7 @@
       searchAudio.addEventListener("error", () => {
         if (!soundSearch.playing) return;
         stopSearchPreview();
-        toast("Couldn't play that sound.", true);
+        toast("Couldn't play that sound.", { error: true });
       });
 
       // The MyInstants part of the panel. Before the first search it shows a hint and suggestions.
@@ -3227,7 +2756,7 @@
             ...SUGGESTIONS.map((term) => {
               const chip = el(
                 "button",
-                { type: "button", class: "small", "aria-label": `Search MyInstants for ${term}` },
+                { type: "button", class: "btn btn-small", "aria-label": `Search MyInstants for ${term}` },
                 term,
               );
               chip.onclick = () => {
@@ -3267,7 +2796,7 @@
                 : code === 404
                   ? "This tiklive server can't search MyInstants. Update tiklive, then retry."
                   : "Couldn't search. Try again.";
-            const retry = el("button", { type: "button", class: "small" }, "Retry");
+            const retry = el("button", { type: "button", class: "btn btn-small" }, "Retry");
             retry.onclick = () => fetchSounds(page);
             return status.replaceChildren(text, " ", retry);
           }
@@ -3282,7 +2811,11 @@
           list.replaceChildren(...s.results.map((r) => resultRow(r, onPick, volume)));
           more.replaceChildren();
           if (s.hasMore && s.results.length) {
-            const button = el("button", { type: "button", class: "small", disabled: s.loading }, "Load more");
+            const button = el(
+              "button",
+              { type: "button", class: "btn btn-small", disabled: s.loading },
+              "Load more",
+            );
             button.onclick = () => fetchSounds(s.page + 1);
             more.append(button);
           }
@@ -3317,7 +2850,7 @@
         renderSearchViews();
         try {
           const q = encodeURIComponent(state.query);
-          const data = await request(`/api/sounds/search?q=${q}&page=${page}`);
+          const data = await api(`/api/sounds/search?q=${q}&page=${page}`);
           if (seq !== state.seq) return;
           state.results = page === 1 ? data.results : [...state.results, ...data.results];
           state.page = data.page;
@@ -3340,7 +2873,7 @@
           ? el(
               "a",
               {
-                class: "button small",
+                class: "btn btn-small",
                 href: page,
                 target: "_blank",
                 rel: "noopener noreferrer",
@@ -3354,7 +2887,7 @@
           "button",
           {
             type: "button",
-            class: "small",
+            class: "btn btn-small",
             "aria-label": `Use ${title}`,
             "data-use": result.url,
             disabled: busy,
@@ -3383,7 +2916,7 @@
         let failed = false;
         try {
           const name = (result.title ?? "").trim().slice(0, 200);
-          const item = await request("/api/media/import", {
+          const item = await api("/api/media/import", {
             method: "POST",
             json: { url: result.url, ...(name ? { name } : {}) },
           });
@@ -3396,7 +2929,7 @@
           failed = true;
           state.importErrors.set(
             result.url,
-            err instanceof ApiError ? err.message : "Couldn't reach tiklive. Try again.",
+            Number.isInteger(err?.status) ? err.message : "Couldn't reach tiklive. Try again.",
           );
         } finally {
           state.importing.delete(result.url);
@@ -3569,113 +3102,14 @@
         }
       }
 
-      // App sound: the desktop app plays sounds and speech itself. These controls write the settings the
-      // player reads, and show what it's doing. Desktop app only.
-      if (window.tikliveDesktop) {
-        const APP_AUDIO_KEY = "tiklive.appAudio";
-        const PLAYER_OFFLINE_MS = 5000;
-        const PLAYER_POLL_MS = 1000;
-        const channel = new BroadcastChannel("tiklive-player");
-        const loadedAt = Date.now();
-        let player = null; // the last status the player sent
-        let heardAt = loadedAt; // when the player last sent anything
-        let disconnectedAt = null; // when the player began reporting that it isn't connected
-
-        function readAppAudio() {
-          try {
-            const saved = JSON.parse(localStorage.getItem(APP_AUDIO_KEY) ?? "null");
-            return {
-              enabled: typeof saved?.enabled === "boolean" ? saved.enabled : true,
-              volume: Number.isFinite(saved?.volume) ? Math.min(1, Math.max(0, saved.volume)) : 1,
-            };
-          } catch {
-            // Not available: the defaults apply.
-            return { enabled: true, volume: 1 };
-          }
-        }
-
-        function writeAppAudio(settings) {
-          try {
-            localStorage.setItem(APP_AUDIO_KEY, JSON.stringify(settings));
-          } catch {
-            // Not available: the change isn't saved.
-          }
-        }
-
-        function renderSound() {
-          const settings = readAppAudio();
-          $("app-toggle").setAttribute("aria-pressed", String(settings.enabled));
-          // SVG elements have no hidden property, so toggle the attribute.
-          $("app-icon-on").toggleAttribute("hidden", !settings.enabled);
-          $("app-icon-off").toggleAttribute("hidden", settings.enabled);
-          $("app-volume").value = String(Math.round(settings.volume * 100));
-        }
-
-        function renderPlayer() {
-          // The player counts as offline when it has been silent for 5 s, or has reported that it isn't
-          // connected for 5 s. Only while a username is saved.
-          const now = Date.now();
-          const offline =
-            readSaved() !== "" &&
-            (now - heardAt > PLAYER_OFFLINE_MS ||
-              (disconnectedAt !== null && now - disconnectedAt > PLAYER_OFFLINE_MS));
-          const busy = Boolean(player && (player.playing || player.queued > 0));
-          $("app-offline").hidden = !offline;
-          $("app-now").hidden = offline || !busy;
-          if (busy && !offline) {
-            const parts = [player.playing ? `▶ ${player.playing}` : `${player.queued} queued`];
-            if (player.playing && player.queued > 0) parts.push(`${player.queued} queued`);
-            $("app-now-text").textContent = parts.join(" · ");
-            $("app-skip").disabled = !player.playing;
-          }
-        }
-
-        channel.addEventListener("message", (event) => {
-          const message = event.data;
-          if (message?.type !== "status") return;
-          const now = Date.now();
-          player = message;
-          heardAt = now;
-          if (message.connected) disconnectedAt = null;
-          else disconnectedAt ??= now;
-          renderPlayer();
-        });
-
-        $("app-toggle").onclick = () => {
-          const settings = readAppAudio();
-          writeAppAudio({ ...settings, enabled: !settings.enabled });
-          renderSound();
-        };
-        $("app-volume").oninput = (event) => {
-          writeAppAudio({ ...readAppAudio(), volume: Number(event.target.value) / 100 });
-          renderSound();
-        };
-        $("app-skip").onclick = () => channel.postMessage({ type: "skip" });
-        $("app-clear").onclick = () => channel.postMessage({ type: "clear" });
-
-        // Other tabs can change the settings or the saved username.
-        window.addEventListener("storage", (event) => {
-          if (event.key === null || event.key === APP_AUDIO_KEY) renderSound();
-          if (event.key === null || event.key === STORAGE_KEY) renderPlayer();
-        });
-
-        $("app-sound").hidden = false;
-        renderSound();
-        renderPlayer();
-        // Ask now, then poll: a silent player shows as offline, and a stale status clears.
-        channel.postMessage({ type: "status?" });
-        setInterval(() => {
-          channel.postMessage({ type: "status?" });
-          renderPlayer();
-        }, PLAYER_POLL_MS);
-      }
-
       // ---- wiring and start ----
 
-      if (window.tikliveDesktop) {
+      if (isDesktop) {
         $("feed-empty").textContent =
           "Fired actions show up here. This page doesn't play them. The desktop app plays sounds and speech, and the player in OBS shows pictures and videos.";
       }
+      $("overlays-link").href = withToken("/overlays.html#actions");
+      $("gate-link").href = withToken("/");
 
       $("editor-form").onsubmit = saveEditor;
       $("editor").addEventListener("cancel", (e) => {
@@ -3685,7 +3119,7 @@
       $("editor").addEventListener("close", stopSearchPreview);
       $("editor-close").onclick = closeEditor;
       $("editor-cancel").onclick = closeEditor;
-      $("new").onclick = () => openEditor(null);
+      newButton.onclick = () => openEditor(null);
       $("f-name").oninput = () => (editor.draft.name = $("f-name").value);
       $("f-cooldown").oninput = () => setNumber(editor.draft, "cooldown", $("f-cooldown").value);
       $("f-user-cooldown").oninput = () =>
@@ -3695,7 +3129,13 @@
         if (button) addStep(button.dataset.add);
       };
 
-      boot();
+      buildTemplates();
+      buildLibrary();
+      onUsernameChange((name) => {
+        username = name;
+        useUsername();
+      });
+      useUsername();
     </script>
   </body>
 </html>
