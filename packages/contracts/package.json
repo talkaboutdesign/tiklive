@@ -1,6 +1,6 @@
 {
   "name": "@tiklive/contracts",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Event and wire-protocol schemas shared by tiklive packages",
   "keywords": [
     "livestream",

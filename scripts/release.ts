@@ -3,6 +3,7 @@
  *
  *   bun scripts/release.ts            # publish (expects `bun run build` first)
  *   bun scripts/release.ts --dry-run  # pack and show what would be published
+ *   bun scripts/release.ts --otp=123456  # local publish with a 2FA code
  *
  * Packages are packed with `bun pm pack` (which rewrites `workspace:` and
  * `catalog:` versions) and published with npm, which handles npm trusted
@@ -17,6 +18,8 @@ import { join } from "node:path";
 const PACKAGES = ["contracts", "core", "client", "server"];
 const OUT = join(import.meta.dir, "..", ".release");
 const dryRun = process.argv.includes("--dry-run");
+/** `--otp=123456` is passed through to npm for local publishes with an authenticator app. */
+const otp = process.argv.filter((arg) => arg.startsWith("--otp="));
 
 interface Manifest {
   readonly name: string;
@@ -60,7 +63,11 @@ for (const dir of PACKAGES) {
     console.log(`would publish ${id} (${tarball}) with tag ${tag}`);
     continue;
   }
-  await $`npm publish ${join(OUT, tarball)} --access public --tag ${tag}`;
+  // Inherit the terminal so npm can run its interactive 2FA / browser login when publishing locally.
+  const npm = Bun.spawn(["npm", "publish", join(OUT, tarball), "--access", "public", "--tag", tag, ...otp], {
+    stdio: ["inherit", "inherit", "inherit"],
+  });
+  if ((await npm.exited) !== 0) throw new Error(`npm publish failed for ${id}`);
   published.push(id);
   console.log(`New tag: ${id}`);
 }
