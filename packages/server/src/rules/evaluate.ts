@@ -319,8 +319,8 @@ const coolingDown = (rule: Rule, user: LiveUser | undefined, state: EngineState,
 };
 
 const recordFired = (rule: Rule, user: LiveUser | undefined, state: EngineState, now: number): void => {
-  state.lastFired.set(rule.id, now);
-  if (user) state.lastFiredByUser.set(userKey(rule.id, user.userId), now);
+  if ((rule.cooldown ?? 0) > 0) state.lastFired.set(rule.id, now);
+  if (user && (rule.userCooldown ?? 0) > 0) state.lastFiredByUser.set(userKey(rule.id, user.userId), now);
 };
 
 const firing = (
@@ -357,6 +357,27 @@ const likeFirings = (
   recordFired(rule, event.user, state, now);
   const count = Math.min(reached - prev, MAX_MILESTONES);
   return Array.from({ length: count }, () => firing(rule, event.user, event, rendered));
+};
+
+/** Drops expired cooldowns and state for removed or disabled rules. Called periodically, outside the hot path. */
+export const pruneState = (rules: ReadonlyArray<Rule>, state: EngineState, now: number): void => {
+  const active = new Map(rules.filter((rule) => rule.enabled).map((rule) => [rule.id, rule]));
+  for (const [id, at] of state.lastFired) {
+    if (now - at >= (active.get(id)?.cooldown ?? 0) * 1000) state.lastFired.delete(id);
+  }
+  for (const [key, at] of state.lastFiredByUser) {
+    const id = key.slice(0, key.indexOf("\u0000"));
+    if (now - at >= (active.get(id)?.userCooldown ?? 0) * 1000) state.lastFiredByUser.delete(key);
+  }
+  for (const key of state.joinsThisStream) {
+    if (!active.has(key.slice(0, key.indexOf("\u0000")))) state.joinsThisStream.delete(key);
+  }
+  for (const key of state.likeMilestones.keys()) {
+    const id = key.slice(0, key.indexOf(":"));
+    const rule = active.get(id);
+    if (rule?.trigger.type !== "likes" || key !== `${id}:${rule.trigger.every}`)
+      state.likeMilestones.delete(key);
+  }
 };
 
 /** The rules that fire for this event, in rule order. Updates `state` (likes, cooldowns). */

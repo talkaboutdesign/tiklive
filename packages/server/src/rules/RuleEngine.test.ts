@@ -620,3 +620,17 @@ describe("webhookRequest", () => {
     },
   );
 });
+
+describe("room identity", () => {
+  it.effect("preserves joins for the same room and resets them when a later session uses a new room", () =>
+    Effect.gen(function* () {
+      const engine = yield* RuleEngine;
+      const join: LiveEvent = { type: "join", timestamp: 0, user: USER };
+      expect(yield* engine.fire("streamer", join, {}, "room-a")).toHaveLength(1);
+      expect(yield* engine.fire("streamer", join, {}, "room-a")).toHaveLength(0);
+      // No streamEnd arrives while the session is absent.
+      expect(yield* engine.fire("streamer", join, {}, "room-b")).toHaveLength(1);
+      expect(yield* engine.fire("streamer", join, {}, "room-b")).toHaveLength(0);
+    }).pipe(Effect.provide(engineWith([giftRule({ trigger: { type: "join" } })]))),
+  );
+});

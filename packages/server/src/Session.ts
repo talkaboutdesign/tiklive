@@ -50,7 +50,7 @@ export interface SessionOptions {
   readonly subscriberBuffer?: number;
   readonly connection?: LiveConnection.ConnectOptions;
   /** Runs after each event is published; each returned action is published as an `Action` message. */
-  readonly actions?: (event: LiveEvent) => Effect.Effect<ReadonlyArray<FiredAction>>;
+  readonly actions?: (event: LiveEvent, roomId?: string) => Effect.Effect<ReadonlyArray<FiredAction>>;
 }
 
 type MutableStats = { -readonly [K in keyof SessionStats]: SessionStats[K] };
@@ -159,7 +159,7 @@ export const make = (
     const actions = options.actions;
     const runActions = (event: LiveEvent) =>
       actions
-        ? Effect.suspend(() => actions(event)).pipe(
+        ? Effect.suspend(() => actions(event, roomId)).pipe(
             Effect.flatMap((fired) => Effect.forEach(fired, publishAction, { discard: true })),
           )
         : Effect.void;
