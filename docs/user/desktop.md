@@ -49,6 +49,8 @@ your chat in the middle, and gifts on the right. Likes, joins and other noise st
   follows can be turned on.
 - **Gifts** (right column): the latest gifts, newest first, your top gifters, and the coins so far. Big gifts are
   highlighted.
+- **Resize the right column** by dragging its left edge. Double-click the edge to reset it. With the keyboard, tab to
+  the edge and use the arrow keys. The width is remembered.
 - **Silence** (the eye button on a message): hides that person in tiklive only. They can still chat on TikTok, and
   everyone else still sees their messages. Undo it from the Silenced list under Filters.
 - **Preview** (the video button, top right): plays your stream the way viewers see it, a few seconds behind. It's

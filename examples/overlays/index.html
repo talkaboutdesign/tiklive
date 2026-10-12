@@ -268,6 +268,7 @@
 
       /* Body: chat on the left, preview and gifts on the right */
       .live-body {
+        --side-width: 340px; /* set by the resize script, clamped to the window */
         display: flex;
         flex: 1 1 auto;
         min-height: 0;
@@ -281,13 +282,58 @@
       }
       .side {
         display: flex;
+        position: relative;
         flex: none;
         flex-direction: column;
-        width: 340px;
+        width: var(--side-width);
         min-height: 0;
         /* The preview sizes its video from the column height (cqh) */
         container-type: size;
         border-left: 1px solid var(--line);
+      }
+      /* Drag handle on the left edge. The 8px hit area straddles the border, and the 1px line
+         is transparent until hover (border color), while dragging or focused (accent). */
+      .side-handle {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: -3px;
+        z-index: 3;
+        width: 8px;
+        cursor: col-resize;
+        touch-action: none;
+        -webkit-app-region: no-drag;
+        outline: none;
+      }
+      .side-handle::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 3px;
+        width: 1px;
+        background: transparent;
+      }
+      .side-handle:hover::after {
+        background: var(--line-strong);
+      }
+      .side-handle:focus-visible::after,
+      .side-resizing .side-handle::after {
+        background: var(--accent);
+      }
+      .side-resizing .side-handle::after {
+        background: color-mix(in srgb, var(--accent) 60%, transparent);
+      }
+      /* While dragging: the pointer stays a resize cursor, selection is off, and the video and any
+         iframe ignore pointer events so the drag never stalls on them. */
+      .side-resizing,
+      .side-resizing * {
+        cursor: col-resize !important;
+        user-select: none;
+      }
+      .side-resizing video,
+      .side-resizing iframe {
+        pointer-events: none;
       }
 
       /* ---------- Filter bar: one row. Settings live in the Filters popover. ---------- */
@@ -762,13 +808,6 @@
         font-size: 13px;
       }
 
-      /* Narrower side column on mid-sized windows */
-      @media (max-width: 999px) and (min-width: 821px) {
-        .side {
-          width: 300px;
-        }
-      }
-
       /* Stacked layout: the preview and gifts go above the chat, and scroll together */
       @media (max-width: 820px) {
         .live-body {
@@ -814,6 +853,9 @@
         .gift-list {
           flex: none;
           overflow: visible;
+        }
+        .side-handle {
+          display: none;
         }
       }
     </style>
@@ -886,7 +928,7 @@
             <dl class="room-stats" id="room-stats" aria-label="Room totals"></dl>
           </section>
 
-          <div class="live-body">
+          <div class="live-body" id="live-body">
             <section class="chat-col" aria-label="Chat">
               <div class="filter-bar" id="filter-bar">
                 <div class="segmented" role="radiogroup" aria-label="Who can appear">
@@ -990,7 +1032,19 @@
               </div>
             </section>
 
-            <aside class="side" aria-label="Preview and gifts">
+            <aside class="side" id="side-panel" aria-label="Preview and gifts">
+              <div
+                class="side-handle"
+                id="side-handle"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize side panel"
+                aria-controls="side-panel"
+                tabindex="0"
+                aria-valuemin="280"
+                aria-valuemax="640"
+                aria-valuenow="340"
+              ></div>
               <section class="preview" id="preview" aria-label="Preview" hidden>
                 <div class="preview-head">
                   <span class="preview-title">Preview</span>
@@ -1142,6 +1196,13 @@
           return JSON.parse(readPref(key) ?? "null") ?? fallback;
         } catch {
           return fallback;
+        }
+      }
+      function clearPref(key) {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          memory.delete(key);
         }
       }
       const writeJson = (key, value) => writePref(key, JSON.stringify(value));
@@ -2056,8 +2117,121 @@
         if (lastStatus?.state === "live") renderStatusLine(lastStatus);
       }, 30000);
 
+      // ---- Resizable side column ----
+
+      // The width the user chose, kept as-is. The window clamps it only for display, so shrinking
+      // the window and growing it back restores the choice. Always within the absolute bounds.
+      const SIDE = { key: "tiklive.dashboard.sideWidth", fallback: 340, min: 280, max: 640, chat: 420 };
+      const liveBody = $("live-body");
+      const sideHandle = $("side-handle");
+      const parseSideWidth = (raw) => {
+        const n = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
+        return Number.isFinite(n) ? Math.min(SIDE.max, Math.max(SIDE.min, Math.round(n))) : null;
+      };
+      let sideChosen = parseSideWidth(readPref(SIDE.key));
+
+      // The widest the column can be: 640px, 60% of the dashboard area, and room for the chat. The
+      // dashboard area excludes the sidebar, so the chat keeps its width at every window size.
+      function sideCeiling() {
+        const w = liveBody.clientWidth || window.innerWidth;
+        return Math.max(SIDE.min, Math.floor(Math.min(SIDE.max, w * 0.6, w - SIDE.chat)));
+      }
+      const clampSide = (px) => Math.round(Math.min(sideCeiling(), Math.max(SIDE.min, px)));
+      const sideShown = () => clampSide(sideChosen ?? SIDE.fallback);
+
+      function applySide() {
+        const shown = sideShown();
+        liveBody.style.setProperty("--side-width", `${shown}px`);
+        sideHandle.setAttribute("aria-valuemin", String(SIDE.min));
+        sideHandle.setAttribute("aria-valuemax", String(sideCeiling()));
+        sideHandle.setAttribute("aria-valuenow", String(shown));
+      }
+
+      // A drag moves the handle with the pointer. The width changes at most once per frame, and is
+      // saved once, when the drag ends and the pointer actually moved.
+      let drag = null; // { id, startX, startW, x, moved }
+      let dragFrame = 0;
+      function moveSide() {
+        dragFrame = 0;
+        if (!drag) return;
+        // Moving left (smaller clientX) widens the column.
+        sideChosen = clampSide(drag.startW + (drag.startX - drag.x));
+        if (drag.x !== drag.startX) drag.moved = true;
+        applySide();
+      }
+      function endDrag() {
+        if (!drag) return;
+        if (dragFrame) {
+          cancelAnimationFrame(dragFrame);
+          moveSide();
+        }
+        const { moved } = drag;
+        drag = null;
+        document.body.classList.remove("side-resizing");
+        if (moved) writePref(SIDE.key, String(sideChosen));
+        applySide();
+      }
+
+      sideHandle.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || drag) return;
+        e.preventDefault(); // no text selection while dragging
+        sideHandle.setPointerCapture(e.pointerId);
+        sideHandle.focus({ preventScroll: true });
+        drag = { id: e.pointerId, startX: e.clientX, startW: sideShown(), x: e.clientX, moved: false };
+        document.body.classList.add("side-resizing");
+      });
+      sideHandle.addEventListener("pointermove", (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        drag.x = e.clientX;
+        if (!dragFrame) dragFrame = requestAnimationFrame(moveSide);
+      });
+      sideHandle.addEventListener("pointerup", (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        drag.x = e.clientX;
+        endDrag();
+      });
+      sideHandle.addEventListener("pointercancel", (e) => {
+        if (drag && e.pointerId === drag.id) endDrag();
+      });
+      sideHandle.addEventListener("lostpointercapture", (e) => {
+        if (drag && e.pointerId === drag.id) endDrag();
+      });
+      window.addEventListener("blur", endDrag);
+
+      // Double-click resets to the default and forgets the saved width.
+      sideHandle.addEventListener("dblclick", () => {
+        sideChosen = null;
+        clearPref(SIDE.key);
+        applySide();
+      });
+
+      sideHandle.addEventListener("keydown", (e) => {
+        const step = e.shiftKey ? 64 : 16;
+        let next;
+        if (e.key === "ArrowLeft") next = sideShown() + step;
+        else if (e.key === "ArrowRight") next = sideShown() - step;
+        else if (e.key === "Home") next = SIDE.min;
+        else if (e.key === "End") next = sideCeiling();
+        else return;
+        e.preventDefault();
+        sideChosen = clampSide(next);
+        writePref(SIDE.key, String(sideChosen));
+        applySide();
+      });
+
+      // Window resize re-clamps the display, once per frame at most.
+      let resizeFrame = 0;
+      window.addEventListener("resize", () => {
+        if (resizeFrame) return;
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = 0;
+          applySide();
+        });
+      });
+
       // ---- Startup ----
 
+      applySide();
       $("gifts-icon").append(icon("gift", 14));
       syncFilterControls();
       renderMute();
