@@ -85,8 +85,8 @@ interface Viewer {
 interface Board {
   settings: PointsSettings;
   viewers: Map<string, Viewer>;
-  /** Changed since the last write. Only the batched flush looks at this. */
-  dirty: boolean;
+  /** Goes up on every change. A board needs saving when this is above the version last saved. */
+  version: number;
 }
 
 const StoredViewer = Schema.Struct({
@@ -175,13 +175,13 @@ const byRank = (a: Viewer, b: Viewer) =>
 const freshBoard = (): Board => ({
   settings: { ...DEFAULT_POINTS_SETTINGS },
   viewers: new Map(),
-  dirty: false,
+  version: 0,
 });
 
 const cloneBoard = (board: Board): Board => ({
   settings: { ...board.settings },
   viewers: new Map([...board.viewers].map(([id, viewer]) => [id, { ...viewer }])),
-  dirty: false,
+  version: board.version,
 });
 
 const toStored = (board: Board): Stored => ({
@@ -189,10 +189,11 @@ const toStored = (board: Board): Stored => ({
   viewers: [...board.viewers.values()].map((viewer) => ({ ...viewer })),
 });
 
+// Loaded from disk, so it starts at version 0, the same as a board nothing has changed.
 const fromStored = (stored: Stored): Board => ({
   settings: { ...stored.settings },
   viewers: new Map(stored.viewers.map((viewer) => [viewer.userId, { ...viewer }])),
-  dirty: false,
+  version: 0,
 });
 
 /** Where a streamer's totals live. `load` never fails; `save` fails only on I/O. */
@@ -259,7 +260,7 @@ const filePersistence = (dir: string): Persistence => {
     save: (username, stored) => {
       if (!Schema.is(Username)(username)) return Effect.void;
       const file = fileFor(username);
-      return writeFileAtomic(file, `${JSON.stringify(stored, null, 2)}\n`).pipe(
+      return writeFileAtomic(file, `${JSON.stringify(stored)}\n`).pipe(
         Effect.mapError(
           (cause) =>
             new PointsWriteError({ message: `Could not save points to ${file}: ${describe(cause)}` }),
@@ -270,14 +271,22 @@ const filePersistence = (dir: string): Persistence => {
 };
 
 /**
- * The store logic shared by both backends. Every change runs under one lock. Changes from the
- * dashboard are written before they take effect. Points from events only mark the board dirty,
- * and `flushDirty` writes them: on a timer when `batched`, and once more when the scope closes.
+ * The store logic shared by both backends. Every change runs under `lock`, so the boards only change
+ * one at a time. Changes from the dashboard are saved before they take effect. Points from events only
+ * bump the board's version, and `flushDirty` saves the boards that changed: on a timer when `batched`,
+ * and once more when the scope closes. Saves run under `writeLock`, after `lock` is released, so a
+ * large board never holds up events. An older snapshot never overwrites a newer save.
  */
 const makeStore = (persistence: Persistence, batched: boolean) =>
   Effect.gen(function* () {
+    // Held for every change and read. Lock order is always `lock`, then `writeLock`.
     const lock = yield* Semaphore.make(1);
+    // Held only around a save.
+    const writeLock = yield* Semaphore.make(1);
     const boards = new Map<string, Board>();
+    // The version last saved for each streamer. Nothing saved yet counts as version 0.
+    const saved = new Map<string, number>();
+    const savedVersion = (username: string) => saved.get(username) ?? 0;
 
     // Only called under the lock.
     const boardFor = (username: string) =>
@@ -291,32 +300,52 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
       });
 
     // Writes `next` and only then makes it the current board, so a failed write keeps the old totals.
-    const commit = (username: string, next: Board) =>
-      persistence.save(username, toStored(next)).pipe(
+    // Only called under the lock.
+    const commit = (username: string, current: Board, next: Board) => {
+      next.version = current.version + 1;
+      return writeLock.withPermit(persistence.save(username, toStored(next))).pipe(
         Effect.andThen(
           Effect.sync(() => {
-            next.dirty = false;
+            saved.set(username, next.version);
             boards.set(username, next);
           }),
         ),
       );
+    };
 
-    // Suspended so the list of dirty boards is read when the flush runs, not when the store is built.
-    const flushDirty = lock.withPermit(
-      Effect.suspend(() =>
-        Effect.forEach(
-          [...boards].filter(([, board]) => board.dirty),
-          ([username, board]) =>
-            persistence.save(username, toStored(board)).pipe(
-              Effect.andThen(Effect.sync(() => (board.dirty = false))),
-              Effect.catch((error) =>
-                Effect.logWarning(`Could not save points for @${username}; will retry`, error),
-              ),
-            ),
-          { discard: true },
+    // Snapshots the boards that changed since they were saved, under the lock. Then each write runs
+    // under `writeLock` alone, so events keep flowing while a big board is serialized and written.
+    // A snapshot is skipped if a newer version has been saved since. A failed write is logged and
+    // left unsaved, so the next flush retries it.
+    const flushDirty = Effect.gen(function* () {
+      const pending = yield* lock.withPermit(
+        Effect.sync(() =>
+          [...boards].flatMap(([username, board]) =>
+            board.version > savedVersion(username)
+              ? [{ username, version: board.version, stored: toStored(board) }]
+              : [],
+          ),
         ),
-      ),
-    );
+      );
+      yield* Effect.forEach(
+        pending,
+        ({ username, version, stored }) =>
+          // Suspended so the saved version is checked once the write lock is held, not before.
+          writeLock.withPermit(
+            Effect.suspend(() =>
+              version <= savedVersion(username)
+                ? Effect.void
+                : persistence.save(username, stored).pipe(
+                    Effect.andThen(Effect.sync(() => saved.set(username, version))),
+                    Effect.catch((error) =>
+                      Effect.logWarning(`Could not save points for @${username}; will retry`, error),
+                    ),
+                  ),
+            ),
+          ),
+        { discard: true },
+      );
+    });
 
     if (batched) {
       yield* Effect.sleep(FLUSH_EVERY).pipe(Effect.andThen(flushDirty), Effect.forever, Effect.forkScoped);
@@ -357,7 +386,7 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
             viewer.profilePictureUrl = user.profilePictureUrl;
             viewer.lastSeen = now;
             viewer.points += earn(event, viewer, board.settings, now);
-            board.dirty = true;
+            board.version += 1;
           }),
         ),
 
@@ -396,9 +425,10 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
       updateSettings: (username, settings) =>
         lock.withPermit(
           Effect.gen(function* () {
-            const next = cloneBoard(yield* boardFor(username));
+            const board = yield* boardFor(username);
+            const next = cloneBoard(board);
             next.settings = { ...settings };
-            yield* commit(username, next);
+            yield* commit(username, board, next);
             return { ...settings };
           }),
         ),
@@ -411,7 +441,7 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
             const next = cloneBoard(board);
             const viewer = next.viewers.get(userId)!;
             viewer.points = Math.max(0, "delta" in change ? viewer.points + change.delta : change.set);
-            yield* commit(username, next);
+            yield* commit(username, board, next);
             return Option.some(publicView(viewer));
           }),
         ),
@@ -419,9 +449,10 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
       reset: (username) =>
         lock.withPermit(
           Effect.gen(function* () {
-            const next = cloneBoard(yield* boardFor(username));
+            const board = yield* boardFor(username);
+            const next = cloneBoard(board);
             next.viewers.clear();
-            yield* commit(username, next);
+            yield* commit(username, board, next);
           }),
         ),
     });

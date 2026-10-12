@@ -303,6 +303,8 @@ const withTempDir = <A, E, R>(body: (dir: string) => Effect.Effect<A, E, R>) =>
     );
   });
 
+type OnDisk = { settings: PointsSettings; viewers: Array<{ userId: string; points: number }> };
+
 const onDisk = (dir: string) =>
   Effect.promise(async () => {
     try {
@@ -330,6 +332,31 @@ const onDiskSoon = (dir: string) =>
       } catch {
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
+    }
+    return undefined;
+  });
+
+/** The raw text of the streamer's file, once `ready` accepts it. Waits in real time, like `onDiskSoon`. */
+const textOnDiskSoon = (dir: string, ready: (text: string) => boolean) =>
+  Effect.promise(async () => {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const text = await readFile(join(dir, "points", `${USER}.json`), "utf8").catch(() => undefined);
+      if (text !== undefined && ready(text)) return text;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return undefined;
+  });
+
+/** The parsed streamer's file, once `ready` accepts it. Waits in real time, like `onDiskSoon`. */
+const parsedOnDiskSoon = (dir: string, ready: (saved: OnDisk) => boolean) =>
+  Effect.promise(async () => {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const saved = await readFile(join(dir, "points", `${USER}.json`), "utf8").then(
+        (text) => JSON.parse(text) as OnDisk,
+        () => undefined,
+      );
+      if (saved && ready(saved)) return saved;
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
     return undefined;
   });
@@ -452,6 +479,105 @@ describe("PointsStore in a file", () => {
           expect(failed.message).toContain("Could not save points");
           expect(Option.isNone(yield* store.get(USER, "1"))).toBe(true);
         }).pipe(Effect.provide(layerFile(dir))),
+      ),
+    ),
+  );
+
+  it.effect("saves compact JSON, and still loads a pretty-printed file from before", () =>
+    Effect.scoped(
+      withTempDir((dir) =>
+        Effect.gen(function* () {
+          // A file written by an older version: indented, one viewer with 7 points.
+          const older = {
+            userId: "1",
+            uniqueId: "handle1",
+            nickname: "Name 1",
+            profilePictureUrl: "https://img.example/1.jpg",
+            points: 7,
+            coins: 0,
+            messages: 0,
+            firstSeen: 1,
+            lastSeen: 1,
+            likeCarry: 0,
+            lastChatAt: null,
+          };
+          yield* Effect.promise(() => mkdir(join(dir, "points"), { recursive: true }));
+          yield* Effect.promise(() =>
+            writeFile(
+              join(dir, "points", `${USER}.json`),
+              JSON.stringify({ settings: DEFAULT_POINTS_SETTINGS, viewers: [older] }, null, 2),
+            ),
+          );
+          yield* Effect.gen(function* () {
+            const store = yield* PointsStore;
+            expect(yield* pointsOf(store, "1")).toBe(7);
+            yield* store.record(USER, follow("1"));
+            yield* TestClock.adjust("5 seconds");
+          }).pipe(Effect.provide(layerFile(dir)));
+
+          // The rewrite is the only file with no indentation in it.
+          const text = yield* textOnDiskSoon(dir, (saved) => !saved.includes("\n  "));
+          expect(text?.endsWith("\n")).toBe(true);
+          expect(text?.trimEnd().includes("\n")).toBe(false);
+          expect(JSON.parse(text ?? "null")).toMatchObject({ viewers: [{ userId: "1", points: 57 }] });
+        }),
+      ),
+    ),
+  );
+
+  it.effect("retries a write that failed on the next flush", () =>
+    Effect.scoped(
+      withTempDir((dir) =>
+        Effect.gen(function* () {
+          // A regular file where the points folder should be: writes fail until it's removed.
+          yield* Effect.promise(() => writeFile(join(dir, "points"), "x"));
+          yield* Effect.gen(function* () {
+            const store = yield* PointsStore;
+            yield* store.record(USER, follow("1"));
+            // The flush fails in the background. The reset waits for that write to finish, so the
+            // failure has happened before the folder is fixed. The reset fails too, and changes nothing.
+            yield* TestClock.adjust("5 seconds");
+            yield* Effect.flip(store.reset(USER));
+            yield* Effect.promise(() => rm(join(dir, "points")));
+
+            yield* TestClock.adjust("5 seconds");
+            expect(yield* onDiskSoon(dir)).toMatchObject({ viewers: [{ userId: "1", points: 50 }] });
+          }).pipe(Effect.provide(layerFile(dir)));
+        }),
+      ),
+    ),
+  );
+
+  it.effect("keeps the newest totals on disk across dashboard changes and timed flushes", () =>
+    Effect.scoped(
+      withTempDir((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.gen(function* () {
+            const store = yield* PointsStore;
+            yield* store.record(USER, follow("1"));
+            yield* TestClock.adjust("5 seconds");
+            expect(yield* parsedOnDiskSoon(dir, (saved) => saved.viewers.length === 1)).toBeDefined();
+
+            yield* store.adjust(USER, "1", { set: 99 });
+            expect(yield* onDisk(dir)).toMatchObject({ viewers: [{ userId: "1", points: 99 }] });
+
+            yield* store.record(USER, follow("2"));
+            yield* TestClock.adjust("5 seconds");
+            const second = yield* parsedOnDiskSoon(dir, (saved) => saved.viewers.length === 2);
+            expect(second?.viewers.map((v) => [v.userId, v.points])).toEqual([
+              ["1", 99],
+              ["2", 50],
+            ]);
+
+            yield* store.reset(USER);
+            expect(yield* onDisk(dir)).toMatchObject({ viewers: [] });
+
+            yield* store.record(USER, follow("3"));
+            yield* TestClock.adjust("5 seconds");
+            const third = yield* parsedOnDiskSoon(dir, (saved) => saved.viewers.length === 1);
+            expect(third?.viewers.map((v) => [v.userId, v.points])).toEqual([["3", 50]]);
+          }).pipe(Effect.provide(layerFile(dir)));
+        }),
       ),
     ),
   );
