@@ -4,11 +4,14 @@
  *   bun scripts/release.ts            # publish (expects `bun run build` first)
  *   bun scripts/release.ts --dry-run  # pack and show what would be published
  *   bun scripts/release.ts --otp=123456  # local publish with a 2FA code
+ *   bun scripts/release.ts --stage    # stage instead of publish (what CI does)
  *
  * Packages are packed with `bun pm pack` (which rewrites `workspace:` and
- * `catalog:` versions) and published with npm, which handles npm trusted
- * publishing (OIDC) and provenance in GitHub Actions. Prints `New tag:` lines
- * that changesets/action uses to detect a release.
+ * `catalog:` versions) and handed to npm, which handles npm trusted publishing
+ * (OIDC) in GitHub Actions. With `--stage`, versions are uploaded with
+ * `npm stage publish` and only go public once a maintainer approves them with
+ * 2FA (`npm stage list`, `npm stage approve <id>`, in dependency order).
+ * Prints `New tag:` lines that changesets/action uses to detect a release.
  */
 import { $ } from "bun";
 import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
@@ -18,6 +21,7 @@ import { join } from "node:path";
 const PACKAGES = ["contracts", "core", "client", "server"];
 const OUT = join(import.meta.dir, "..", ".release");
 const dryRun = process.argv.includes("--dry-run");
+const stage = process.argv.includes("--stage");
 /** `--otp=123456` is passed through to npm for local publishes with an authenticator app. */
 const otp = process.argv.filter((arg) => arg.startsWith("--otp="));
 
@@ -59,18 +63,37 @@ for (const dir of PACKAGES) {
 
   // Prereleases (e.g. 0.2.0-next.1) go to the `next` dist-tag so `latest` stays stable.
   const tag = manifest.version.includes("-") ? "next" : "latest";
+  const command = stage ? ["npm", "stage", "publish"] : ["npm", "publish"];
   if (dryRun) {
-    console.log(`would publish ${id} (${tarball}) with tag ${tag}`);
+    console.log(`would ${stage ? "stage" : "publish"} ${id} (${tarball}) with tag ${tag}`);
     continue;
   }
-  // Inherit the terminal so npm can run its interactive 2FA / browser login when publishing locally.
-  const npm = Bun.spawn(["npm", "publish", join(OUT, tarball), "--access", "public", "--tag", tag, ...otp], {
-    stdio: ["inherit", "inherit", "inherit"],
-  });
-  if ((await npm.exited) !== 0) throw new Error(`npm publish failed for ${id}`);
+  const args = [...command, join(OUT, tarball), "--access", "public", "--tag", tag, ...otp];
+  if (stage) {
+    // A staged version isn't visible to `npm view`, so a re-run tries to stage it again.
+    const result = await $`${args}`.nothrow();
+    const output = `${result.stdout}${result.stderr}`;
+    if (result.exitCode !== 0) {
+      if (/stag/i.test(output) && /already|exist|conflict|E409/i.test(output)) {
+        console.log(`skip ${id} (already staged)`);
+        continue;
+      }
+      throw new Error(`npm stage publish failed for ${id}`);
+    }
+  } else {
+    // Inherit the terminal so npm can run its interactive 2FA / browser login when publishing locally.
+    const npm = Bun.spawn(args, { stdio: ["inherit", "inherit", "inherit"] });
+    if ((await npm.exited) !== 0) throw new Error(`npm publish failed for ${id}`);
+  }
   published.push(id);
   console.log(`New tag: ${id}`);
 }
 
 if (!dryRun)
-  console.log(published.length ? `Published ${published.length} package(s).` : "Nothing to publish.");
+  console.log(
+    published.length
+      ? `${stage ? "Staged" : "Published"} ${published.length} package(s).${
+          stage ? " Approve them with `npm stage list` / `npm stage approve <id>`." : ""
+        }`
+      : "Nothing to publish.",
+  );
