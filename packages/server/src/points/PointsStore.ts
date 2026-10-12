@@ -285,6 +285,7 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
     const writeLock = yield* Semaphore.make(1);
     const boards = new Map<string, Board>();
     // The version last saved for each streamer. Nothing saved yet counts as version 0.
+    // lastWritten only changes while holding writeLock, together with the write it records.
     const saved = new Map<string, number>();
     const savedVersion = (username: string) => saved.get(username) ?? 0;
 
@@ -303,14 +304,15 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
     // Only called under the lock.
     const commit = (username: string, current: Board, next: Board) => {
       next.version = current.version + 1;
-      return writeLock.withPermit(persistence.save(username, toStored(next))).pipe(
-        Effect.andThen(
-          Effect.sync(() => {
-            saved.set(username, next.version);
-            boards.set(username, next);
-          }),
-        ),
-      );
+      return writeLock
+        .withPermit(
+          persistence.save(username, toStored(next)).pipe(
+            // Recorded before the permit is released, so a flush can't take the lock in between and
+            // write an older snapshot over this one.
+            Effect.andThen(Effect.sync(() => saved.set(username, next.version))),
+          ),
+        )
+        .pipe(Effect.andThen(Effect.sync(() => boards.set(username, next))));
     };
 
     // Snapshots the boards that changed since they were saved, under the lock. Then each write runs
@@ -457,6 +459,12 @@ const makeStore = (persistence: Persistence, batched: boolean) =>
         ),
     });
   });
+
+/**
+ * `makeStore` over any persistence, so tests can hold a save open. This module is re-exported as
+ * `PointsStore` from the package index, so it is part of the namespace. Use `layerFile` or `layerMemory`.
+ */
+export const makeStoreForTest = makeStore;
 
 /** Points kept in memory only. Start empty, and are lost when the server stops. */
 export const layerMemory: Layer.Layer<PointsStore> = Layer.effect(

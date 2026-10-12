@@ -9,15 +9,18 @@ import {
   type LiveUser,
   type PointsSettings,
 } from "@tiklive/contracts";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as TestClock from "effect/testing/TestClock";
 import { mkdtemp, readdir, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { layerFile, layerMemory, PointsStore, PointsWriteError } from "./PointsStore.ts";
+import { layerFile, layerMemory, makeStoreForTest, PointsStore, PointsWriteError } from "./PointsStore.ts";
 
 const USER = "streamer";
+const OTHER = "other";
 
 const user = (userId: string, nickname = `Name ${userId}`, uniqueId = `handle${userId}`): LiveUser => ({
   userId,
@@ -579,6 +582,71 @@ describe("PointsStore in a file", () => {
           }).pipe(Effect.provide(layerFile(dir)));
         }),
       ),
+    ),
+  );
+});
+
+// ---- a flush and a dashboard change waiting for the write lock ----
+
+/** Lets the runnable fibers run until they wait. Nothing here sleeps in real time. */
+const settle = Effect.forEach(Array.from({ length: 50 }), () => Effect.yieldNow, { discard: true });
+
+/**
+ * A disk that keeps every write in order. The first write of `hold.username` waits on `hold.release`,
+ * and `hold.entered` completes once that write has started, so the test decides when it finishes.
+ */
+const fakeDisk = (hold: {
+  username: string;
+  entered: Deferred.Deferred<void>;
+  release: Deferred.Deferred<void>;
+}) => {
+  const writes: Array<{ username: string; points: Array<[string, number]> }> = [];
+  let held = true;
+  return {
+    writes,
+    persistence: {
+      load: () => Effect.succeed(undefined),
+      save: (username: string, stored: { viewers: ReadonlyArray<{ userId: string; points: number }> }) =>
+        Effect.gen(function* () {
+          if (held && username === hold.username) {
+            held = false;
+            yield* Deferred.succeed(hold.entered, undefined);
+            yield* Deferred.await(hold.release);
+          }
+          writes.push({ username, points: stored.viewers.map((viewer) => [viewer.userId, viewer.points]) });
+        }),
+    },
+  };
+};
+
+describe("PointsStore: a dashboard change and a flush", () => {
+  it.effect("keeps the newest totals on disk when a change queues behind a flush's held write", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const disk = fakeDisk({ username: OTHER, entered, release });
+
+        // Both streamers changed, so the flush snapshots both (USER at version 1, 50 points). It writes
+        // OTHER first, and that write is held, so the flush keeps the write lock while USER waits.
+        const store = yield* makeStoreForTest(disk.persistence, true);
+        yield* store.record(OTHER, follow("9"));
+        yield* store.record(USER, follow("1"));
+        yield* TestClock.adjust("5 seconds");
+        yield* Deferred.await(entered);
+
+        // The change for USER is version 2 (99 points). It takes the lock and waits for the write lock.
+        const change = yield* Effect.forkChild(store.adjust(USER, "1", { set: 99 }));
+        yield* settle;
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(change);
+        yield* settle;
+
+        // The newest write of USER is the change, and the store agrees with the disk.
+        const userWrites = disk.writes.filter((write) => write.username === USER);
+        expect(userWrites.at(-1)?.points).toEqual([["1", 99]]);
+        expect(Option.getOrThrow(yield* store.get(USER, "1")).points).toBe(99);
+      }),
     ),
   );
 });
