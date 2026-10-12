@@ -1,0 +1,232 @@
+<!doctype html>
+<!--
+  Subathon timer: counts down, and gifts, follows, subs and shares add time.
+    http://localhost:8080/overlays/timer.html?username=YOURNAME
+  start: minutes (60)     perCoin: seconds per coin (10)   perFollow: seconds (30)
+  perSub: seconds (300)   perShare: seconds (0)           max: cap in minutes (0 = no cap)
+  label: text (Subathon)  id: saved-state name (default)   reset=1: clear saved time on load
+  &token=… if the server requires one
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="data:," />
+    <title>tiklive timer</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: transparent;
+        font-family:
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        color: #fff;
+      }
+      .timer {
+        position: fixed;
+        top: 16px;
+        left: 16px;
+        padding: 14px 24px 16px;
+        border-radius: 20px;
+        background: rgba(16, 16, 22, 0.72);
+        text-align: center;
+        min-width: 360px;
+      }
+      .label {
+        font-size: 24px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #ffd166;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      }
+      .clock {
+        font-size: 96px;
+        line-height: 1.05;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        text-shadow: 0 3px 14px rgba(0, 0, 0, 0.6);
+      }
+      .timer.done .clock {
+        color: #ff6b6b;
+      }
+      .timer.done .label {
+        color: #ff6b6b;
+      }
+      #toasts {
+        position: fixed;
+        top: 170px;
+        left: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-start;
+      }
+      .toast {
+        padding: 6px 14px;
+        border-radius: 12px;
+        background: rgba(16, 16, 22, 0.72);
+        font-size: 26px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: #9dff9d;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+        animation: slide-in 0.3s ease-out;
+        transition: opacity 0.6s;
+      }
+      .toast.fade {
+        opacity: 0;
+      }
+      @keyframes slide-in {
+        from {
+          transform: translateY(-8px);
+          opacity: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .toast {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="timer" id="timer">
+      <div class="label" id="label"></div>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+    <div id="toasts"></div>
+    <script type="module">
+      import { TikLive } from "/tiklive.js";
+
+      const params = new URLSearchParams(location.search);
+      // A number param with a default. Missing, non-numeric or below `min` values fall back to `def`.
+      const num = (k, def, min = 0) => {
+        const n = Number(params.get(k));
+        return params.has(k) && params.get(k) !== "" && Number.isFinite(n) && n >= min ? n : def;
+      };
+      const SEC = 1000;
+      const startMs = num("start", 60) * 60 * SEC;
+      const perCoin = num("perCoin", 10) * SEC;
+      const perFollow = num("perFollow", 30) * SEC;
+      const perSub = num("perSub", 300) * SEC;
+      const perShare = num("perShare", 0) * SEC;
+      const capMs = num("max", 0) > 0 ? num("max", 0) * 60 * SEC : Infinity;
+      const label = params.get("label")?.trim().slice(0, 60) || "Subathon";
+      const id = (params.get("id") || "default").replace(/[^\w-]/g, "_").slice(0, 40);
+      const reset = params.get("reset") === "1";
+
+      const timerEl = document.getElementById("timer");
+      const clockEl = document.getElementById("clock");
+      const toasts = document.getElementById("toasts");
+      document.getElementById("label").textContent = label;
+
+      const live = new TikLive({ events: ["gift", "follow", "subscribe", "share"] });
+      const storeKey = `tiklive.timer.${live.username}.${id}`;
+
+      // Saved state is { end } (unix ms). Storage can be unavailable (private windows), so it's optional.
+      function load() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(storeKey) ?? "null");
+          return saved && Number.isFinite(saved.end) ? saved.end : null;
+        } catch {
+          return null;
+        }
+      }
+      function save() {
+        try {
+          localStorage.setItem(storeKey, JSON.stringify({ end }));
+        } catch {
+          // Storage is unavailable: the timer still works for this visit.
+        }
+      }
+
+      // reset=1 ignores the saved end time, so every load starts the countdown again.
+      let end = reset ? null : load();
+      if (end === null) {
+        end = Date.now() + startMs;
+        save();
+      }
+
+      // Formats a duration as m:ss, or h:mm:ss from one hour up.
+      function fmtShort(ms) {
+        const total = Math.floor(ms / SEC);
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        const pad = (n) => String(n).padStart(2, "0");
+        return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+      }
+      const fmtClock = (ms) => {
+        const total = Math.floor(ms / SEC);
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+      };
+
+      // Replayed events and repeated msgIds never add time twice.
+      const seen = new Set();
+      function fresh(msgId) {
+        if (!msgId) return true;
+        if (seen.has(msgId)) return false;
+        seen.add(msgId);
+        if (seen.size > 5000) seen.delete(seen.values().next().value);
+        return true;
+      }
+
+      function remaining() {
+        return Math.max(0, end - Date.now());
+      }
+
+      function addTime(ms, user) {
+        if (ms <= 0 || remaining() <= 0) return;
+        // Clamp to the cap on what's left. Only the time that was actually added is shown.
+        const room = capMs - remaining();
+        const added = Math.min(ms, room);
+        if (added <= 0) return;
+        end += added;
+        save();
+        render();
+        showToast(`+${fmtShort(added)} · ${user?.nickname || user?.uniqueId || ""}`);
+      }
+
+      function showToast(text) {
+        const el = document.createElement("div");
+        el.className = "toast";
+        el.textContent = text;
+        toasts.prepend(el);
+        while (toasts.children.length > 4) toasts.lastElementChild.remove();
+        setTimeout(() => {
+          el.classList.add("fade");
+          setTimeout(() => el.remove(), 700);
+        }, 3000);
+      }
+
+      function render() {
+        const rem = remaining();
+        clockEl.textContent = fmtClock(rem);
+        const done = rem === 0;
+        timerEl.classList.toggle("done", done);
+        document.getElementById("label").textContent = done ? "Time's up!" : label;
+      }
+      render();
+      setInterval(render, 250);
+
+      live.on("gift", (e, meta) => {
+        // Streakable gifts repeat while the combo runs. Only the final event carries the combo total.
+        if (meta.replay || e.streaking || !fresh(e.msgId)) return;
+        addTime(Math.max(0, Number(e.totalDiamonds) || 0) * perCoin, e.user);
+      });
+      live.on("follow", (e, meta) => {
+        if (!meta.replay && fresh(e.msgId)) addTime(perFollow, e.user);
+      });
+      live.on("subscribe", (e, meta) => {
+        if (!meta.replay && fresh(e.msgId)) addTime(perSub, e.user);
+      });
+      live.on("share", (e, meta) => {
+        if (!meta.replay && fresh(e.msgId)) addTime(perShare, e.user);
+      });
+    </script>
+  </body>
+</html>
