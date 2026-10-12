@@ -12,6 +12,8 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOpti
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { IPC } from "./ipc.ts";
+import * as DesktopSettings from "./settings.ts";
+import { defaultChannel, isUpdateChannel } from "./updates/channel.ts";
 import * as DesktopUpdates from "./updates/DesktopUpdates.ts";
 import * as Updater from "./updates/Updater.ts";
 
@@ -47,10 +49,16 @@ const stopServer = Effect.promise(() => serverRuntime.dispose()).pipe(
 const updatesRuntime = ManagedRuntime.make(
   DesktopUpdates.layer({ beforeInstall: stopServer }).pipe(
     Layer.provide(Updater.electronLayer({ isPackaged: app.isPackaged, currentVersion: app.getVersion() })),
+    Layer.provide(
+      DesktopSettings.layerFile({
+        path: join(app.getPath("userData"), "desktop-settings.json"),
+        defaultChannel: defaultChannel(app.getVersion()),
+      }),
+    ),
   ),
 );
 
-const runUpdates = <A>(f: (updates: DesktopUpdates.DesktopUpdates["Service"]) => Effect.Effect<A>) =>
+const runUpdates = <A, E>(f: (updates: DesktopUpdates.DesktopUpdates["Service"]) => Effect.Effect<A, E>) =>
   updatesRuntime.runPromise(DesktopUpdates.DesktopUpdates.use(f));
 
 let mainWindow: BrowserWindow | undefined;
@@ -218,6 +226,10 @@ const registerIpc = () => {
   ipcMain.handle(IPC.updateCheck, () => runUpdates((updates) => updates.check));
   ipcMain.handle(IPC.updateDownload, () => runUpdates((updates) => updates.download));
   ipcMain.handle(IPC.updateInstall, () => runUpdates((updates) => updates.install));
+  ipcMain.handle(IPC.updateSetChannel, (_event, channel: unknown) => {
+    if (!isUpdateChannel(channel)) throw new Error(`Unknown update channel: ${String(channel)}`);
+    return runUpdates((updates) => updates.setChannel(channel));
+  });
 
   updatesRuntime.runFork(
     DesktopUpdates.DesktopUpdates.use((updates) =>

@@ -3,6 +3,7 @@
  * `DesktopBridge` as `window.tikliveDesktop`; pages check for it to know
  * they're running in the desktop app.
  */
+import type { UpdateChannel } from "./updates/channel.ts";
 import type { UpdateState } from "./updates/updateMachine.ts";
 
 export const IPC = {
@@ -12,6 +13,7 @@ export const IPC = {
   updateCheck: "tiklive:update-check",
   updateDownload: "tiklive:update-download",
   updateInstall: "tiklive:update-install",
+  updateSetChannel: "tiklive:update-set-channel",
 } as const;
 
 export interface DesktopBridge {
@@ -21,6 +23,8 @@ export interface DesktopBridge {
     readonly check: () => Promise<void>;
     readonly download: () => Promise<void>;
     readonly install: () => Promise<void>;
+    /** Switches between stable releases ("latest") and nightlies, saves it, and checks right away. */
+    readonly setChannel: (channel: UpdateChannel) => Promise<void>;
     /** Calls `listener` on every state change. Returns an unsubscribe function. */
     readonly onState: (listener: (state: UpdateState) => void) => () => void;
   };

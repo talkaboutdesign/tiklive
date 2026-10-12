@@ -1,40 +1,62 @@
 name: Release
 
-# Runs only when started by hand (Actions → Release → Run workflow on main), by
-# the repository owner, after they approve the `release` environment.
-# With pending changesets, changesets/action opens or updates a
-# "Release: version packages" PR. After that PR is merged, run the workflow
-# again to stage the new versions on npm (a maintainer approves them with 2FA),
-# build the desktop app (release-desktop.yml) and create a GitHub Release with
-# its installers and updater files attached.
+# Two channels, both from main, with no approvals:
+#
+# - Nightly: every push to main with pending changesets. CI runs first. The
+#   changesets are versioned as a snapshot (0.6.0-nightly.20261012173210)
+#   without committing anything, `tiklive` is published under the npm
+#   `nightly` dist-tag, the desktop app is built, and the commit gets a GitHub
+#   prerelease with the installers and nightly*.yml update files.
+# - Stable: Actions → Release → Run workflow, channel "stable". Promotes the
+#   latest nightly: on that nightly's commit it runs `changeset version`,
+#   merges the version commit into main, publishes `tiklive` to `latest`,
+#   builds the desktop app (release-desktop.yml) and creates the vX.Y.Z GitHub
+#   Release with the installers attached. Commits merged after that nightly
+#   wait for the next one.
+#
+# Run it with channel "nightly" to build a nightly of main right away, for
+# example to retry a failed one.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        type: choice
+        options: [nightly, stable]
+        default: nightly
 
+# Stable has its own group, so a newer nightly never replaces a queued stable run.
 concurrency:
-  group: release
+  group: release-${{ inputs.channel == 'stable' && 'stable' || 'nightly' }}
   cancel-in-progress: false
 
 permissions:
-  contents: write # push version commits, tags and GitHub Releases
-  pull-requests: write # open the version PR
+  contents: write # version commits, tags and GitHub Releases
   id-token: write # npm trusted publishing (OIDC) + provenance
 
 jobs:
-  release:
-    name: Version or publish
-    # Only the repository owner can start a release, and the protected `release`
-    # environment (main branch only) waits for their approval before this runs.
-    if: github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main'
+  ci:
+    name: CI
+    if: inputs.channel != 'stable'
+    uses: ./.github/workflows/ci.yml
+
+  nightly:
+    name: Nightly
+    needs: ci
+    # Only the repository owner can push to main, and the `release` environment
+    # (which holds the secrets and the npm trusted publisher) allows only main.
+    if: inputs.channel != 'stable' && github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main'
     environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
-      published: ${{ steps.changesets.outputs.published }}
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Read Bun version from package.json
         id: bun-version
@@ -53,38 +75,159 @@ jobs:
       - run: npm install -g npm@latest
 
       - run: bun install --frozen-lockfile
-      - run: bun run build
 
-      - name: Version PR or publish
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          version: bun run version-packages
-          publish: bun run release --stage
-          title: "Release: version packages"
-          commit: "Release: version packages"
-          createGithubReleases: false
+      - name: Version
+        id: version
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }} # @changesets/changelog-github looks up PRs
+        run: |
+          set -euo pipefail
+          if [[ -z "$(find .changeset -name '*.md' ! -name README.md)" ]]; then
+            echo "No pending changesets, so there is nothing to release."
+            exit 0
+          fi
+          bun run changeset version --snapshot nightly
+          echo "version=$(jq -r .version packages/server/package.json)" >> "$GITHUB_OUTPUT"
 
+      - if: steps.version.outputs.version
+        run: bun run build
+
+      - if: steps.version.outputs.version
+        run: bun run release
+
+      # The snapshot's changelog isn't committed, so the notes travel as an artifact.
+      - name: Write release notes
+        if: steps.version.outputs.version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
+
+      - if: steps.version.outputs.version
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: notes.md
+
+  stable:
+    name: Stable
+    if: inputs.channel == 'stable' && github.triggering_actor == github.repository_owner && github.ref == 'refs/heads/main'
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0 # history and tags
+
+      - name: Read Bun version from package.json
+        id: bun-version
+        run: echo "version=$(jq -r '.packageManager | split("@")[1]' package.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ steps.bun-version.outputs.version }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1.
+      - run: npm install -g npm@latest
+
+      # The nightly's CI run already tested this commit. The version commit
+      # only changes versions and changelogs, so it's committed and merged into
+      # main before anything is published: if main can't take it, nothing ships.
+      - name: Version the latest nightly
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # @changesets/changelog-github looks up PRs
+        run: |
+          set -euo pipefail
+          nightly=$(git tag --list 'v*-nightly.*' --sort=-v:refname | head -n 1)
+          if [[ -z "$nightly" ]]; then
+            echo "::error::No nightly to promote. Merge a change with a changeset into main first."
+            exit 1
+          fi
+          version=${nightly#v}
+          version=${version%%-*}
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "::error::$nightly was already released as v$version. Merge a new change to get a new nightly."
+            exit 1
+          fi
+
+          if [[ "$(jq -r .version packages/server/package.json)" == "$version" ]]; then
+            # An earlier run committed this version but didn't finish releasing it.
+            sha=$(git log -1 --format=%H --grep="^Release: v$version\$")
+            echo "Resuming the release of v$version from $sha"
+          else
+            echo "Promoting $nightly ($(git rev-parse "$nightly^{commit}"))"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git switch --detach "$nightly"
+            bun install --frozen-lockfile
+            bun run version-packages
+            git add -A
+            git commit -m "Release: v$version"
+            sha=$(git rev-parse HEAD)
+            # Fast-forwards when nothing landed after the nightly.
+            git switch main
+            git merge --no-edit -m "Merge release v$version into main" "$sha"
+            git push origin main
+          fi
+          git switch --detach "$sha"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      # Skips the package if this version is already on npm.
+      - run: bun run release
+
+      - name: Write release notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: awk -v v="## $VERSION" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: notes.md
+
+  # Both channels. A version's prerelease suffix makes electron-builder write
+  # nightly*.yml instead of latest*.yml, which is how the app tells them apart.
   desktop:
     name: Desktop
-    needs: release
-    if: needs.release.outputs.published == 'true'
+    needs: [nightly, stable]
+    if: ${{ !failure() && !cancelled() && (needs.nightly.outputs.version != '' || needs.stable.outputs.version != '') }}
     uses: ./.github/workflows/release-desktop.yml
+    with:
+      version: ${{ needs.nightly.outputs.version || needs.stable.outputs.version }}
+      ref: ${{ needs.nightly.outputs.version && needs.nightly.outputs.sha || needs.stable.outputs.sha }}
     secrets: inherit
 
   # Created only once every installer is built, like t3code: the desktop
   # app's updater reads the latest release, so it must never see one without
   # its latest*.yml files.
+  # Nightlies are prereleases, never marked latest: the stable channel reads
+  # the latest release, the nightly channel the newest nightly prerelease.
   github-release:
     name: GitHub Release
-    needs: [release, desktop]
-    if: needs.release.outputs.published == 'true'
+    needs: [nightly, stable, desktop]
+    if: ${{ !failure() && !cancelled() && needs.desktop.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.nightly.outputs.version || needs.stable.outputs.version }}
+      NIGHTLY: ${{ needs.nightly.outputs.version != '' }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.nightly.outputs.version && needs.nightly.outputs.sha || needs.stable.outputs.sha }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -92,12 +235,17 @@ jobs:
           merge-multiple: true
           path: release-assets
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          version=$(jq -r .version packages/server/package.json)
-          # Release notes: this version's section of the server changelog.
-          awk -v v="## $version" '$0==v{f=1;next} /^## /{f=0} f' packages/server/CHANGELOG.md > notes.md
-          git tag "v$version" && git push origin "v$version"
-          gh release create "v$version" --title "v$version" --notes-file notes.md release-assets/*
+          git tag "v$VERSION" && git push origin "v$VERSION"
+          if [[ "$NIGHTLY" == "true" ]]; then
+            gh release create "v$VERSION" --prerelease --latest=false --title "v$VERSION" --notes-file notes.md release-assets/*
+          else
+            gh release create "v$VERSION" --title "v$VERSION" --notes-file notes.md release-assets/*
+          fi
