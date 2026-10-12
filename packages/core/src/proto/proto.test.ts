@@ -118,6 +118,20 @@ describe("frames", () => {
 });
 
 describe("live event decoding", () => {
+  it("treats a zero common msgId as missing and uses the envelope id instead", () => {
+    const payload = new ProtoWriter()
+      .message(1, common("0", 1791744000123))
+      .message(2, user("1", "alice", "Alice"))
+      .string(3, "hi")
+      .finish();
+    const decode = (msgId: string) =>
+      decodeLiveEvent({ method: "WebcastChatMessage", payload, msgId, isHistory: false });
+
+    expect(decode("555")).toMatchObject({ msgId: "555" });
+    expect(decode("0")).not.toHaveProperty("msgId");
+    expect(decode("")).not.toHaveProperty("msgId");
+  });
+
   it("decodes chat messages with user identity", () => {
     const payload = new ProtoWriter()
       .message(1, common("100", 1791744000123))

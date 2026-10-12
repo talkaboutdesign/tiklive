@@ -34,8 +34,10 @@ export const PROTOCOL_VERSION = 1;
 
 const BASE_RETRY_MS = 500;
 const MAX_RETRY_MS = 10_000;
-/** How many delivered msgIds to remember for skipping repeats after a reconnect. */
+/** How many delivered msgIds to remember for skipping replays after a reconnect. */
 const RECENT_LIMIT = 1000;
+/** Event types the server never replays (see Session history), so their msgIds aren't remembered. */
+const UNREPLAYED_TYPES: ReadonlySet<string> = new Set(["like", "viewers"]);
 
 /** Extra fields that accompany every event delivered to a handler. */
 export interface EventMeta {
@@ -136,7 +138,7 @@ export class TikLive {
   status: SessionStatus | null = null;
 
   readonly #handlers = new Map<string, Set<AnyHandler>>();
-  /** msgIds of recently delivered events. Kept across reconnects so replays don't show twice. */
+  /** msgIds of recently delivered replayable events. Kept across reconnects so replays don't show twice. */
   readonly #delivered = new Set<string>();
   readonly #WebSocketCtor: typeof WebSocket;
   readonly #reconnect: boolean;
@@ -285,7 +287,7 @@ export class TikLive {
         return;
       case "event": {
         const event = msg.event;
-        if (this.#isRepeat(event.msgId)) return;
+        if (this.#isReplayedDuplicate(event, msg.replay === true)) return;
         const meta: EventMeta = { replay: msg.replay === true, username: msg.username };
         this.#emit(event.type, event, meta);
         this.#emit("*", event, meta);
@@ -310,12 +312,15 @@ export class TikLive {
   }
 
   /**
-   * True if this msgId was delivered before. Records new msgIds as a side effect, dropping the
-   * oldest once there are more than {@link RECENT_LIMIT}. Events without a msgId are never repeats.
+   * True if a replayed event was already delivered, so it should be skipped. Live events are never
+   * skipped: the server's connector already drops repeated msgIds. Records each replayable event's
+   * msgId as a side effect, dropping the oldest once there are more than {@link RECENT_LIMIT}.
+   * Events with no usable msgId (missing, empty or `"0"`) are never recorded or skipped.
    */
-  #isRepeat(msgId: string | undefined): boolean {
-    if (!msgId) return false;
-    if (this.#delivered.has(msgId)) return true;
+  #isReplayedDuplicate(event: LiveEvent, replayed: boolean): boolean {
+    const msgId = event.msgId;
+    if (!msgId || msgId === "0" || UNREPLAYED_TYPES.has(event.type)) return false;
+    if (this.#delivered.has(msgId)) return replayed;
     this.#delivered.add(msgId);
     if (this.#delivered.size > RECENT_LIMIT) {
       const oldest = this.#delivered.values().next().value;

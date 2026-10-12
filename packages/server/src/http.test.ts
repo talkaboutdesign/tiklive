@@ -471,6 +471,33 @@ describe("POST /api/sessions/:username/simulate", () => {
       }
     }),
   );
+
+  it.live("gives each simulated event its own msgId, even when sent back to back", () =>
+    serve({}, async (base) => {
+      await post(base, "/api/sessions/demo");
+      const open: Array<Client> = [];
+      try {
+        const client = await connect(`${base.ws}/ws`, open);
+        client.send({ action: "subscribe", username: "demo" });
+        await client.waitFor((m) => m.type === "status" && m.username === "demo", "status");
+
+        const ids: string[] = [];
+        for (let i = 0; i < 3; i++) {
+          const res = await post(base, "/api/sessions/demo/simulate", { type: "follow", user: USER });
+          expect(res.status).toBe(200);
+          const body = (await res.json()) as { event: { msgId: string } };
+          ids.push(body.event.msgId);
+        }
+
+        expect(new Set(ids).size).toBe(3);
+        for (const msgId of ids) {
+          await client.waitFor((m) => m.type === "event" && m.event.msgId === msgId, "simulated follow");
+        }
+      } finally {
+        closeAll(open);
+      }
+    }),
+  );
 });
 
 describe("WebSocket protocol", () => {

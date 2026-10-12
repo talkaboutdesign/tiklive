@@ -22,4 +22,19 @@ describe("demoEvents", () => {
       }
     }),
   );
+
+  it.effect("gives each run its own msgIds, so a recreated session never reuses them", () =>
+    Effect.gen(function* () {
+      const run = demoEvents.pipe(Stream.take(20), Stream.runCollect, Effect.forkChild);
+      const first = yield* run;
+      const second = yield* run;
+      yield* TestClock.adjust("1 minute");
+      const a = (yield* Fiber.join(first)).map((e) => e.msgId);
+      const b = (yield* Fiber.join(second)).map((e) => e.msgId);
+
+      for (const msgId of [...a, ...b]) expect(msgId).toMatch(/^demo-[0-9a-z]+-\d+-\d+$/);
+      expect(new Set(a).size).toBe(a.length);
+      expect(a.some((id) => b.includes(id))).toBe(false);
+    }),
+  );
 });

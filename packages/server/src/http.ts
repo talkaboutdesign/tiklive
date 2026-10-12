@@ -136,6 +136,9 @@ const MAX_POINTS_BODY = 4 * 1024;
 
 const MEDIA_STATUS = { unsupported: 415, tooLarge: 413, disabled: 503, io: 500 } as const;
 
+/** Makes simulated msgIds unique even when two arrive in the same millisecond (clients dedupe replays by msgId). */
+let simulateSeq = 0;
+
 const json = (body: unknown, status = 200) =>
   HttpServerResponse.jsonUnsafe(body, { status, headers: SECURITY_HEADERS });
 const jsonError = (status: number, message: string) => json({ error: message }, status);
@@ -346,7 +349,9 @@ export const routes = (options: HttpOptions = {}) => {
         }
         const now = Date.now();
         const candidate =
-          body && typeof body === "object" ? { timestamp: now, msgId: `sim-${now}`, ...body } : body;
+          body && typeof body === "object"
+            ? { timestamp: now, msgId: `sim-${now}-${++simulateSeq}`, ...body }
+            : body;
         const decoded = Schema.decodeUnknownExit(LiveEvent)(candidate);
         if (decoded._tag === "Failure") {
           return jsonError(

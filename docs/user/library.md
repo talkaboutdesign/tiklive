@@ -110,9 +110,9 @@ Handlers:
 - `"action"` gets `(action, meta)` when the `actions` option is on: a `FiredAction` with the rule's steps
   filled in. `meta` has `username`. Actions don't reach `"*"`.
 - A handler that throws is logged with `console.error`, and the other handlers still run.
-- With `replay`, a reconnect asks for recent events again, so events missed during the gap arrive. Events the
-  client already delivered (by `msgId`, the last 1000) are skipped, so they don't show twice. Events without a
-  `msgId` are never skipped.
+- With `replay`, a reconnect asks for recent events again, so events missed during the gap arrive. A replayed
+  event whose `msgId` the client already delivered (the last 1000 are remembered) is skipped, so it doesn't show
+  twice. Live events are never filtered. Events without a `msgId` (or with `"0"`) are never skipped.
 
 `live.gifts()` returns the gift catalog (`GiftInfo[]`: `giftId`, `name`, `diamondCount`, `imageUrl`,
 `streakable`, sorted by price). It fetches `/api/gifts` from the same server, with the same token. The server

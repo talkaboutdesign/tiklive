@@ -90,8 +90,9 @@ history size). Likes and viewer-count updates are never kept in history, because
 frequent to be useful when replayed.
 
 The browser client (`TikLive`) re-sends `replay: true` on every reconnect, so events missed during
-the gap arrive. It skips replayed events whose `msgId` it has already delivered, so a reconnect
-doesn't show old events twice. Events without a `msgId` are never skipped.
+the gap arrive. It skips a **replayed** event (`replay: true`) whose `msgId` it has already delivered,
+so a reconnect doesn't show old events twice. Live events are never filtered. Events without a `msgId`,
+or with `msgId` `"0"`, are never skipped.
 
 ### Shortcut URL
 

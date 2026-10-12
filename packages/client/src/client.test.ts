@@ -391,7 +391,7 @@ describe("replay after reconnect", () => {
     live.close();
   });
 
-  it("skips a live event that was already delivered as a replay, and '*' sees it once", () => {
+  it("delivers a live event even when its msgId repeats", () => {
     const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
     const onAll = vi.fn();
     live.on("*", onAll);
@@ -399,7 +399,53 @@ describe("replay after reconnect", () => {
     lastSocket().receive({ type: "event", username: "alice", event: chatId("m1"), replay: true });
     lastSocket().receive({ type: "event", username: "alice", event: chatId("m1") });
 
-    expect(onAll).toHaveBeenCalledOnce();
+    expect(onAll.mock.calls.map(([e, meta]) => [e.msgId, meta.replay])).toEqual([
+      ["m1", true],
+      ["m1", false],
+    ]);
+    live.close();
+  });
+
+  it("never skips a replayed event whose msgId is '0' or missing", () => {
+    vi.useFakeTimers();
+    const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
+    const onChat = vi.fn();
+    live.on("chat", onChat);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("0") });
+    lastSocket().receive({ type: "event", username: "alice", event: chat });
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(500);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("0"), replay: true });
+    lastSocket().receive({ type: "event", username: "alice", event: chat, replay: true });
+
+    expect(onChat).toHaveBeenCalledTimes(4);
+    live.close();
+  });
+
+  it("keeps a chat's msgId through a long run of likes, which the server never replays", () => {
+    vi.useFakeTimers();
+    const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
+    const onChat = vi.fn();
+    live.on("chat", onChat);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1") });
+    for (let i = 0; i < 1100; i++) {
+      lastSocket().receive({
+        type: "event",
+        username: "alice",
+        event: { type: "like", timestamp: i, user, likeCount: 1, totalLikeCount: i, msgId: `like-${i}` },
+      });
+    }
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(500);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1"), replay: true });
+
+    expect(onChat).toHaveBeenCalledOnce();
     live.close();
   });
 
