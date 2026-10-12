@@ -1,5 +1,16 @@
 # @tiklive/client
 
+## 0.3.0
+
+### Minor Changes
+
+- [#4](https://github.com/talkaboutdesign/tiklive/pull/4) [`e1d8ebd`](https://github.com/talkaboutdesign/tiklive/commit/e1d8ebde214f50961a4b7522972269f2a600e73c) Thanks [@talkaboutdesign](https://github.com/talkaboutdesign)! - Add the gift catalog and more room details. `GET /api/gifts` (and `TikLive#gifts()` in the client) returns TikTok's gift list, sorted by price and cached for an hour. `SessionStatus` gains `streamStartedAt` (TikTok's stream start time, which survives reconnects) and `coverUrl`.
+
+### Patch Changes
+
+- Updated dependencies [[`e1d8ebd`](https://github.com/talkaboutdesign/tiklive/commit/e1d8ebde214f50961a4b7522972269f2a600e73c)]:
+  - @tiklive/contracts@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes
