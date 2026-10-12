@@ -74,7 +74,7 @@ export interface ConnectOptions {
   readonly heartbeatInterval?: Duration.Input;
   /** Treat the socket as dropped when nothing arrives for this long. Default 60 seconds. */
   readonly idleTimeout?: Duration.Input;
-  /** Timeout for the room lookup and for each socket open. Default 15 seconds. */
+  /** Timeout for the room lookup, each cookie request and each socket open. Default 15 seconds. */
   readonly connectTimeout?: Duration.Input;
 }
 
@@ -225,6 +225,14 @@ const run = (
         }),
       );
 
+    const getTtwid = (refresh: boolean) =>
+      web.getTtwid({ refresh }).pipe(
+        Effect.timeoutOrElse({
+          duration: connectTimeout,
+          orElse: () => Effect.fail(new TikTokRequestError({ message: "Device cookie request timed out" })),
+        }),
+      );
+
     /** Room lookup + ttwid + socket. */
     const attempt = Effect.gen(function* () {
       let roomId: string;
@@ -242,18 +250,16 @@ const run = (
         if (!room.isLive) return yield* new UserOffline({ username });
         roomId = room.roomId;
       }
-      const ttwid = yield* web.getTtwid({ refresh: refreshTtwid });
+      const ttwid = yield* getTtwid(refreshTtwid);
       refreshTtwid = false;
       return yield* runSocket(roomId, room, ttwid).pipe(
         Effect.catchTag("SocketOpenFailed", (error) =>
           // A stale device cookie is the most common cause; retry once with a fresh one.
-          web
-            .getTtwid({ refresh: true })
-            .pipe(
-              Effect.flatMap((fresh) =>
-                fresh === ttwid ? Effect.fail(error) : runSocket(roomId, room, fresh),
-              ),
+          getTtwid(true).pipe(
+            Effect.flatMap((fresh) =>
+              fresh === ttwid ? Effect.fail(error) : runSocket(roomId, room, fresh),
             ),
+          ),
         ),
       );
     });

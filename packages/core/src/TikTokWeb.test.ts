@@ -1,5 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
-import { parseGiftList, pickHlsUrl } from "./TikTokWeb.ts";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import { make, parseGiftList, pickHlsUrl } from "./TikTokWeb.ts";
 
 describe("parseGiftList", () => {
   it("maps catalog entries to GiftInfo, skipping entries without an id or name", () => {
@@ -89,4 +92,39 @@ describe("pickHlsUrl", () => {
     expect(pickHlsUrl(streamData({ sd: { main: { hls: "javascript:alert(1)" } } }))).toBeUndefined();
     expect(pickHlsUrl(streamData({ ao: { main: { hls: "https://cdn.example/ao.m3u8" } } }))).toBeUndefined();
   });
+});
+
+describe("room lookup failures", () => {
+  for (const body of [{ statusCode: 12345, message: "temporary failure" }, {}, null]) {
+    it.effect(`keeps unexpected response ${JSON.stringify(body)} retryable`, () =>
+      Effect.gen(function* () {
+        const web = yield* make();
+        const result = yield* Effect.result(web.getRoomStatus("someone"));
+        expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "TikTokRequestError" } });
+      }).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) =>
+            Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(body))),
+          ),
+        ),
+      ),
+    );
+  }
+  it.effect("recognizes an explicit not-found response", () =>
+    Effect.gen(function* () {
+      const web = yield* make();
+      expect(yield* Effect.result(web.getRoomStatus("someone"))).toMatchObject({
+        _tag: "Failure",
+        failure: { _tag: "UserNotFound" },
+      });
+    }).pipe(
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ statusCode: 19881007 }))),
+        ),
+      ),
+    ),
+  );
 });

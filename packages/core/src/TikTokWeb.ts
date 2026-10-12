@@ -125,13 +125,16 @@ export const make = (options: TikTokWebOptions = {}) =>
           try: () => JSON.parse(text) as RoomApiResponse,
           catch: () => requestError("Room lookup returned invalid JSON", { status: res.status }),
         });
-        if (body.statusCode === 19881007 || !body.data?.user) {
+        if (body?.statusCode === 19881007) {
           return yield* new UserNotFound({ username: uniqueId });
         }
-        if (body.statusCode) {
+        if (body?.statusCode) {
           return yield* requestError(`Room lookup failed: ${body.message ?? body.statusCode}`);
         }
 
+        if (!body?.data?.user) {
+          return yield* requestError("Room lookup returned no user data");
+        }
         const { user, liveRoom, stats } = body.data;
         const startTime = liveRoom?.startTime ?? 0;
         const hlsUrl = pickHlsUrl(liveRoom?.streamData?.pull_data?.stream_data);
