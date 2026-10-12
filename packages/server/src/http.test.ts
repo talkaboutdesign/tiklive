@@ -687,7 +687,12 @@ describe("static files and client bundle", () => {
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("text/html");
       expect(res.headers.get("x-content-type-options")).toBe("nosniff");
-      expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
+      const csp = res.headers.get("content-security-policy") ?? "";
+      expect(csp).toContain("default-src 'self'");
+      // The dashboard's video preview loads HLS from TikTok's CDN, and nothing else remote.
+      const connect = csp.split("; ").find((d) => d.startsWith("connect-src "));
+      expect(connect).toContain("https://*.tiktokcdn-us.com");
+      expect(connect?.split(" ")).not.toContain("https:");
       expect(await res.text()).toBe("<h1>overlay</h1>");
     });
   });

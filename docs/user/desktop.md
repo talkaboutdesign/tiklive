@@ -38,6 +38,25 @@ The app checks the new channel as soon as you switch. Switching from Nightly bac
 stable release even when it's older than your nightly. A nightly install stays on nightlies until a newer nightly
 comes out, even after the stable release of the same version. Switch to Stable to get it.
 
+## Dashboard
+
+The dashboard is the view to keep open while you're live. It shows who's live and the room's numbers at the top,
+your chat in the middle, and gifts on the right. Likes, joins and other noise stay out of it.
+
+- **Filters** (above the chat): show everyone, only followers, or only friends (people you follow back). The
+  Filters button opens the rest: hide strangers with fewer than a set number of followers, hide messages with
+  certain words, show gifts and follows in the chat, and the Silenced list. Moderators and your own messages always show. Gifts and new subscribers stand out in the chat, and
+  follows can be turned on.
+- **Gifts** (right column): the latest gifts, newest first, your top gifters, and the coins so far. Big gifts are
+  highlighted.
+- **Silence** (the eye button on a message): hides that person in tiklive only. They can still chat on TikTok, and
+  everyone else still sees their messages. Undo it from the Silenced list under Filters.
+- **Preview** (the video button, top right): plays your stream the way viewers see it, a few seconds behind. It's
+  muted until you turn the sound on.
+
+tiklive doesn't log in to TikTok, so it can't delete comments or block people. Do that in TikTok LIVE Studio or the
+TikTok app, or ask a moderator.
+
 ## Using it with OBS
 
 The app serves the same dashboard and overlays as the command-line server, at http://127.0.0.1:8080/. Use the

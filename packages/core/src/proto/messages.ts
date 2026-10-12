@@ -31,12 +31,19 @@ function imageUrl(image: ProtoMessage | undefined): string {
   return image?.strs(1)[0] ?? "";
 }
 
+// FollowInfo.followStatus: the viewer's relationship to the streamer.
+const FOLLOW_STATUS: ReadonlyArray<NonNullable<LiveUser["followStatus"]>> = ["none", "follower", "friend"];
+
 export function decodeUser(u: ProtoMessage | undefined, identity?: ProtoMessage): LiveUser {
+  const follow = u?.msg(22);
+  const followStatus = follow ? FOLLOW_STATUS[follow.num(3)] : undefined;
   return {
     userId: u?.id(1) ?? "",
     uniqueId: u?.str(38) ?? "",
     nickname: u?.str(3) ?? "",
     profilePictureUrl: imageUrl(u?.msg(9)),
+    ...(follow ? { followingCount: follow.num(1), followerCount: follow.num(2) } : {}),
+    ...(followStatus ? { followStatus } : {}),
     ...(identity
       ? {
           isGifter: identity.bool(1),

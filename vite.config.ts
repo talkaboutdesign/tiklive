@@ -17,13 +17,25 @@ export default defineConfig({
     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts"],
   },
   lint: {
-    ignorePatterns: [".repos/**", "**/dist/**", "**/dist-electron/**", "**/release/**"],
+    ignorePatterns: [
+      ".repos/**",
+      "**/dist/**",
+      "**/dist-electron/**",
+      "**/release/**",
+      "examples/overlays/vendor/**",
+    ],
     options: {
       reportUnusedDisableDirectives: "error",
     },
   },
   fmt: {
-    ignorePatterns: [".repos/**", "**/dist/**", "**/dist-electron/**", "**/release/**"],
+    ignorePatterns: [
+      ".repos/**",
+      "**/dist/**",
+      "**/dist-electron/**",
+      "**/release/**",
+      "examples/overlays/vendor/**",
+    ],
     printWidth: 110,
   },
 });

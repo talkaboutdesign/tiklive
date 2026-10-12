@@ -3,15 +3,16 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { LiveEvent, LiveUser } from "@tiklive/contracts";
 
-const NAMES = [
-  "pixelpanda",
-  "nightowl",
-  "lofi.luna",
-  "capt.crunch",
-  "mochi_mia",
-  "turbo.tim",
-  "starlight",
-  "bytebandit",
+// [handle, followerCount, followStatus]: a mix of friends, followers and low-follower strangers.
+const NAMES: ReadonlyArray<readonly [string, number, NonNullable<LiveUser["followStatus"]>]> = [
+  ["pixelpanda", 1840, "friend"],
+  ["nightowl", 312, "follower"],
+  ["lofi.luna", 25300, "follower"],
+  ["capt.crunch", 4, "none"],
+  ["mochi_mia", 960, "friend"],
+  ["turbo.tim", 0, "none"],
+  ["starlight", 7120, "none"],
+  ["bytebandit", 58, "follower"],
 ];
 const COMMENTS = [
   "hello!! 👋",
@@ -80,12 +81,17 @@ const GIFTS = [
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)]!;
 
 function fakeUser(): LiveUser {
-  const name = pick(NAMES);
+  const entry = pick(NAMES);
+  const [name, followerCount, followStatus] = entry;
   return {
-    userId: String(1000 + NAMES.indexOf(name)),
+    userId: String(1000 + NAMES.indexOf(entry)),
     uniqueId: name,
     nickname: name.replace(/[._]/g, " "),
     profilePictureUrl: `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(name)}`,
+    followerCount,
+    followingCount: 150,
+    followStatus,
+    isFollower: followStatus !== "none",
   };
 }
 

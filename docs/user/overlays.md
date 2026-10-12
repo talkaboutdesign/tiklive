@@ -125,8 +125,11 @@ The first time you open the dashboard, it asks for your TikTok username. tiklive
 later visits go straight to the dashboard. You don't need to be live for this: tiklive waits and connects when
 you go live. To switch to another username, use **Settings** in the sidebar.
 
-The dashboard shows your status (live, offline, connecting or error), viewer and engagement totals, and a
-filterable event log. The overlay URLs and their options are on the [Overlays page](#overlays-page).
+The dashboard is a live view of your room: your status and totals at the top, your chat with filters (followers,
+friends, minimum follower count, hidden words), highlighted gifts and subscriptions, a gifts column with your top
+gifters, and an optional video preview. Likes, joins and other events stay out of it. See
+[desktop.md](./desktop.md#dashboard) for the details. The overlay URLs and their options are on the
+[Overlays page](#overlays-page).
 
 **Send test event** sends a fake event to every overlay connected to your username. It's enabled once connected.
 

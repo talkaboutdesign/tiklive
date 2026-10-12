@@ -55,6 +55,19 @@ describe("contracts", () => {
     expect(() => decode({ type: "nope", timestamp: 1 })).toThrow();
   });
 
+  it("accepts the optional follow details on a user", () => {
+    const decode = Schema.decodeUnknownSync(LiveEvent);
+    const follower = { ...user, followerCount: 53, followingCount: 275, followStatus: "friend" };
+    expect(decode({ type: "follow", timestamp: 1, user: follower })).toEqual({
+      type: "follow",
+      timestamp: 1,
+      user: follower,
+    });
+    expect(() =>
+      decode({ type: "follow", timestamp: 1, user: { ...user, followStatus: "bestie" } }),
+    ).toThrow();
+  });
+
   it("matches on event type", () => {
     const describeEvent = LiveEvent.match({
       chat: (e) => e.comment,
@@ -79,7 +92,12 @@ describe("contracts", () => {
     const status = { username: "alice", state: "live", stats: stats() };
     const decode = Schema.decodeUnknownSync(SessionStatus);
     expect(decode(status)).toEqual(status);
-    const detailed = { ...status, streamStartedAt: 1791770120000, coverUrl: "https://img.example/c.webp" };
+    const detailed = {
+      ...status,
+      streamStartedAt: 1791770120000,
+      coverUrl: "https://img.example/c.webp",
+      hlsUrl: "https://cdn.example/live.m3u8",
+    };
     expect(decode(detailed)).toEqual(detailed);
     expect(() => decode({ ...status, streamStartedAt: "yesterday" })).toThrow();
   });

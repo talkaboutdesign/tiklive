@@ -25,6 +25,8 @@ export interface RoomStatus {
   readonly streamStartedAt?: number;
   /** Stream cover image URL. Only set when TikTok provides one. */
   readonly coverUrl?: string;
+  /** HLS playlist URL for watching the stream. Only set when TikTok provides one. */
+  readonly hlsUrl?: string;
 }
 
 export interface TikTokWebOptions {
@@ -132,6 +134,7 @@ export const make = (options: TikTokWebOptions = {}) =>
 
         const { user, liveRoom, stats } = body.data;
         const startTime = liveRoom?.startTime ?? 0;
+        const hlsUrl = pickHlsUrl(liveRoom?.streamData?.pull_data?.stream_data);
         return {
           roomId: user.roomId ?? "",
           // liveRoom.status: 2 = live, 4 = ended.
@@ -147,6 +150,7 @@ export const make = (options: TikTokWebOptions = {}) =>
           },
           ...(startTime > 0 ? { streamStartedAt: startTime * 1000 } : {}),
           ...(liveRoom?.coverUrl ? { coverUrl: liveRoom.coverUrl } : {}),
+          ...(hlsUrl ? { hlsUrl } : {}),
         } satisfies RoomStatus;
       });
 
@@ -248,6 +252,34 @@ interface RoomApiResponse {
       /** Unix seconds. */
       startTime?: number;
       coverUrl?: string;
+      /** `stream_data` is a JSON string holding a {@link StreamData}. */
+      streamData?: { pull_data?: { stream_data?: string } };
     };
   };
+}
+
+interface StreamData {
+  /** Keyed by quality ("ld", "sd", "hd", "origin", "ao" for audio only, ...). */
+  data?: Record<string, { main?: { hls?: string } } | undefined>;
+}
+
+// Smaller first: the URL is for previews, not for re-streaming.
+const HLS_QUALITIES = ["sd", "ld", "hd", "uhd", "origin"];
+
+/** The HLS URL from the room's `stream_data` JSON, preferring a small video quality. */
+export function pickHlsUrl(streamData: string | undefined): string | undefined {
+  if (!streamData) return undefined;
+  let parsed: StreamData | null;
+  try {
+    parsed = JSON.parse(streamData) as StreamData | null;
+  } catch {
+    return undefined;
+  }
+  const qualities = parsed?.data ?? {};
+  const keys = [...HLS_QUALITIES, ...Object.keys(qualities).filter((k) => k !== "ao")];
+  for (const key of keys) {
+    const url = qualities[key]?.main?.hls;
+    if (typeof url === "string" && url.startsWith("https://")) return url;
+  }
+  return undefined;
 }

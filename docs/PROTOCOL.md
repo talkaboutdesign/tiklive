@@ -188,6 +188,9 @@ de-duplication). `user` is a `LiveUser`:
   isSubscriber?: boolean;
   isFollower?: boolean;
   isGifter?: boolean;
+  followerCount?: number;    // the viewer's own counts, when TikTok includes them
+  followingCount?: number;
+  followStatus?: "none" | "follower" | "friend"; // the viewer's relationship to the streamer. friend = mutual follow
 }
 ```
 
@@ -229,6 +232,7 @@ interface SessionStatus {
   liveSince?: number; // unix ms when the current connection started
   streamStartedAt?: number; // unix ms when TikTok says the stream started. Doesn't reset on reconnect
   coverUrl?: string; // stream cover image URL
+  hlsUrl?: string; // HLS playlist for watching the stream. Signed by TikTok, valid for the current stream only
   error?: string; // set in the "error" state
   stats: SessionStats;
 }
@@ -321,6 +325,7 @@ with `PUT /api/rules`, sending the `revision` you last read. A save based on an 
   Clients must ignore unknown fields and event types. The browser client already does.
 - Actions (the `action` message, the `actions` subscribe option, `actions=1`, and the `/api/rules`,
   `/api/media`, `/api/media/import`, `/api/sounds/search` and `/media/:file` routes) was an additive change, so `PROTOCOL_VERSION` stays at 1.
+  So were the follow fields on `LiveUser` and `SessionStatus.hlsUrl`.
 - The browser client (`packages/client`) checks `hello.protocolVersion` against its own
   constant and logs one warning on a mismatch. It doesn't refuse to connect.
 - When the version changes, update `PROTOCOL_VERSION`, this document, and the client together.

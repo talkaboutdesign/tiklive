@@ -147,6 +147,44 @@ describe("live event decoding", () => {
     });
   });
 
+  it("decodes the viewer's follower counts and relationship to the streamer", () => {
+    const chatFrom = (followInfo?: ProtoWriter) => {
+      const u = user("4", "dana", "Dana");
+      if (followInfo) u.message(22, followInfo);
+      return new ProtoWriter().message(1, common("400", 1)).message(2, u).string(3, "hi").finish();
+    };
+    const userOf = (payload: Uint8Array) => {
+      const event = decodeLiveEvent({
+        method: "WebcastChatMessage",
+        payload,
+        msgId: "400",
+        isHistory: false,
+      });
+      return event?.type === "chat" ? event.user : undefined;
+    };
+
+    const friend = new ProtoWriter().varint(1, 275).varint(2, 53).varint(3, 2);
+    expect(userOf(chatFrom(friend))).toMatchObject({
+      followingCount: 275,
+      followerCount: 53,
+      followStatus: "friend",
+    });
+    expect(userOf(chatFrom(new ProtoWriter().varint(1, 1).varint(2, 2).varint(3, 1)))?.followStatus).toBe(
+      "follower",
+    );
+    // A stranger: TikTok leaves followStatus at its zero default.
+    expect(userOf(chatFrom(new ProtoWriter().varint(1, 623).varint(2, 229)))).toMatchObject({
+      followerCount: 229,
+      followStatus: "none",
+    });
+    // An unknown status is left out rather than guessed.
+    expect(userOf(chatFrom(new ProtoWriter().varint(3, 9)))).not.toHaveProperty("followStatus");
+
+    const bare = userOf(chatFrom());
+    expect(bare).not.toHaveProperty("followerCount");
+    expect(bare).not.toHaveProperty("followStatus");
+  });
+
   it("tracks gift streaks", () => {
     const gift = (repeatCount: number, repeatEnd: boolean) =>
       new ProtoWriter()

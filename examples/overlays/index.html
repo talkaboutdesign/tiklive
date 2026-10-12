@@ -100,20 +100,34 @@
         font-weight: 700;
       }
 
-      /* ---------- Dashboard page ---------- */
-      .dash {
+      /* ---------- Live view: fills the window under the header. Only the chat and the gifts scroll. ---------- */
+      #main {
         display: flex;
         flex-direction: column;
-        min-height: calc(100dvh - 52px);
-        padding-bottom: 32px;
+        overflow: hidden;
+      }
+      /* The app.css header padding lines up with the centered 920px column. This page is full width. */
+      .page-header {
+        flex: none;
+        padding: 0 20px;
+      }
+      .dash {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        max-width: none;
+        margin: 0;
+        padding: 0;
       }
       .notice {
         display: flex;
+        flex: none;
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: 10px 16px;
-        margin-bottom: 16px;
+        margin: 12px 20px 0;
         padding: 10px 14px;
         background: var(--accent-soft);
         border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
@@ -155,213 +169,651 @@
         background: var(--hover);
       }
 
-      /* Status card */
-      .status-card {
-        padding: 20px 22px;
+      /* Header toggles */
+      .icon-btn {
+        flex: none;
+        width: 32px;
+        height: 32px;
+        padding: 0;
       }
-      .status-head {
+      /* Header panel toggles: muted when closed, highlighted when open. */
+      .icon-btn[aria-pressed="false"] {
+        color: var(--muted);
+      }
+      .icon-btn[aria-pressed="true"] {
+        background: var(--hover);
+        color: var(--text);
+      }
+
+      /* Room bar: who, status, and the room's numbers. Full width, with a hairline below. */
+      .room {
         display: flex;
+        flex: none;
+        flex-wrap: wrap;
         align-items: center;
-        gap: 16px;
+        gap: 8px 14px;
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--line);
       }
       .who {
-        flex: 1;
+        display: flex;
+        flex: 0 1 auto;
+        align-items: baseline;
+        gap: 6px;
         min-width: 0;
       }
       .who-name {
         overflow: hidden;
-        font-size: 17px;
+        font-size: 15px;
         font-weight: 600;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .who-meta {
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .status-line {
-        margin-top: 16px;
-        padding-top: 14px;
-        border-top: 1px solid var(--line);
-      }
-      .status-line.error {
-        color: var(--danger);
-      }
-      .status-title {
-        font-weight: 600;
-      }
-      .status-meta {
-        margin-top: 2px;
-        color: var(--muted);
-        font-size: 13px;
-      }
-
-      /* Stat tiles */
-      .stats {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px;
-        margin-top: 16px;
-      }
-      .stat {
         min-width: 0;
-        padding: 14px 16px;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
       }
-      .stat-label {
-        display: block;
+      .who-handle {
+        flex: none;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .room-status {
+        display: flex;
+        flex: 1 1 160px;
+        min-width: 0;
+        margin: 0;
         overflow: hidden;
         color: var(--muted);
-        font-size: 12.5px;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .room-status.error {
+        color: var(--danger);
+      }
+      .room-title {
+        min-width: 0;
+        overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .room-live {
+        flex: none;
+        white-space: nowrap;
+      }
+      .room-title + .room-live::before {
+        content: "·";
+        margin: 0 6px;
+        color: var(--faint);
+      }
+      .room-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        margin: 0 0 0 auto;
+        padding: 0;
+      }
+      .room-stat {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        margin: 0;
+      }
+      .stat-label {
+        color: var(--muted);
+        font-size: 12px;
+      }
       .stat-value {
-        display: block;
-        margin-top: 4px;
-        font-size: 22px;
+        margin: 0;
+        font-size: 15px;
         font-weight: 600;
-        letter-spacing: -0.01em;
       }
 
-      /* Events */
-      .events {
+      /* Body: chat on the left, preview and gifts on the right */
+      .live-body {
         display: flex;
-        flex: 1 0 auto;
-        flex-direction: column;
-        margin-top: 28px;
+        flex: 1 1 auto;
+        min-height: 0;
       }
-      .events-group {
+      .chat-col {
         display: flex;
-        flex: 1 0 auto;
+        flex: 1 1 auto;
         flex-direction: column;
-        min-height: 360px;
+        min-width: 0;
+        min-height: 0;
       }
-      .events-bar {
+      .side {
+        display: flex;
+        flex: none;
+        flex-direction: column;
+        width: 340px;
+        min-height: 0;
+        /* The preview sizes its video from the column height (cqh) */
+        container-type: size;
+        border-left: 1px solid var(--line);
+      }
+
+      /* ---------- Filter bar: one row. Settings live in the Filters popover. ---------- */
+      .filter-bar {
+        display: flex;
+        flex: none;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 8px;
+        min-height: 44px;
+        padding: 6px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+      .filter-bar .segmented label {
+        height: 28px;
+      }
+      .hidden-count {
+        margin-left: auto;
+        font-size: 12.5px;
+      }
+      .popover-wrap {
+        position: relative;
+      }
+      .popover {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        width: min(320px, calc(100vw - 32px));
+        max-height: 360px;
+        padding: 6px;
+        background: var(--surface);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--radius-sm);
+        box-shadow: var(--shadow);
+      }
+      .filters-pop {
+        left: 0;
+        right: auto;
+        width: 300px;
+        max-width: calc(100vw - 32px);
+        max-height: min(560px, calc(100dvh - 140px));
+        padding: 4px 16px;
+        overflow-y: auto;
+        border-radius: var(--radius);
+      }
+      /* Opens upward when there's no room below the button (the stacked layout on short windows) */
+      .filters-pop.up {
+        top: auto;
+        bottom: calc(100% + 6px);
+      }
+      .set {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 10px 12px 10px 16px;
-        border-bottom: 1px solid var(--line);
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
       }
-      .filters {
-        display: flex;
-        flex: 1;
-        flex-wrap: wrap;
-        gap: 5px;
+      .set:first-child {
+        border-top: 0;
+      }
+      .set-stack {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .set-text {
+        flex: 1 1 auto;
         min-width: 0;
       }
-      .chip {
-        --tag: var(--muted);
-        display: inline-flex;
-        align-items: center;
-        height: 24px;
-        padding: 0 8px;
-        background: transparent;
-        border: 1px solid var(--line-strong);
-        border-radius: 999px;
+      .set-title {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .set-hint {
+        margin-top: 2px;
         color: var(--muted);
         font-size: 12px;
-        font-weight: 500;
+        line-height: 1.4;
       }
-      .chip:hover {
-        color: var(--text);
-        background: var(--hover);
-      }
-      .chip[aria-pressed="true"] {
-        color: var(--tag);
-        background: color-mix(in srgb, var(--tag) 12%, transparent);
-        border-color: color-mix(in srgb, var(--tag) 45%, transparent);
-      }
-      .log-wrap {
-        position: relative;
-        flex: 1 1 auto;
-        min-height: 280px;
-      }
-      .log {
-        position: absolute;
-        inset: 0;
-        overflow-y: auto;
-        padding: 4px 0;
-        font-size: 13.5px;
-      }
-      .log-empty {
-        position: absolute;
-        inset: 20px;
-        margin: 0;
+      .set .input {
+        min-width: 0;
+        height: 30px;
         font-size: 13px;
       }
-      .log-row {
+      .set .input.num {
+        flex: none;
+        width: 84px;
+      }
+      .silenced-empty {
+        margin-top: 6px;
+        font-size: 12.5px;
+      }
+      .silenced-list {
+        display: flex;
+        flex-direction: column;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+      .silenced-item {
         display: flex;
         align-items: center;
         gap: 10px;
-        min-height: 38px;
-        padding: 6px 16px;
+        padding: 6px 8px;
+        border-radius: 6px;
       }
-      .log-row + .log-row {
-        border-top: 1px solid var(--line);
+      .silenced-item:hover {
+        background: var(--hover);
       }
-      .log-time {
+      .silenced-text {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .silenced-name,
+      .silenced-handle {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .silenced-name {
+        font-weight: 600;
+      }
+      .silenced-handle {
+        font-size: 12.5px;
+      }
+
+      /* ---------- Chat feed ---------- */
+      .feed-wrap {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      .feed {
+        position: absolute;
+        inset: 0;
+        overflow-y: auto;
+        padding: 6px 20px 14px;
+        overscroll-behavior: contain;
+      }
+      .feed-empty {
+        position: absolute;
+        inset: 16px 20px auto;
+        margin: 0;
+        font-size: 13px;
+      }
+      .feed-row {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 7px 10px;
+        border-radius: var(--radius-sm);
+      }
+      .feed-row:hover {
+        background: var(--hover);
+      }
+      .feed-row .avatar {
+        margin-top: 2px;
+      }
+      .row-body {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .row-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 6px;
+        font-size: 13px;
+      }
+      .row-name {
+        overflow-wrap: anywhere;
+        font-weight: 600;
+      }
+      .row-count {
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .tag {
+        --tag: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 18px;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--tag) 14%, transparent);
+        color: var(--tag);
+        font-size: 11px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .tag.mod {
+        --tag: var(--info);
+      }
+      .tag.friend {
+        --tag: var(--success);
+      }
+      .row-text {
+        max-width: 80ch;
+        font-size: 15px;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
+      }
+      .row-text img {
+        width: 24px;
+        height: 24px;
+        margin: 0 1px;
+        vertical-align: middle;
+        object-fit: contain;
+      }
+      /* Friends and moderators get a faint accent bar, so the people you know stand out */
+      .feed-row.known {
+        box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 40%, transparent);
+      }
+      .sub-line {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .feed-row.sub,
+      .feed-row.sub:hover {
+        background: var(--accent-soft);
+      }
+      .gift-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 2px 6px;
+        font-size: 14px;
+      }
+      .gift-img {
         flex: none;
-        width: 58px;
-        color: var(--faint);
+        width: 28px;
+        height: 28px;
+        object-fit: contain;
+      }
+      /* Gifts, in the chat and in the gifts lane. Bigger gifts (100+ coins) get a stronger tint. */
+      .gift {
+        border-left: 3px solid color-mix(in srgb, var(--warning) 45%, transparent);
+        background: color-mix(in srgb, var(--warning) 7%, transparent);
+      }
+      .gift.big {
+        border-left-color: var(--warning);
+        background: color-mix(in srgb, var(--warning) 18%, transparent);
+      }
+      .feed-row.gift {
+        padding-left: 7px;
+      }
+      /* Follows: one muted line, no avatar */
+      .follow-row {
+        align-items: center;
+        padding-top: 3px;
+        padding-bottom: 3px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .follow-text {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .follow-name {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .row-silence {
+        flex: none;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        opacity: 0;
+      }
+      .feed-row:hover .row-silence,
+      .feed-row:focus-within .row-silence {
+        opacity: 1;
+      }
+      .new-pill {
+        position: absolute;
+        bottom: 12px;
+        left: 50%;
+        z-index: 2;
+        height: 30px;
+        padding: 0 12px;
+        transform: translateX(-50%);
+        background: var(--surface);
+        border-radius: 999px;
+        box-shadow: var(--shadow);
+      }
+
+      /* ---------- Preview panel ---------- */
+      .preview {
+        display: flex;
+        flex: none;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 0;
+        padding: 14px 20px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .preview-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 32px;
+      }
+      .preview-title {
+        flex: 1 1 auto;
+        font-weight: 600;
+      }
+      /* At most 55% of the column height, so the gifts lane stays visible below it */
+      .video-frame {
+        position: relative;
+        width: min(100%, calc(55cqh * 9 / 16));
+        aspect-ratio: 9 / 16;
+        margin: 0 auto;
+        overflow: hidden;
+        background: var(--field);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-sm);
+      }
+      .video-frame video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: #000;
+      }
+      .preview-msg {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 20px;
+        background: var(--field);
+        color: var(--muted);
+        font-size: 13px;
+        text-align: center;
+      }
+      .preview-note {
+        color: var(--muted);
         font-size: 12px;
       }
-      .log-tag {
-        --tag: var(--muted);
+
+      /* ---------- Gifts lane ---------- */
+      .gifts {
+        display: flex;
+        flex: 1 1 0;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .gifts-head {
+        display: flex;
         flex: none;
-        min-width: 88px;
-        color: var(--tag);
-        font-size: 11.5px;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px 10px;
+      }
+      .gifts-title {
+        flex: 1 1 auto;
+        font-size: 14px;
         font-weight: 600;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
       }
-      .log-gap {
-        flex: none;
-        width: 24px;
+      .gifts-total {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
       }
-      .log-name {
+      .top {
         flex: none;
-        max-width: 150px;
+        padding: 0 20px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .top-label {
+        margin-bottom: 8px;
+        font-size: 12px;
+      }
+      .top-list {
+        display: flex;
+        gap: 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .top-item {
+        display: flex;
+        flex: 1 1 0;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .top-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .top-name {
+        overflow: hidden;
+        font-size: 13px;
+        font-weight: 600;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .top-coins {
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .gift-list {
+        flex: 1 1 0;
+        min-height: 0;
+        margin: 0;
+        padding: 6px 20px 14px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        list-style: none;
+      }
+      .lane-gift {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 -10px 2px;
+        padding: 7px 10px 7px 7px;
+        border-radius: var(--radius-sm);
+      }
+      .lane-gift-img {
+        flex: none;
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+      }
+      .lane-text {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .lane-name {
         overflow: hidden;
         font-weight: 600;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .log-desc {
-        flex: 1;
-        min-width: 0;
-        overflow-wrap: anywhere;
+      .lane-what {
+        font-size: 12.5px;
+        white-space: nowrap;
       }
-      .log-desc img {
-        vertical-align: middle;
+      .lane-coins {
+        flex: none;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
       }
-      .gift-img {
-        width: 22px;
-        height: 22px;
-        margin-right: 4px;
-        object-fit: contain;
-      }
-      .t-gift {
-        --tag: var(--warning);
-      }
-      .t-chat {
-        --tag: var(--info);
-      }
-      .t-follow,
-      .t-subscribe {
-        --tag: var(--accent);
-      }
-      .t-share {
-        --tag: var(--success);
+      .gift-empty {
+        flex: none;
+        margin: 6px 20px 14px;
+        padding: 20px 12px;
+        font-size: 13px;
       }
 
-      @media (max-width: 560px) {
-        .stats {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+      /* Narrower side column on mid-sized windows */
+      @media (max-width: 999px) and (min-width: 821px) {
+        .side {
+          width: 300px;
+        }
+      }
+
+      /* Stacked layout: the preview and gifts go above the chat, and scroll together */
+      @media (max-width: 820px) {
+        .live-body {
+          flex-direction: column;
+        }
+        .side {
+          order: -1;
+          container-type: normal;
+          flex: none;
+          width: auto;
+          max-height: 45vh;
+          overflow-y: auto;
+          border-left: 0;
+          border-bottom: 1px solid var(--line);
+        }
+        /* Video on the left, title and note on the right, so the panel stays short */
+        .preview {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          align-items: start;
+          gap: 8px 16px;
+          padding: 12px 20px;
+          border-bottom: 0;
+        }
+        .preview-head {
+          grid-column: 2;
+          grid-row: 1;
+        }
+        .video-frame {
+          grid-column: 1;
+          grid-row: 1 / span 2;
+          width: calc(45vh * 0.55 * 9 / 16);
+          margin: 0;
+        }
+        .preview-note {
+          grid-column: 2;
+          grid-row: 2;
+          align-self: end;
+        }
+        .gifts {
+          flex: none;
+        }
+        .gift-list {
+          flex: none;
+          overflow: visible;
         }
       }
     </style>
@@ -423,37 +875,165 @@
             <a id="demo-set" class="btn btn-small" href="/settings.html">Set your username</a>
           </div>
 
-          <section class="card status-card" aria-label="Stream status">
-            <div class="status-head">
-              <span id="status-avatar"></span>
-              <div class="who">
-                <div class="who-name" id="owner-name"></div>
-                <div class="who-meta" id="owner-handle"></div>
-                <div class="who-meta" id="followers" hidden></div>
-              </div>
-              <span id="status-pill"></span>
+          <section class="room" aria-label="Room">
+            <span id="status-avatar"></span>
+            <div class="who">
+              <span class="who-name" id="owner-name"></span>
+              <span class="who-handle muted" id="owner-handle"></span>
             </div>
-            <div id="status-line" class="status-line">Starting…</div>
+            <span id="status-pill"></span>
+            <p id="status-line" class="room-status">Starting…</p>
+            <dl class="room-stats" id="room-stats" aria-label="Room totals"></dl>
           </section>
 
-          <div class="stats" id="stats"></div>
+          <div class="live-body">
+            <section class="chat-col" aria-label="Chat">
+              <div class="filter-bar" id="filter-bar">
+                <div class="segmented" role="radiogroup" aria-label="Who can appear">
+                  <label><input type="radio" name="who" value="everyone" /> Everyone</label>
+                  <label><input type="radio" name="who" value="followers" /> Followers</label>
+                  <label><input type="radio" name="who" value="friends" /> Friends</label>
+                </div>
+                <div class="popover-wrap" id="filters-wrap">
+                  <button
+                    class="btn btn-ghost btn-small"
+                    id="filters-btn"
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-expanded="false"
+                    aria-controls="filters-pop"
+                  ></button>
+                  <div class="popover filters-pop" id="filters-pop" role="dialog" aria-label="Filters" hidden>
+                    <div class="set">
+                      <div class="set-text">
+                        <label class="set-title" for="min-followers">Min. followers</label>
+                        <p class="set-hint">
+                          Hides strangers with fewer followers. Followers and friends always show.
+                        </p>
+                      </div>
+                      <input
+                        class="input num"
+                        id="min-followers"
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputmode="numeric"
+                      />
+                    </div>
+                    <div class="set set-stack">
+                      <div class="set-text">
+                        <label class="set-title" for="hide-words">Hide words</label>
+                        <p class="set-hint">Comma separated.</p>
+                      </div>
+                      <input
+                        class="input"
+                        id="hide-words"
+                        type="text"
+                        placeholder="spam, promo"
+                        autocomplete="off"
+                        spellcheck="false"
+                      />
+                    </div>
+                    <div class="set">
+                      <div class="set-text">
+                        <span class="set-title" id="gifts-label">Gifts in chat</span>
+                        <p class="set-hint">Gifts always show in the Gifts lane.</p>
+                      </div>
+                      <button
+                        class="switch"
+                        id="gifts"
+                        type="button"
+                        role="switch"
+                        aria-checked="true"
+                        aria-labelledby="gifts-label"
+                      ></button>
+                    </div>
+                    <div class="set">
+                      <div class="set-text">
+                        <span class="set-title" id="follows-label">Follows</span>
+                        <p class="set-hint">Show new follows in chat.</p>
+                      </div>
+                      <button
+                        class="switch"
+                        id="follows"
+                        type="button"
+                        role="switch"
+                        aria-checked="false"
+                        aria-labelledby="follows-label"
+                      ></button>
+                    </div>
+                    <div class="set set-stack">
+                      <span class="set-title" id="silenced-title">Silenced people (0)</span>
+                      <p class="hint silenced-empty" id="silenced-empty">
+                        No one is silenced. Use the eye icon on a message to hide someone in this view.
+                      </p>
+                      <div class="silenced-list" id="silenced-list"></div>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  class="btn btn-ghost btn-small hidden-count"
+                  id="hidden-count"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                  aria-controls="filters-pop"
+                >
+                  0 hidden
+                </button>
+              </div>
 
-          <section class="events" aria-labelledby="sec-events">
-            <h2 class="section-title" id="sec-events">Events</h2>
-            <div class="group events-group">
-              <div class="events-bar">
-                <div id="filters" class="filters" role="group" aria-label="Show event types"></div>
-                <button id="clear" class="btn btn-ghost btn-small" type="button">Clear</button>
+              <div class="feed-wrap">
+                <div class="feed" id="feed" role="log" aria-live="off" aria-label="Chat" tabindex="0"></div>
+                <p class="empty feed-empty" id="feed-empty">Waiting for chat…</p>
+                <button class="btn new-pill" id="new-pill" type="button" hidden></button>
               </div>
-              <div class="log-wrap">
-                <div id="log" class="log" role="log" aria-label="Events" tabindex="0"></div>
-                <p id="log-empty" class="empty log-empty">
-                  No events yet. They show up here while you're live. Use Send test event at the top to try
-                  your overlays.
-                </p>
-              </div>
-            </div>
-          </section>
+            </section>
+
+            <aside class="side" aria-label="Preview and gifts">
+              <section class="preview" id="preview" aria-label="Preview" hidden>
+                <div class="preview-head">
+                  <span class="preview-title">Preview</span>
+                  <span
+                    class="dot"
+                    id="live-dot"
+                    data-state="live"
+                    role="img"
+                    aria-label="Live"
+                    hidden
+                  ></span>
+                  <button class="btn btn-ghost icon-btn" id="mute" type="button"></button>
+                  <button
+                    class="btn btn-ghost icon-btn"
+                    id="close-preview"
+                    type="button"
+                    aria-label="Close preview"
+                  ></button>
+                </div>
+                <div class="video-frame">
+                  <video id="video" playsinline autoplay muted></video>
+                  <div class="preview-msg" id="preview-msg" hidden></div>
+                </div>
+                <p class="preview-note">A few seconds behind your live. Viewers see the same delay.</p>
+              </section>
+
+              <section class="gifts" aria-labelledby="gifts-title">
+                <div class="gifts-head">
+                  <h2 class="gifts-title" id="gifts-title">Gifts</h2>
+                  <span class="gifts-total">
+                    <span id="gifts-icon" aria-hidden="true"></span>
+                    <span id="gifts-total">0 coins</span>
+                  </span>
+                </div>
+                <div class="top" id="top" hidden>
+                  <p class="top-label muted">Top gifters</p>
+                  <ol class="top-list" id="top-list"></ol>
+                </div>
+                <ol class="gift-list" id="gift-list" aria-label="Recent gifts"></ol>
+                <p class="empty gift-empty" id="gift-empty">No gifts yet.</p>
+              </section>
+            </aside>
+          </div>
         </div>
       </main>
     </div>
@@ -476,37 +1056,33 @@
         el,
         api,
         toast,
+        token,
         withToken,
+        safeUrl,
+        debounce,
       } from "/app/shell.js";
 
       const $ = (id) => document.getElementById(id);
       const num = (x) => Number(x) || 0;
       const params = new URLSearchParams(location.search);
-      const token = params.get("token") ?? "";
-      const TYPES = [
-        "chat",
-        "gift",
-        "like",
-        "follow",
-        "share",
-        "join",
-        "subscribe",
-        "question",
-        "emote",
-        "viewers",
-        "streamEnd",
-        "chatDelete",
-      ];
-      const shown = new Set(TYPES.filter((t) => !["like", "viewers", "join"].includes(t)));
-      const STAT_TILES = [
+      const BUFFER_MAX = 500;
+      const DOM_MAX = 300;
+      const GIFTS_MAX = 50;
+      const BIG_GIFT = 100; // coins. Bigger gifts get a stronger highlight.
+      const FEED_TYPES = new Set(["chat", "gift", "subscribe", "follow"]);
+      const KEYS = {
+        filters: "tiklive.stream.filters",
+        preview: "tiklive.stream.preview",
+        previewMuted: "tiklive.stream.previewMuted",
+        silenced: "tiklive.stream.silenced",
+      };
+      const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const ROOM_STATS = [
         ["Viewers", "viewers"],
-        ["Peak viewers", "peakViewers"],
         ["Likes", "likes"],
         ["Coins", "diamonds"],
         ["Follows", "follows"],
-        ["Shares", "shares"],
-        ["Chats", "chats"],
-        ["Joins", "joins"],
       ];
       const TESTS = [
         ["Chat message", "chat"],
@@ -541,86 +1117,135 @@
         subscribe: { subMonth: 1 },
         like: { likeCount: 10, totalLikeCount: 10 },
       };
+      const coins = (n) => `${n.toLocaleString()} ${n === 1 ? "coin" : "coins"}`;
+      const statText = (n) => (n >= 10000 ? compact.format(n) : n.toLocaleString());
 
-      let live = null; // the current events connection
+      // ---- Saved preferences (falls back to memory when localStorage is unavailable) ----
+
+      const memory = new Map();
+      function readPref(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return memory.get(key) ?? null;
+        }
+      }
+      function writePref(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch {
+          memory.set(key, value);
+        }
+      }
+      function readJson(key, fallback) {
+        try {
+          return JSON.parse(readPref(key) ?? "null") ?? fallback;
+        } catch {
+          return fallback;
+        }
+      }
+      const writeJson = (key, value) => writePref(key, JSON.stringify(value));
+
+      // ---- State ----
+
       let activeName = ""; // the streamer the dashboard shows, or "" on onboarding
+      let live = null; // the current events connection
       let lastStatus = null;
+      let buffer = []; // { id, event } for chat, gift, subscribe and follow events
+      let nextId = 1;
+      let pending = 0; // messages that arrived while scrolled up
+      let giftLog = []; // finished gifts, newest first
+      let topViewers = []; // from the most recent viewers event
+      let previewOpen = readJson(KEYS.preview, false);
+      let previewMuted = readJson(KEYS.previewMuted, true);
+      let session = null; // the preview's HLS session: { url, hls, failed, ready }
 
-      // ---- Views ----
+      function normalizeFilters(raw) {
+        const f = raw && typeof raw === "object" ? raw : {};
+        return {
+          who: ["everyone", "followers", "friends"].includes(f.who) ? f.who : "everyone",
+          minFollowers:
+            Number.isFinite(f.minFollowers) && f.minFollowers > 0 ? Math.floor(f.minFollowers) : 0,
+          hideWords: typeof f.hideWords === "string" ? f.hideWords : "",
+          gifts: typeof f.gifts === "boolean" ? f.gifts : true,
+          follows: typeof f.follows === "boolean" ? f.follows : false,
+        };
+      }
+      const filters = normalizeFilters(readJson(KEYS.filters, null));
+      const saveFilters = () => writeJson(KEYS.filters, filters);
 
-      function showView(view) {
-        $("onboarding").hidden = view !== "onboarding";
-        $("app").hidden = view !== "dashboard";
+      // Silenced people are kept per view. A user with no real ID (empty or "0") matches by @handle.
+      const hasId = (id) => typeof id === "string" && id !== "" && id !== "0";
+      function sameUser(a, b) {
+        if (hasId(a.userId) && hasId(b.userId)) return a.userId === b.userId;
+        return a.uniqueId !== "" && a.uniqueId.toLowerCase() === b.uniqueId.toLowerCase();
+      }
+      function readSilenced() {
+        const list = readJson(KEYS.silenced, []);
+        if (!Array.isArray(list)) return [];
+        return list
+          .filter((s) => s && typeof s === "object" && typeof s.uniqueId === "string")
+          .map((s) => ({
+            userId: typeof s.userId === "string" ? s.userId : "",
+            uniqueId: s.uniqueId,
+            nickname: typeof s.nickname === "string" ? s.nickname : "",
+            profilePictureUrl: typeof s.profilePictureUrl === "string" ? s.profilePictureUrl : "",
+          }));
+      }
+      let silenced = readSilenced();
+      const isSilenced = (user) => silenced.some((s) => sameUser(s, user));
+      const isSelf = (user) => user.uniqueId.toLowerCase() === activeName;
+      const isMod = (user) => user.isModerator === true;
+      const isKnown = (user) => isMod(user) || user.followStatus === "friend";
+      const followsStreamer = (user) =>
+        user.followStatus === "follower" || user.followStatus === "friend" || user.isFollower === true;
+
+      function parseWords(text) {
+        return text
+          .split(",")
+          .map((w) => w.trim().toLowerCase())
+          .filter(Boolean);
       }
 
-      function openOnboarding(prefill = activeName !== "demo" ? activeName : "", error = "") {
-        const input = $("username");
-        input.value = prefill;
-        $("form-error").textContent = error;
-        if (error) input.setAttribute("aria-invalid", "true");
-        else input.removeAttribute("aria-invalid");
-        $("cancel").hidden = !activeName;
-        showView("onboarding");
-        input.focus();
-      }
-
-      function enterDashboard(name) {
-        if (name !== activeName) connect(name);
-        showView("dashboard");
-      }
-
-      function submitOnboarding(e) {
-        e.preventDefault();
-        const input = $("username");
-        const name = normalizeUsername(input.value);
-        if (!USERNAME.test(name)) {
-          $("form-error").textContent = INVALID_USERNAME;
-          input.setAttribute("aria-invalid", "true");
-          input.focus();
-          return;
+      // Whether a feed event is shown. Silenced people are always hidden. Moderators and the streamer
+      // are always shown, whatever the filters say. Subscriptions are always shown.
+      function passes({ type, user, comment }, words) {
+        if (isSilenced(user)) return false;
+        if (isMod(user) || isSelf(user)) return true;
+        if (type === "subscribe") return true;
+        if (type === "gift" && !filters.gifts) return false;
+        if (type === "follow" && !filters.follows) return false;
+        if (filters.who === "followers" && !followsStreamer(user)) return false;
+        if (filters.who === "friends" && user.followStatus !== "friend") return false;
+        // Strangers only: followers and friends are never hidden by the follower minimum.
+        if (
+          filters.minFollowers > 0 &&
+          !followsStreamer(user) &&
+          typeof user.followerCount === "number" &&
+          user.followerCount < filters.minFollowers
+        ) {
+          return false;
         }
-        input.removeAttribute("aria-invalid");
-        $("form-error").textContent = "";
-        if (name === "demo") {
-          startDemo();
-          return;
+        if (type === "chat" && words.length > 0) {
+          const text = comment.toLowerCase();
+          if (words.some((w) => text.includes(w))) return false;
         }
-        // Saving fires onUsernameChange, which opens the dashboard.
-        saveUsername(name);
+        return true;
       }
 
-      // The demo is never saved. ?username=demo makes the shell's status socket follow it too,
-      // so the page reloads with it set.
-      function startDemo() {
-        const url = new URL(location.href);
-        url.searchParams.set("username", "demo");
-        location.replace(url);
-      }
+      // ---- Header actions ----
 
-      // ---- Events connection ----
-
-      function connect(name) {
-        live?.close();
-        const client = new TikLive({ username: name, token, replay: true });
-        // Anything from a connection that has since been replaced is ignored.
-        const mine =
-          (handler) =>
-          (...args) => {
-            if (client === live) handler(...args);
-          };
-        live = client;
-        activeName = name;
-        $("log").replaceChildren();
-        updateLogEmpty();
-        client.on("*", mine(addRow));
-        client.on(
-          "error",
-          mine((e) => toast(e.message, { error: true })),
-        );
-        trigger.disabled = false;
-        $("demo-notice").hidden = name !== "demo";
-        $("demo-set").href = withToken("/settings.html");
-      }
+      const previewToggle = el(
+        "button",
+        {
+          type: "button",
+          class: "btn btn-ghost icon-btn",
+          "aria-label": "Preview",
+          title: "Preview",
+          "aria-pressed": String(previewOpen),
+        },
+        icon("video", 18),
+      );
 
       // ---- Test events menu (header) ----
 
@@ -651,7 +1276,11 @@
         ...menuItems,
       );
       const menuWrap = el("div", { class: "menu-wrap" }, trigger, menu);
-      mountShell({ page: "dashboard", crumbs: ["Dashboard"], actions: [menuWrap] });
+      mountShell({
+        page: "dashboard",
+        crumbs: ["Dashboard"],
+        actions: [menuWrap, previewToggle],
+      });
 
       function openMenu(focusFirst) {
         menu.hidden = false;
@@ -715,114 +1344,654 @@
         }
       }
 
-      // ---- Event log ----
+      // ---- Views ----
 
-      $("filters").replaceChildren(
-        ...TYPES.map((t) =>
-          el(
-            "button",
-            {
-              type: "button",
-              class: `chip t-${t}`,
-              "data-t": t,
-              "aria-pressed": shown.has(t) ? "true" : "false",
-            },
-            t,
-          ),
-        ),
-      );
-      $("filters").addEventListener("click", (e) => {
-        const chip = e.target.closest("button[data-t]");
-        if (!chip) return;
-        const t = chip.dataset.t;
-        const on = !shown.has(t);
-        if (on) shown.add(t);
-        else shown.delete(t);
-        chip.setAttribute("aria-pressed", String(on));
-      });
-      $("clear").addEventListener("click", () => {
-        $("log").replaceChildren();
-        updateLogEmpty();
-      });
-
-      function describe(e) {
-        switch (e.type) {
-          case "chat":
-            return [e.comment ?? ""];
-          case "gift":
-            return [
-              img(e.giftImageUrl, { class: "gift-img", alt: e.giftName ?? "" }),
-              `${e.giftName ?? ""} ×${num(e.repeatCount)} (${num(e.totalDiamonds)} coins)${e.streaking ? " …" : ""}`,
-            ];
-          case "like":
-            return [`+${num(e.likeCount)} likes (${num(e.totalLikeCount).toLocaleString()} total)`];
-          case "viewers":
-            return [`${num(e.viewerCount).toLocaleString()} viewers`];
-          case "subscribe":
-            return [`subscribed (month ${num(e.subMonth)})`];
-          case "question":
-            return [e.question ?? ""];
-          case "emote":
-            return (e.emotes ?? []).map((m) => img(m.imageUrl, { height: 24 }));
-          case "streamEnd":
-            return [`stream ${e.reason}`];
-          case "chatDelete":
-            return [`deleted ${num(e.msgIds?.length)} chat message(s)`];
-          default:
-            return [e.type];
-        }
+      function showView(view) {
+        $("onboarding").hidden = view !== "onboarding";
+        $("app").hidden = view !== "dashboard";
       }
 
-      function timeOf(e) {
-        const t = Number(e.timestamp);
-        return new Date(Number.isFinite(t) && t > 0 ? t : Date.now()).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
+      function openOnboarding(prefill = activeName !== "demo" ? activeName : "", error = "") {
+        const input = $("username");
+        input.value = prefill;
+        $("form-error").textContent = error;
+        if (error) input.setAttribute("aria-invalid", "true");
+        else input.removeAttribute("aria-invalid");
+        $("cancel").hidden = !activeName;
+        showView("onboarding");
+        input.focus();
+      }
+
+      function enterDashboard(name) {
+        if (name !== activeName) connect(name);
+        showView("dashboard");
+        syncPreview();
+      }
+
+      function submitOnboarding(e) {
+        e.preventDefault();
+        const input = $("username");
+        const name = normalizeUsername(input.value);
+        if (!USERNAME.test(name)) {
+          $("form-error").textContent = INVALID_USERNAME;
+          input.setAttribute("aria-invalid", "true");
+          input.focus();
+          return;
+        }
+        input.removeAttribute("aria-invalid");
+        $("form-error").textContent = "";
+        if (name === "demo") {
+          startDemo();
+          return;
+        }
+        // Saving fires onUsernameChange, which opens the dashboard.
+        saveUsername(name);
+      }
+
+      // The demo is never saved. ?username=demo makes the shell's status socket follow it too,
+      // so the page reloads with it set.
+      function startDemo() {
+        const url = new URL(location.href);
+        url.searchParams.set("username", "demo");
+        location.replace(url);
+      }
+
+      // ---- Events connection ----
+
+      function connect(name) {
+        live?.close();
+        const client = new TikLive({ username: name, token, replay: true });
+        // Anything from a connection that has since been replaced is ignored.
+        const mine =
+          (handler) =>
+          (...args) => {
+            if (client === live) handler(...args);
+          };
+        live = client;
+        activeName = name;
+        buffer = [];
+        pending = 0;
+        giftLog = [];
+        topViewers = [];
+        $("feed").replaceChildren();
+        updatePill();
+        renderGifts();
+        renderTop();
+        updateCounts();
+        client.on("*", mine(addEvent));
+        client.on(
+          "error",
+          mine((e) => toast(e.message, { error: true })),
+        );
+        trigger.disabled = false;
+        $("demo-notice").hidden = name !== "demo";
+        $("demo-set").href = withToken("/settings.html");
+      }
+
+      // ---- Chat feed ----
+
+      const feed = $("feed");
+      const newPill = $("new-pill");
+      function setPreview(open) {
+        previewOpen = open;
+        $("preview").hidden = !open;
+        previewToggle.setAttribute("aria-pressed", String(open));
+        writeJson(KEYS.preview, open);
+        syncPreview();
+      }
+
+      previewToggle.addEventListener("click", () => setPreview(!previewOpen));
+
+      const filtersWrap = $("filters-wrap");
+      const filtersBtn = $("filters-btn");
+      const filtersPop = $("filters-pop");
+      const hiddenBtn = $("hidden-count");
+      const silencedList = $("silenced-list");
+
+      // Writes the saved filters into the controls. Called at startup.
+      function syncFilterControls() {
+        for (const radio of document.querySelectorAll('input[name="who"]')) {
+          radio.checked = radio.value === filters.who;
+        }
+        $("min-followers").value = String(filters.minFollowers);
+        $("hide-words").value = filters.hideWords;
+        $("gifts").setAttribute("aria-checked", String(filters.gifts));
+        $("follows").setAttribute("aria-checked", String(filters.follows));
+      }
+
+      // Shows how many filters differ from the defaults, as a badge on the Filters button.
+      function updateFilterBadge() {
+        const active = [
+          filters.who !== "everyone",
+          filters.minFollowers > 0,
+          filters.hideWords.trim() !== "",
+          !filters.gifts,
+          filters.follows,
+          silenced.length > 0,
+        ].filter(Boolean).length;
+        filtersBtn.replaceChildren(
+          icon("filters", 14),
+          "Filters",
+          ...(active > 0 ? [el("span", { class: "badge badge-accent" }, String(active))] : []),
+        );
+      }
+
+      // A saved filter changed: store it, then redraw the feed.
+      function changeFilters() {
+        saveFilters();
+        updateFilterBadge();
+        render();
+      }
+
+      for (const radio of document.querySelectorAll('input[name="who"]')) {
+        radio.addEventListener("change", () => {
+          if (!radio.checked) return;
+          filters.who = radio.value;
+          changeFilters();
         });
       }
 
-      function updateLogEmpty() {
-        $("log-empty").hidden = $("log").children.length > 0;
-      }
+      const applyMinFollowers = debounce(() => {
+        const n = Math.floor(Number($("min-followers").value));
+        filters.minFollowers = Number.isFinite(n) && n > 0 ? n : 0;
+        changeFilters();
+      }, 250);
+      $("min-followers").addEventListener("input", applyMinFollowers);
 
-      function addRow(e, meta) {
-        if (!shown.has(e.type)) return;
-        const u = e.user;
-        const name = u ? u.nickname || u.uniqueId || "" : "";
-        const replay = meta?.replay === true;
-        const row = el(
-          "div",
-          { class: "log-row" },
-          el("span", { class: "log-time tabular" }, timeOf(e)),
-          el(
-            "span",
-            { class: `log-tag t-${e.type}`, title: replay ? "Replayed from earlier" : undefined },
-            `${e.type}${replay ? "*" : ""}`,
-          ),
-          u
-            ? avatar(u.profilePictureUrl, name, "sm")
-            : el("span", { class: "log-gap", "aria-hidden": "true" }),
-          el("span", { class: "log-name" }, name),
-          el("span", { class: "log-desc" }, ...describe(e)),
+      const applyWords = debounce(() => {
+        filters.hideWords = $("hide-words").value;
+        changeFilters();
+      }, 250);
+      $("hide-words").addEventListener("input", applyWords);
+
+      $("gifts").addEventListener("click", () => {
+        filters.gifts = !filters.gifts;
+        $("gifts").setAttribute("aria-checked", String(filters.gifts));
+        changeFilters();
+      });
+
+      $("follows").addEventListener("click", () => {
+        filters.follows = !filters.follows;
+        $("follows").setAttribute("aria-checked", String(filters.follows));
+        changeFilters();
+      });
+
+      // The Filters popover opens from the Filters button or from the hidden count.
+      function setFiltersOpen(open, focusFirst = false) {
+        filtersPop.hidden = !open;
+        filtersBtn.setAttribute("aria-expanded", String(open));
+        hiddenBtn.setAttribute("aria-expanded", String(open));
+        if (open) {
+          filtersPop.classList.toggle(
+            "up",
+            filtersBtn.getBoundingClientRect().bottom + 6 + filtersPop.offsetHeight > innerHeight - 12,
+          );
+          if (focusFirst) $("min-followers").focus();
+        }
+      }
+      function closeFilters(refocus) {
+        if (filtersPop.hidden) return;
+        setFiltersOpen(false);
+        if (refocus) filtersBtn.focus();
+      }
+      const toggleFilters = () => setFiltersOpen(filtersPop.hidden, true);
+      filtersBtn.addEventListener("click", toggleFilters);
+      hiddenBtn.addEventListener("click", toggleFilters);
+      const outsidePopover = (target) => !filtersWrap.contains(target) && !hiddenBtn.contains(target);
+      document.addEventListener("pointerdown", (e) => {
+        if (outsidePopover(e.target)) closeFilters(false);
+      });
+      document.addEventListener("focusin", (e) => {
+        if (outsidePopover(e.target)) closeFilters(false);
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeFilters(true);
+      });
+
+      function renderSilenced() {
+        $("silenced-title").textContent = `Silenced people (${silenced.length})`;
+        silencedList.replaceChildren(
+          ...silenced.map((s) => {
+            const name = s.nickname || s.uniqueId;
+            const unsilence = el(
+              "button",
+              {
+                type: "button",
+                class: "btn btn-small",
+                "aria-label": `Unsilence @${s.uniqueId}`,
+              },
+              "Unsilence",
+            );
+            unsilence.addEventListener("click", () => {
+              silenced = silenced.filter((x) => x !== s);
+              writeJson(KEYS.silenced, silenced);
+              renderSilenced();
+              refresh();
+            });
+            return el(
+              "div",
+              { class: "silenced-item" },
+              avatar(s.profilePictureUrl, name, "sm"),
+              el(
+                "div",
+                { class: "silenced-text" },
+                el("span", { class: "silenced-name" }, name),
+                el("span", { class: "muted silenced-handle" }, `@${s.uniqueId}`),
+              ),
+              unsilence,
+            );
+          }),
         );
-        const box = $("log");
-        const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-        box.append(row);
-        while (box.children.length > 500) box.firstElementChild.remove();
-        if (atBottom) box.scrollTop = box.scrollHeight;
-        updateLogEmpty();
+        $("silenced-empty").hidden = silenced.length > 0;
+        updateFilterBadge();
       }
 
-      // ---- Status card and stats ----
+      function silenceUser(user) {
+        if (isSilenced(user)) return;
+        silenced = [
+          ...silenced,
+          {
+            userId: user.userId,
+            uniqueId: user.uniqueId,
+            nickname: user.nickname,
+            profilePictureUrl: user.profilePictureUrl,
+          },
+        ];
+        writeJson(KEYS.silenced, silenced);
+        renderSilenced();
+        refresh();
+        toast(`Silenced @${user.uniqueId}. Only hidden here, not on TikTok.`);
+      }
 
-      const statValues = new Map();
-      $("stats").replaceChildren(
-        ...STAT_TILES.map(([label, key]) => {
-          const value = el("span", { class: "stat-value tabular" }, "0");
-          statValues.set(key, value);
-          return el("div", { class: "stat" }, el("span", { class: "stat-label" }, label), value);
-        }),
+      const atBottom = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+
+      function updatePill() {
+        newPill.hidden = pending === 0;
+        newPill.replaceChildren(icon("arrowDown", 14), `${pending} new message${pending === 1 ? "" : "s"}`);
+      }
+
+      newPill.addEventListener("click", () => {
+        feed.scrollTo({ top: feed.scrollHeight, behavior: reduceMotion.matches ? "auto" : "smooth" });
+        pending = 0;
+        updatePill();
+      });
+      feed.addEventListener(
+        "scroll",
+        () => {
+          if (atBottom() && pending !== 0) {
+            pending = 0;
+            updatePill();
+          }
+        },
+        { passive: true },
       );
+
+      function silenceButton(user) {
+        const button = el(
+          "button",
+          {
+            type: "button",
+            class: "btn btn-ghost row-silence",
+            "aria-label": `Silence @${user.uniqueId} in this view`,
+            title: "Silence in this view",
+          },
+          icon("silence", 16),
+        );
+        button.addEventListener("click", () => silenceUser(user));
+        return button;
+      }
+
+      function gift(e) {
+        const total = num(e.totalDiamonds);
+        return el(
+          "div",
+          { class: "gift-line" },
+          img(e.giftImageUrl, { class: "gift-img", alt: "", width: 28, height: 28 }),
+          el("span", {}, `sent ${e.giftName} ×${e.repeatCount}`),
+          el("span", { class: "muted" }, `· ${coins(total)}`),
+        );
+      }
+
+      function followRow({ user }) {
+        const name = user.nickname || user.uniqueId;
+        return el(
+          "div",
+          { class: "feed-row follow-row" },
+          el("span", { class: "follow-text" }, el("span", { class: "follow-name" }, name), " followed you"),
+          silenceButton(user),
+        );
+      }
+
+      function rowFor({ event: e }) {
+        if (e.type === "follow") return followRow(e);
+        const u = e.user;
+        const name = u.nickname || u.uniqueId;
+        const badges = [];
+        if (isMod(u)) badges.push(el("span", { class: "tag mod" }, icon("mod", 12), "Moderator"));
+        if (u.followStatus === "friend") {
+          badges.push(el("span", { class: "tag friend" }, icon("friend", 12), "Friend"));
+        } else if (followsStreamer(u)) {
+          badges.push(el("span", { class: "tag follower" }, "Follower"));
+        }
+
+        let body;
+        if (e.type === "gift") {
+          body = gift(e);
+        } else if (e.type === "subscribe") {
+          body = el("div", { class: "sub-line" }, `subscribed · month ${num(e.subMonth)}`);
+        } else {
+          body = el(
+            "div",
+            { class: "row-text" },
+            e.comment,
+            ...(e.emotes ?? []).map((m) => img(m.imageUrl, { alt: "" })),
+          );
+        }
+        const tags = [
+          e.type === "gift" && "gift",
+          e.type === "gift" && num(e.totalDiamonds) >= BIG_GIFT && "big",
+          e.type === "subscribe" && "sub",
+          isKnown(u) && "known",
+        ].filter(Boolean);
+        return el(
+          "div",
+          { class: ["feed-row", ...tags].join(" ") },
+          avatar(u.profilePictureUrl, name, "sm"),
+          el(
+            "div",
+            { class: "row-body" },
+            el(
+              "div",
+              { class: "row-head" },
+              el("span", { class: "row-name" }, name),
+              ...badges,
+              typeof u.followerCount === "number"
+                ? el("span", { class: "row-count" }, `${compact.format(u.followerCount)} followers`)
+                : null,
+            ),
+            body,
+          ),
+          silenceButton(u),
+        );
+      }
+
+      // Counts the buffer, sets the hidden count and the empty message. Returns the shown count.
+      function updateCounts() {
+        const words = parseWords(filters.hideWords);
+        let shown = 0;
+        for (const entry of buffer) if (passes(entry.event, words)) shown += 1;
+        $("hidden-count").textContent = `${buffer.length - shown} hidden`;
+        $("feed-empty").hidden = shown > 0;
+        $("feed-empty").textContent =
+          buffer.length === 0 ? "Waiting for chat…" : "Everything here is hidden by your filters.";
+        return shown;
+      }
+
+      // Rebuilds the feed from the buffer. Used when a filter, a silence or a deletion changes it.
+      function render() {
+        const words = parseWords(filters.hideWords);
+        const stick = atBottom();
+        feed.replaceChildren(
+          ...buffer
+            .filter((entry) => passes(entry.event, words))
+            .slice(-DOM_MAX)
+            .map(rowFor),
+        );
+        if (stick) {
+          feed.scrollTop = feed.scrollHeight;
+          pending = 0;
+        }
+        updatePill();
+        updateCounts();
+      }
+
+      // ---- Gifts lane and top gifters (these ignore the feed filters, but not silencing) ----
+
+      function giftItem(e) {
+        const u = e.user;
+        const total = num(e.totalDiamonds);
+        return el(
+          "li",
+          { class: total >= BIG_GIFT ? "lane-gift gift big" : "lane-gift gift" },
+          img(e.giftImageUrl, { class: "lane-gift-img", alt: "", width: 32, height: 32 }) ??
+            el("span", { class: "lane-gift-img", "aria-hidden": "true" }),
+          el(
+            "div",
+            { class: "lane-text" },
+            el("span", { class: "lane-name" }, u.nickname || u.uniqueId),
+            el("span", { class: "lane-what muted" }, `${e.giftName ?? ""} ×${num(e.repeatCount)}`),
+          ),
+          el("span", { class: "lane-coins tabular" }, coins(total)),
+        );
+      }
+
+      function renderGifts() {
+        const shown = giftLog.filter((e) => !isSilenced(e.user));
+        $("gift-list").replaceChildren(...shown.map(giftItem));
+        // The list grows to fill the column, so hide it when empty to keep the message at the top.
+        $("gift-list").hidden = shown.length === 0;
+        $("gift-empty").hidden = shown.length > 0;
+      }
+
+      function renderTop() {
+        const top = topViewers
+          .filter((t) => t?.user && !isSilenced(t.user))
+          .sort((a, b) => num(a.rank) - num(b.rank))
+          .slice(0, 3);
+        $("top").hidden = top.length === 0;
+        $("top-list").replaceChildren(
+          ...top.map(({ user, coinCount }) => {
+            const name = user.nickname || user.uniqueId;
+            return el(
+              "li",
+              { class: "top-item" },
+              avatar(user.profilePictureUrl, name, "sm"),
+              el(
+                "div",
+                { class: "top-text" },
+                el("span", { class: "top-name" }, name),
+                el("span", { class: "top-coins muted tabular" }, coins(num(coinCount))),
+              ),
+            );
+          }),
+        );
+      }
+
+      // Redraws everything that depends on the filters or the silenced list.
+      function refresh() {
+        render();
+        renderGifts();
+        renderTop();
+      }
+
+      function removeMessages(msgIds) {
+        const gone = new Set(msgIds ?? []);
+        const before = buffer.length;
+        buffer = buffer.filter(
+          (entry) => !(entry.event.type === "chat" && gone.has(entry.event.msgId ?? "")),
+        );
+        if (buffer.length !== before) render();
+      }
+
+      function addEvent(event) {
+        if (event.type === "chatDelete") {
+          removeMessages(event.msgIds);
+          return;
+        }
+        if (event.type === "viewers") {
+          topViewers = Array.isArray(event.topViewers) ? event.topViewers : [];
+          renderTop();
+          return;
+        }
+        // Gifts stream while a combo runs. Only the final one (streaking: false) is shown.
+        if (event.type === "gift" && event.streaking) return;
+        if (event.type === "gift") {
+          giftLog.unshift(event);
+          if (giftLog.length > GIFTS_MAX) giftLog.pop();
+          renderGifts();
+        }
+        if (!FEED_TYPES.has(event.type)) return;
+
+        const entry = { id: nextId++, event };
+        buffer.push(entry);
+        if (buffer.length > BUFFER_MAX) buffer.shift();
+
+        if (!passes(event, parseWords(filters.hideWords))) {
+          updateCounts();
+          return;
+        }
+        const stick = atBottom();
+        feed.append(rowFor(entry));
+        while (feed.children.length > DOM_MAX) {
+          const before = feed.scrollHeight;
+          feed.firstElementChild.remove();
+          // Keep the same messages in view when the top of the list is trimmed.
+          if (!stick) feed.scrollTop -= before - feed.scrollHeight;
+        }
+        if (stick) {
+          feed.scrollTop = feed.scrollHeight;
+        } else {
+          pending += 1;
+          updatePill();
+        }
+        updateCounts();
+      }
+
+      // ---- Preview ----
+
+      const video = $("video");
+      const liveDot = $("live-dot");
+      const previewMsg = $("preview-msg");
+      const muteBtn = $("mute");
+      $("close-preview").append(icon("close", 16));
+      $("close-preview").addEventListener("click", () => setPreview(false));
+
+      function renderMute() {
+        const label = previewMuted ? "Unmute preview" : "Mute preview";
+        muteBtn.replaceChildren(icon(previewMuted ? "muted" : "volume", 16));
+        muteBtn.setAttribute("aria-label", label);
+        muteBtn.title = label;
+        video.muted = previewMuted;
+      }
+      muteBtn.addEventListener("click", () => {
+        previewMuted = !previewMuted;
+        writeJson(KEYS.previewMuted, previewMuted);
+        renderMute();
+      });
+
+      // The HLS URL to play right now, or "" when there's nothing to show.
+      function wantedUrl() {
+        if (!previewOpen || activeName === "" || activeName === "demo") return "";
+        if (lastStatus?.username !== activeName || lastStatus.state !== "live") return "";
+        return typeof lastStatus.hlsUrl === "string" && lastStatus.hlsUrl ? safeUrl(lastStatus.hlsUrl) : "";
+      }
+
+      function stopPreview() {
+        const old = session;
+        if (!old) return;
+        session = null;
+        old.hls?.destroy();
+        video.removeAttribute("src");
+        video.load();
+      }
+
+      function failPreview(current) {
+        if (session !== current) return;
+        current.failed = true;
+        current.hls?.destroy();
+        current.hls = null;
+        video.removeAttribute("src");
+        video.load();
+        renderPreview();
+      }
+
+      // Lazy-loads hls.js the first time a preview starts, so the dashboard never pays for it.
+      async function startPreview(url) {
+        const current = { url, hls: null, failed: false, ready: false };
+        session = current;
+        let Hls;
+        try {
+          ({ default: Hls } = await import("/vendor/hls.light.min.mjs"));
+        } catch {
+          failPreview(current);
+          return;
+        }
+        if (session !== current) return;
+        if (Hls.isSupported()) {
+          const hls = new Hls({ lowLatencyMode: true, liveSyncDurationCount: 2 });
+          current.hls = hls;
+          let fatal = 0;
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (session !== current || !data.fatal) return;
+            fatal += 1;
+            // One recovery attempt per failure. A second fatal error before playback resumes gives up.
+            if (fatal === 1 && data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
+            else if (fatal === 1 && data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+            else failPreview(current);
+          });
+          // Playback is healthy again, so a later failure gets its own recovery attempt.
+          hls.on(Hls.Events.FRAG_BUFFERED, () => {
+            fatal = 0;
+          });
+          hls.loadSource(url);
+          hls.attachMedia(video);
+        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = url;
+        } else {
+          failPreview(current);
+        }
+      }
+
+      // Starts, stops or reloads the preview to match the panel and the status.
+      function syncPreview() {
+        const url = wantedUrl();
+        if ((session?.url ?? "") !== url) {
+          stopPreview();
+          if (url) startPreview(url);
+        }
+        renderPreview();
+      }
+
+      function retryPreview() {
+        const url = wantedUrl();
+        stopPreview();
+        if (url) startPreview(url);
+        renderPreview();
+      }
+
+      function renderPreview() {
+        const url = wantedUrl();
+        let text = null;
+        let retry = false;
+        if (activeName === "demo") text = "No video in demo mode.";
+        else if (!url) text = "The preview shows up here while you're live.";
+        else if (session?.failed) {
+          text = "Preview unavailable";
+          retry = true;
+        } else if (!session?.ready) text = "Loading preview…";
+
+        const children = [];
+        if (text) children.push(el("span", {}, text));
+        if (retry) {
+          const button = el("button", { type: "button", class: "btn btn-small" }, icon("retry", 14), "Retry");
+          button.addEventListener("click", retryPreview);
+          children.push(button);
+        }
+        previewMsg.replaceChildren(...children);
+        previewMsg.hidden = text === null;
+        liveDot.hidden = lastStatus?.state !== "live";
+      }
+
+      video.addEventListener("loadeddata", () => {
+        if (session && !session.failed) session.ready = true;
+        renderPreview();
+      });
+      // Native HLS (Safari) reports failures on the element itself.
+      video.addEventListener("error", () => {
+        if (session && !session.failed && !session.hls) failPreview(session);
+      });
+
+      // ---- Room bar ----
 
       function liveForText(since) {
         const mins = Math.max(0, Math.floor((Date.now() - since) / 60000));
@@ -836,10 +2005,13 @@
         line.classList.toggle("error", s.state === "error");
         if (s.state === "live") {
           const since = Number(s.streamStartedAt ?? s.liveSince);
-          const parts = [];
-          if (s.title) parts.push(el("div", { class: "status-title" }, s.title));
-          parts.push(el("div", { class: "status-meta" }, since > 0 ? liveForText(since) : "Live now"));
-          line.replaceChildren(...parts);
+          const liveText = since > 0 ? liveForText(since) : "Live now";
+          line.replaceChildren(
+            ...(s.title
+              ? [el("span", { class: "room-title" }, s.title), el("span", { class: "room-live" }, liveText)]
+              : [el("span", { class: "room-live" }, liveText)]),
+          );
+          line.title = s.title ? `${s.title} · ${liveText}` : liveText;
           return;
         }
         let text = "Starting…";
@@ -850,23 +2022,33 @@
         } else if (s.state === "error") {
           text = s.error || "Something went wrong.";
         }
-        line.replaceChildren(text);
+        line.replaceChildren(el("span", { class: "room-title" }, text));
+        line.title = text;
       }
 
-      // The shell's status socket follows the saved username, so it's the source for the card.
+      const statValues = new Map();
+      $("room-stats").replaceChildren(
+        ...ROOM_STATS.map(([label, key]) => {
+          const value = el("dd", { class: "stat-value tabular" }, "0");
+          statValues.set(key, value);
+          return el("div", { class: "room-stat" }, el("dt", { class: "stat-label" }, label), value);
+        }),
+      );
+
+      // The shell's status socket follows the saved username, so it's the source for the room bar.
       onStatus((s) => {
         if (!s) return;
         lastStatus = s;
         const owner = s.owner;
         const stats = s.stats ?? {};
-        $("status-avatar").replaceChildren(avatar(owner?.profilePictureUrl, s.username, "lg"));
+        $("status-avatar").replaceChildren(avatar(owner?.profilePictureUrl, s.username));
         $("status-pill").replaceChildren(pill(s.state));
         $("owner-name").textContent = owner?.nickname || s.username;
         $("owner-handle").textContent = `@${s.username}`;
-        $("followers").hidden = !owner;
-        $("followers").textContent = owner ? `${num(owner.followerCount).toLocaleString()} followers` : "";
         renderStatusLine(s);
-        for (const [key, node] of statValues) node.textContent = num(stats[key]).toLocaleString();
+        for (const [key, node] of statValues) node.textContent = statText(num(stats[key]));
+        $("gifts-total").textContent = coins(num(stats.diamonds));
+        syncPreview();
       });
 
       // "Live for" counts up, so refresh it every 30 s.
@@ -875,6 +2057,14 @@
       }, 30000);
 
       // ---- Startup ----
+
+      $("gifts-icon").append(icon("gift", 14));
+      syncFilterControls();
+      renderMute();
+      renderSilenced();
+      renderGifts();
+      renderTop();
+      setPreview(previewOpen);
 
       onUsernameChange((name) => {
         if (name) enterDashboard(name);
