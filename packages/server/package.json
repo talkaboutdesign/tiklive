@@ -57,7 +57,7 @@
     "typecheck": "bun ../../scripts/embed-assets.ts --ensure && tsc --noEmit -p .",
     "test": "vp test run",
     "dev": "bun --conditions=@tiklive/source --watch src/bin.ts",
-    "build": "vp pack",
+    "build": "vp pack && rm -rf dist/overlays && cp -R ../../examples/overlays dist/overlays && rm dist/overlays/package.json",
     "prepack": "cp ../../LICENSE LICENSE"
   },
   "dependencies": {
