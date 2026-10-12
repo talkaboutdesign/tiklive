@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { gzipSync } from "node:zlib";
-import { decode, ProtoWriter } from "./wire.ts";
+import { decode, ProtoWriter, WireType } from "./wire.ts";
 import {
   decodeFetchResult,
   decodePushFrame,
@@ -118,6 +118,28 @@ describe("frames", () => {
 });
 
 describe("live event decoding", () => {
+  it("treats a zero common msgId as missing and uses the envelope id instead", () => {
+    // ProtoWriter.varint() drops zero values, so write common field 2 (msgId) as an explicit varint 0.
+    const commonWithZeroId = Uint8Array.from([
+      (2 << 3) | WireType.Varint,
+      0,
+      ...new ProtoWriter().varint(4, 1791744000123).finish(),
+    ]);
+    const payload = new ProtoWriter()
+      .bytes(1, commonWithZeroId)
+      .message(2, user("1", "alice", "Alice"))
+      .string(3, "hi")
+      .finish();
+    expect(decode(payload).msg(1)?.id(2)).toBe("0");
+
+    const decodeWith = (msgId: string) =>
+      decodeLiveEvent({ method: "WebcastChatMessage", payload, msgId, isHistory: false });
+
+    expect(decodeWith("555")).toMatchObject({ msgId: "555" });
+    expect(decodeWith("0")).not.toHaveProperty("msgId");
+    expect(decodeWith("")).not.toHaveProperty("msgId");
+  });
+
   it("decodes chat messages with user identity", () => {
     const payload = new ProtoWriter()
       .message(1, common("100", 1791744000123))

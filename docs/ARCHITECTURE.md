@@ -70,9 +70,16 @@ overlay (TikLive client) → handlers
 
 Two details matter for correctness:
 
-- **Ordering within one streamer.** A subscriber subscribes to the PubSub before it reads the
-  status and history, so nothing published in between is lost. The replay happens before live
-  messages are forwarded.
+- **Ordering within one streamer.** A subscriber subscribes to the PubSub before reading status and a
+  replay snapshot. Each event publication gets a per-session sequence number, assigned atomically with
+  history insertion and publication. The snapshot contains retained events plus their inclusive sequence
+  range. After replay, the route skips queued replayable publications within that range. Earlier queued
+  events evicted from history still go out live; likes and viewer counts always go out live. Each matching
+  publication is delivered once, subject to sliding-buffer loss, even when objects or ids are reused.
+  Replay and the remaining live queue each preserve publication order, but replay goes first, so older
+  queued events can follow newer replayed events. Without replay, no queued publications are skipped.
+  `Session.recentEvents` still returns plain events; the additive `replaySnapshot` API and `SessionMessage`
+  Event variant's `seq` expose the boundary to library consumers. Sequence numbers are not sent on the wire.
 - **Slow subscribers.** Each subscriber's PubSub is sliding. A slow socket loses its oldest
   undelivered messages instead of making the server buffer without limit. Library users who
   consume `LiveConnection` directly get backpressure instead (see below).

@@ -14,7 +14,7 @@ import * as Stream from "effect/Stream";
 export const DEMO_USERNAME = "demo";
 
 export type SessionMessage =
-  | { readonly _tag: "Event"; readonly event: LiveEvent }
+  | { readonly _tag: "Event"; readonly event: LiveEvent; readonly seq: number }
   | { readonly _tag: "Status"; readonly status: SessionStatus }
   | { readonly _tag: "Action"; readonly action: FiredAction };
 
@@ -23,9 +23,15 @@ export interface Session {
   readonly status: Effect.Effect<SessionStatus>;
   /** Recent events for replay, oldest first. Excludes likes and viewer counts. */
   readonly recentEvents: Effect.Effect<ReadonlyArray<LiveEvent>>;
+  /** Retained replay events and their inclusive publication range; an empty range has firstSeq > lastSeq. */
+  readonly replaySnapshot: Effect.Effect<{
+    readonly events: ReadonlyArray<LiveEvent>;
+    readonly firstSeq: number;
+    readonly lastSeq: number;
+  }>;
   /**
    * Live events and status changes. Subscribe before reading `status` or
-   * `recentEvents` to avoid missing anything in between. Slow subscribers
+   * `replaySnapshot` to avoid missing anything in between. Slow subscribers
    * lose their oldest undelivered messages rather than buffering forever.
    */
   readonly subscribe: Effect.Effect<PubSub.Subscription<SessionMessage>, never, Scope.Scope>;
@@ -80,7 +86,8 @@ export const make = (
     let streamStartedAt: number | undefined;
     let stats = emptyStats();
     let statsDirty = false;
-    const history: Array<LiveEvent> = [];
+    let lastSeq = 0;
+    const history: Array<{ event: LiveEvent; seq: number }> = [];
 
     const snapshot = (): SessionStatus => ({
       username,
@@ -108,7 +115,8 @@ export const make = (
       });
 
     const handleEvent = (event: LiveEvent) =>
-      Effect.suspend(() => {
+      Effect.sync(() => {
+        const seq = ++lastSeq;
         switch (event.type) {
           case "like":
             stats.likes = Math.max(stats.likes + event.likeCount, event.totalLikeCount);
@@ -136,10 +144,12 @@ export const make = (
         statsDirty = true;
         // Likes and viewer counts are too noisy to be useful as replayed history.
         if (event.type !== "like" && event.type !== "viewers") {
-          history.push(event);
+          history.push({ event, seq });
           if (history.length > historySize) history.shift();
         }
-        return PubSub.publish(pubsub, { _tag: "Event", event });
+        // Sliding publication completes synchronously, including eviction. Keep it in the same block as
+        // sequence assignment and history so a snapshot cannot split a publication.
+        Effect.runSync(PubSub.publish(pubsub, { _tag: "Event", event, seq }));
       }).pipe(Effect.andThen(runActions(event)));
 
     const publishAction = (action: FiredAction) =>
@@ -234,7 +244,12 @@ export const make = (
     return {
       username,
       status: Effect.sync(snapshot),
-      recentEvents: Effect.sync(() => [...history]),
+      recentEvents: Effect.sync(() => history.map(({ event }) => event)),
+      replaySnapshot: Effect.sync(() => ({
+        events: history.map(({ event }) => event),
+        firstSeq: history[0]?.seq ?? lastSeq + 1,
+        lastSeq,
+      })),
       subscribe: PubSub.subscribe(pubsub),
       inject: (event) => Effect.asVoid(handleEvent(event)),
       emitAction: publishAction,

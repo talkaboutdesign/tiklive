@@ -111,6 +111,13 @@ Handlers:
 - `"action"` gets `(action, meta)` when the `actions` option is on: a `FiredAction` with the rule's steps
   filled in. `meta` has `username`. Actions don't reach `"*"`.
 - A handler that throws is logged with `console.error`, and the other handlers still run.
+- With `replay`, a reconnect asks for recent events again, recovering missed events still in history.
+  Within one subscription, the server delivers each publication matching the event filter once, as replay
+  or live, subject to sliding-buffer loss for slow subscribers. Queued events evicted from history during
+  setup, likes, and viewer-count updates still arrive live, after replay; they may be older than the replay.
+  Separate publications remain distinct even if they reuse an object or `msgId`. A replayed event whose
+  `msgId` the client already delivered (the last 1000 replayable ids are remembered) is skipped, so it
+  doesn't show twice. The client never filters live events. Missing, empty, and `"0"` ids are never skipped.
 
 `live.gifts()` returns the gift catalog (`GiftInfo[]`: `giftId`, `name`, `diamondCount`, `imageUrl`,
 `streakable`, sorted by price). It fetches `/api/gifts` from the same server, with the same token. The server

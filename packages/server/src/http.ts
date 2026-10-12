@@ -136,6 +136,9 @@ const MAX_POINTS_BODY = 4 * 1024;
 
 const MEDIA_STATUS = { unsupported: 415, tooLarge: 413, disabled: 503, io: 500 } as const;
 
+/** Makes simulated msgIds unique even when two arrive in the same millisecond (clients dedupe replays by msgId). */
+let simulateSeq = 0;
+
 const json = (body: unknown, status = 200) =>
   HttpServerResponse.jsonUnsafe(body, { status, headers: SECURITY_HEADERS });
 const jsonError = (status: number, message: string) => json({ error: message }, status);
@@ -346,7 +349,9 @@ export const routes = (options: HttpOptions = {}) => {
         }
         const now = Date.now();
         const candidate =
-          body && typeof body === "object" ? { timestamp: now, msgId: `sim-${now}`, ...body } : body;
+          body && typeof body === "object"
+            ? { timestamp: now, msgId: `sim-${now}-${++simulateSeq}`, ...body }
+            : body;
         const decoded = Schema.decodeUnknownExit(LiveEvent)(candidate);
         if (decoded._tag === "Failure") {
           return jsonError(
@@ -742,8 +747,15 @@ export const routes = (options: HttpOptions = {}) => {
                   const session = yield* manager.acquire(username);
                   const updates = yield* session.subscribe;
                   yield* send({ type: "status", username, status: yield* session.status });
+                  // Only publications retained in this snapshot overlap the queue. Earlier queued events
+                  // may have been evicted from history; later publications can reuse an event object or id.
+                  let firstSeq = 1;
+                  let lastSeq = 0;
                   if (replay) {
-                    for (const event of yield* session.recentEvents) {
+                    const snapshot = yield* session.replaySnapshot;
+                    firstSeq = snapshot.firstSeq;
+                    lastSeq = snapshot.lastSeq;
+                    for (const event of snapshot.events) {
                       if (wants(event)) yield* send({ type: "event", username, event, replay: true });
                     }
                   }
@@ -754,6 +766,13 @@ export const routes = (options: HttpOptions = {}) => {
                         yield* send({ type: "status", username, status: message.status });
                         break;
                       case "Event":
+                        if (
+                          message.seq >= firstSeq &&
+                          message.seq <= lastSeq &&
+                          message.event.type !== "like" &&
+                          message.event.type !== "viewers"
+                        )
+                          break;
                         if (wants(message.event))
                           yield* send({ type: "event", username, event: message.event });
                         break;

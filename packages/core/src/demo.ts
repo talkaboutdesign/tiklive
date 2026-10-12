@@ -115,18 +115,24 @@ interface GiftStreak {
  * overlays can be built and tested without anyone being live. Selected with the
  * username `demo`.
  */
+/** Counts runs, so two runs started in the same millisecond still get different msgIds. */
+let demoRuns = 0;
+
 export const demoEvents: Stream.Stream<LiveEvent> = Stream.suspend(() => {
   // Fresh state per subscriber.
   let likes = 0;
   let viewers = 120;
   let seq = 0;
+  // A new run never reuses msgIds from an earlier one. Clients skip replays by msgId, so a
+  // recreated demo session would otherwise have its events hidden after a reconnect.
+  const run = `${Date.now().toString(36)}-${++demoRuns}`;
   let streak: GiftStreak | undefined;
   // msgIds of chat messages not yet deleted, so chatDelete events point at real chat.
   const recentChats: string[] = [];
   // A Rose goal that fills up and then restarts with a new goalId.
   let goal = { id: 1, progress: 0 };
 
-  const base = () => ({ timestamp: Date.now(), msgId: `demo-${++seq}` });
+  const base = () => ({ timestamp: Date.now(), msgId: `demo-${run}-${++seq}` });
 
   const goalEvent = (): LiveEvent => {
     goal.progress = Math.min(GOAL_TARGET, goal.progress + 1 + Math.floor(Math.random() * 6));

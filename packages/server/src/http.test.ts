@@ -4,10 +4,12 @@
  * platform) with fake TikTok connectivity, then talks to it with fetch, raw
  * node:http requests and the global WebSocket.
  */
-import { afterAll, describe, expect, it } from "@effect/vitest";
+import { afterAll, describe, expect, it, vi } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpRouter from "effect/http/HttpRouter";
 import * as HttpServer from "effect/http/HttpServer";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -21,10 +23,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TikTokRequestError, TikTokWeb } from "@tiklive/core";
 import { fakeTikTokWebLayer, fakeWebSocketLayer } from "@tiklive/core/testing";
-import type { SoundSearchResponse } from "@tiklive/contracts";
+import type { LiveEvent, SoundSearchResponse } from "@tiklive/contracts";
 import * as Server from "./server.ts";
+import type * as Session from "./Session.ts";
 import type { ServerOptions } from "./server.ts";
-import { SoundSearch, SoundSearchError } from "./rules/SoundSearch.ts";
+import { routes } from "./http.ts";
+import * as MediaStore from "./rules/MediaStore.ts";
+import * as PointsStore from "./points/PointsStore.ts";
+import * as RuleEngine from "./rules/RuleEngine.ts";
+import * as RulesStore from "./rules/RulesStore.ts";
+import { layer as soundSearchLayer, SoundSearch, SoundSearchError } from "./rules/SoundSearch.ts";
+import { make as makeSessionManager, SessionManager } from "./SessionManager.ts";
 
 const USER = { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" };
 
@@ -55,16 +64,83 @@ interface Base {
   readonly port: number;
 }
 
+/**
+ * Like `serverLayer`, but the first `/ws` subscription to `demo` gets `raced` published, in order, right after
+ * it subscribes, before the route reads the replay snapshot. Retained replayable events are then also in the
+ * subscriber's queue. `Server.layer` builds its own SessionManager, so the routes are composed here.
+ */
+const racingServerLayer = (
+  httpServer: HttpNodeServer,
+  raced: ReadonlyArray<LiveEvent>,
+  options: {
+    readonly beforeSubscribe?: ReadonlyArray<LiveEvent>;
+    readonly onSession?: (session: Session.Session) => void;
+    readonly historySize?: number;
+  } = {},
+) => {
+  const tiktok = fakeTikTok();
+  const rules = RulesStore.layerMemory();
+  const points = PointsStore.layerMemory;
+  const engine = RuleEngine.layer.pipe(Layer.provide(Layer.mergeAll(rules, FetchHttpClient.layer)));
+  let racedOnce = false;
+  const sessions = Layer.effect(
+    SessionManager,
+    Effect.gen(function* () {
+      const manager = yield* makeSessionManager({ session: { historySize: options.historySize ?? 50 } });
+      return SessionManager.of({
+        ...manager,
+        acquire: (username) =>
+          manager.acquire(username).pipe(
+            Effect.tap((session) => Effect.sync(() => options.onSession?.(session))),
+            Effect.map((session) => ({
+              ...session,
+              subscribe: Effect.andThen(
+                Effect.forEach(options.beforeSubscribe ?? [], session.inject, { discard: true }),
+                session.subscribe,
+              ).pipe(
+                Effect.tap(() =>
+                  Effect.suspend(() => {
+                    if (racedOnce) return Effect.void;
+                    racedOnce = true;
+                    return Effect.forEach(raced, session.inject, { discard: true });
+                  }),
+                ),
+              ),
+            })),
+          ),
+      });
+    }),
+  ).pipe(Layer.provide(Layer.mergeAll(tiktok, engine, points)));
+
+  return HttpRouter.serve(routes({ serverVersion: "test" }), { disableLogger: true }).pipe(
+    Layer.provide(
+      Layer.mergeAll(sessions, engine, rules, MediaStore.layerDisabled, points, tiktok, soundSearchLayer()),
+    ),
+    Layer.provideMerge(
+      NodeHttpServer.layer(() => httpServer, {
+        port: 0,
+        host: "127.0.0.1",
+        websocket: { maxPayload: 64 * 1024 },
+      }),
+    ),
+  );
+};
+
 /** Runs `body` against a freshly started server; the server stops when the body finishes. */
 const serve = (
   options: ServerOptions,
   body: (base: Base) => Promise<void>,
   sounds?: Layer.Layer<SoundSearch>,
+) => serveWith((httpServer) => serverLayer(httpServer, options, sounds), body);
+
+const serveWith = (
+  build: (httpServer: HttpNodeServer) => ReturnType<typeof serverLayer>,
+  body: (base: Base) => Promise<void>,
 ) => {
   const httpServer = createServer();
   return Effect.scoped(
     Effect.gen(function* () {
-      const ctx = yield* Layer.build(serverLayer(httpServer, options, sounds));
+      const ctx = yield* Layer.build(build(httpServer));
       // Finalizers run last-in-first-out, so this runs before the server is asked to close. Keep-alive
       // connections left open by fetch would otherwise make shutdown wait (Bun's node:http doesn't
       // close idle sockets on server.close()).
@@ -180,6 +256,9 @@ const simulateFollow = (base: Base, msgId: string) =>
   post(base, "/api/sessions/demo/simulate", { type: "follow", user: USER, msgId });
 
 const eventMessages = (client: Client) => client.messages.filter((m) => m.type === "event");
+
+/** The user's nickname on an event. The racing test gives each event its own, so copies can be counted. */
+const labelOf = (event: Msg): string | undefined => event.user?.nickname;
 
 /** Closes sockets opened by a test, even when the test fails. */
 const closeAll = (clients: Array<Client>) => {
@@ -471,6 +550,39 @@ describe("POST /api/sessions/:username/simulate", () => {
       }
     }),
   );
+
+  it.live("gives each simulated event its own msgId, even when sent back to back", () =>
+    serve({}, async (base) => {
+      await post(base, "/api/sessions/demo");
+      const open: Array<Client> = [];
+      try {
+        const client = await connect(`${base.ws}/ws`, open);
+        client.send({ action: "subscribe", username: "demo" });
+        await client.waitFor((m) => m.type === "status" && m.username === "demo", "status");
+
+        // Freeze the clock so all three events share a millisecond, the case the counter exists for.
+        const now = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+        const ids: string[] = [];
+        try {
+          for (let i = 0; i < 3; i++) {
+            const res = await post(base, "/api/sessions/demo/simulate", { type: "follow", user: USER });
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { event: { msgId: string } };
+            ids.push(body.event.msgId);
+          }
+        } finally {
+          now.mockRestore();
+        }
+
+        expect(new Set(ids).size).toBe(3);
+        for (const msgId of ids) {
+          await client.waitFor((m) => m.type === "event" && m.event.msgId === msgId, "simulated follow");
+        }
+      } finally {
+        closeAll(open);
+      }
+    }),
+  );
 });
 
 describe("WebSocket protocol", () => {
@@ -647,6 +759,243 @@ describe("WebSocket protocol", () => {
           "replayed follow",
         );
         expect(replayed).toMatchObject({ username: "demo", replay: true, event: { type: "follow" } });
+      } finally {
+        closeAll(open);
+      }
+    }),
+  );
+
+  it.live("never sends an event as both replay and live when it lands during subscribe", () => {
+    const now = Date.now();
+    const user = (label: string) => ({ ...USER, nickname: label });
+    // Each event is labelled by its user's nickname. Some have no msgId, or an empty or "0" one.
+    const raced: ReadonlyArray<LiveEvent> = [
+      { type: "follow", timestamp: now, msgId: "raced-follow", user: user("raced-follow") },
+      { type: "follow", timestamp: now, user: user("raced-no-id") },
+      { type: "follow", timestamp: now, msgId: "", user: user("raced-empty-id") },
+      { type: "follow", timestamp: now, msgId: "0", user: user("raced-zero-id") },
+      // Likes are never replayed, so this one is only sent live. It must not end the overlap early.
+      { type: "like", timestamp: now, user: user("raced-like"), likeCount: 1, totalLikeCount: 1 },
+      { type: "follow", timestamp: now, msgId: "raced-last", user: user("raced-last") },
+    ];
+    return serveWith(
+      (httpServer) => racingServerLayer(httpServer, raced),
+      async (base) => {
+        await post(base, "/api/sessions/demo");
+        const open: Array<Client> = [];
+        try {
+          const client = await connect(`${base.ws}/ws?username=demo&replay=1`, open);
+          await client.waitFor(
+            (m) => m.type === "event" && m.replay === true && labelOf(m.event) === "raced-last",
+            "raced-last replayed",
+          );
+
+          await simulateFollow(base, "after-race");
+          const live = await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "after-race",
+            "live follow",
+          );
+          // Messages arrive in order, so a second copy of a raced event would already be here.
+          expect(live.replay).toBeUndefined();
+          const replayed = eventMessages(client)
+            .filter((m) => m.replay === true && String(labelOf(m.event)).startsWith("raced-"))
+            .map((m) => labelOf(m.event));
+          expect(replayed).toEqual(raced.filter((e) => e.type !== "like").map(labelOf));
+          for (const event of raced) {
+            const copies = eventMessages(client).filter((m) => labelOf(m.event) === labelOf(event));
+            expect(copies).toHaveLength(1);
+          }
+        } finally {
+          closeAll(open);
+        }
+      },
+    );
+  });
+
+  it.live("delivers both publications when inject reuses the same object across the snapshot", () => {
+    const event: LiveEvent = { type: "follow", timestamp: Date.now(), user: USER, msgId: "reused-object" };
+    let session: Session.Session;
+    return serveWith(
+      (httpServer) =>
+        racingServerLayer(httpServer, [], {
+          beforeSubscribe: [event],
+          onSession: (value) => {
+            session = value;
+          },
+        }),
+      async (base) => {
+        const open: Array<Client> = [];
+        try {
+          const client = await connect(`${base.ws}/ws?username=demo&replay=1`, open);
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === event.msgId && m.replay === true,
+            "first publication replayed",
+          );
+          await Effect.runPromise(session.inject(event));
+          await simulateFollow(base, "after-reused-object");
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "after-reused-object",
+            "queue drained",
+          );
+          expect(
+            eventMessages(client)
+              .filter((m) => m.event.msgId === event.msgId)
+              .map((m) => m.replay === true),
+          ).toEqual([true, false]);
+        } finally {
+          closeAll(open);
+        }
+      },
+    );
+  });
+
+  it.live("delivers each publication once when the subscribe window exceeds historySize", () => {
+    const raced: ReadonlyArray<LiveEvent> = Array.from({ length: 75 }, (_, i) => ({
+      type: "follow",
+      timestamp: Date.now(),
+      user: USER,
+      msgId: `overflow-${i}`,
+    }));
+    return serveWith(
+      (httpServer) => racingServerLayer(httpServer, raced),
+      async (base) => {
+        const open: Array<Client> = [];
+        try {
+          const client = await connect(`${base.ws}/ws?username=demo&replay=1`, open);
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "overflow-74" && m.replay === true,
+            "history replayed",
+          );
+          await simulateFollow(base, "after-overflow");
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "after-overflow",
+            "queue drained",
+          );
+          const received = eventMessages(client).filter((m) => m.event.msgId?.startsWith("overflow-"));
+          expect(received).toHaveLength(raced.length);
+          for (const [i, event] of raced.entries()) {
+            const copies = received.filter((m) => m.event.msgId === event.msgId);
+            expect(copies).toHaveLength(1);
+            expect(copies[0]!.replay === true).toBe(i >= 25);
+          }
+        } finally {
+          closeAll(open);
+        }
+      },
+    );
+  });
+
+  it.live("delivers likes and viewers inside the snapshot window live with an events filter", () => {
+    const raced: ReadonlyArray<LiveEvent> = [
+      { type: "follow", timestamp: Date.now(), user: USER, msgId: "filtered-follow" },
+      {
+        type: "like",
+        timestamp: Date.now(),
+        user: USER,
+        likeCount: 1,
+        totalLikeCount: 1,
+        msgId: "window-like",
+      },
+      { type: "viewers", timestamp: Date.now(), viewerCount: 1, topViewers: [], msgId: "window-viewers" },
+      { type: "follow", timestamp: Date.now(), user: USER, msgId: "filtered-last" },
+    ];
+    return serveWith(
+      (httpServer) => racingServerLayer(httpServer, raced),
+      async (base) => {
+        const open: Array<Client> = [];
+        try {
+          const client = await connect(`${base.ws}/ws?username=demo&replay=1&events=like,viewers,chat`, open);
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "window-viewers",
+            "viewer update",
+          );
+          await post(base, "/api/sessions/demo/simulate", {
+            type: "chat",
+            user: USER,
+            comment: "done",
+            emotes: [],
+            msgId: "after-filtered-window",
+          });
+          await client.waitFor(
+            (m) => m.type === "event" && m.event.msgId === "after-filtered-window",
+            "queue drained",
+          );
+          expect(
+            eventMessages(client)
+              .filter((m) => raced.some((e) => e.msgId === m.event.msgId))
+              .map((m) => [m.event.msgId, m.replay === true]),
+          ).toEqual([
+            ["window-like", false],
+            ["window-viewers", false],
+          ]);
+        } finally {
+          closeAll(open);
+        }
+      },
+    );
+  });
+
+  for (const query of ["", "&replay=1"]) {
+    it.live(`delivers every queued event with empty history (query: ${query || "no replay"})`, () => {
+      const event: LiveEvent = { type: "follow", timestamp: Date.now(), user: USER, msgId: "empty-history" };
+      return serveWith(
+        (httpServer) => racingServerLayer(httpServer, [event, event], { historySize: 0 }),
+        async (base) => {
+          const open: Array<Client> = [];
+          try {
+            const client = await connect(`${base.ws}/ws?username=demo${query}`, open);
+            await client.waitFor(
+              (m) => m.type === "event" && m.event.msgId === event.msgId,
+              "queued publication",
+            );
+            await simulateFollow(base, "after-empty-history");
+            await client.waitFor(
+              (m) => m.type === "event" && m.event.msgId === "after-empty-history",
+              "queue drained",
+            );
+            expect(
+              eventMessages(client)
+                .filter((m) => m.event.msgId === event.msgId)
+                .map((m) => m.replay === true),
+            ).toEqual([false, false]);
+          } finally {
+            closeAll(open);
+          }
+        },
+      );
+    });
+  }
+
+  it.live("delivers a different event that reuses a replayed msgId", () =>
+    serve({}, async (base) => {
+      await post(base, "/api/sessions/demo");
+      await simulateFollow(base, "dup");
+      const open: Array<Client> = [];
+      try {
+        const client = await connect(`${base.ws}/ws?username=demo&replay=1`, open);
+        await client.waitFor(
+          (m) => m.type === "event" && m.event.msgId === "dup" && m.replay === true,
+          "replayed dup",
+        );
+        // Caller-supplied msgIds aren't unique, so a different event with the same id is a new event, not a copy.
+        await post(base, "/api/sessions/demo/simulate", { type: "follow", user: USER, msgId: "dup" });
+        await post(base, "/api/sessions/demo/simulate", {
+          type: "like",
+          user: USER,
+          likeCount: 1,
+          totalLikeCount: 1,
+          msgId: "dup",
+        });
+        await client.waitFor(
+          (m) => m.type === "event" && m.event.msgId === "dup" && m.event.type === "like",
+          "live like",
+        );
+        const dups = eventMessages(client).filter((m) => m.event.msgId === "dup");
+        expect(dups.map((m) => [m.event.type, m.replay === true])).toEqual([
+          ["follow", true],
+          ["follow", false],
+          ["like", false],
+        ]);
       } finally {
         closeAll(open);
       }

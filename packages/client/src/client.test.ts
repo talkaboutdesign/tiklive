@@ -348,6 +348,126 @@ describe("reconnect", () => {
   });
 });
 
+describe("replay after reconnect", () => {
+  const withId = (msgId: string, event: LiveEvent): LiveEvent => ({ ...event, msgId });
+  const chatId = (msgId: string) => withId(msgId, chat);
+
+  it("does not deliver a replayed event again when its msgId was already delivered", () => {
+    vi.useFakeTimers();
+    const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
+    const onChat = vi.fn();
+    live.on("chat", onChat);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1") });
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m2") });
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(500);
+    lastSocket().open();
+    // The server replays the last events, including the two already shown.
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1"), replay: true });
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m2"), replay: true });
+
+    expect(onChat.mock.calls.map(([e]) => e.msgId)).toEqual(["m1", "m2"]);
+    live.close();
+  });
+
+  it("delivers a replayed event with a new msgId, one missed during the gap", () => {
+    vi.useFakeTimers();
+    const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
+    const onChat = vi.fn();
+    live.on("chat", onChat);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1") });
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(500);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1"), replay: true });
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m2"), replay: true });
+
+    expect(onChat.mock.calls.map(([e]) => e.msgId)).toEqual(["m1", "m2"]);
+    expect(onChat.mock.calls[1]?.[1]).toEqual({ replay: true, username: "alice" });
+    live.close();
+  });
+
+  it("delivers a live event even when its msgId repeats", () => {
+    const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
+    const onAll = vi.fn();
+    live.on("*", onAll);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1"), replay: true });
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1") });
+
+    expect(onAll.mock.calls.map(([e, meta]) => [e.msgId, meta.replay])).toEqual([
+      ["m1", true],
+      ["m1", false],
+    ]);
+    live.close();
+  });
+
+  it("never skips a replayed event whose msgId is '0' or missing", () => {
+    vi.useFakeTimers();
+    const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
+    const onChat = vi.fn();
+    live.on("chat", onChat);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("0") });
+    lastSocket().receive({ type: "event", username: "alice", event: chat });
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(500);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("0"), replay: true });
+    lastSocket().receive({ type: "event", username: "alice", event: chat, replay: true });
+
+    expect(onChat).toHaveBeenCalledTimes(4);
+    live.close();
+  });
+
+  it("keeps a chat's msgId through a long run of likes, which the server never replays", () => {
+    vi.useFakeTimers();
+    const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
+    const onChat = vi.fn();
+    live.on("chat", onChat);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1") });
+    for (let i = 0; i < 1100; i++) {
+      lastSocket().receive({
+        type: "event",
+        username: "alice",
+        event: { type: "like", timestamp: i, user, likeCount: 1, totalLikeCount: i, msgId: `like-${i}` },
+      });
+    }
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(500);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: chatId("m1"), replay: true });
+
+    expect(onChat).toHaveBeenCalledOnce();
+    live.close();
+  });
+
+  it("always delivers events without a msgId, even when repeated", () => {
+    vi.useFakeTimers();
+    const live = new TikLive({ server, replay: true, WebSocket: FakeWebSocket });
+    const onFollow = vi.fn();
+    live.on("follow", onFollow);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: follow });
+
+    lastSocket().drop();
+    vi.advanceTimersByTime(500);
+    lastSocket().open();
+    lastSocket().receive({ type: "event", username: "alice", event: follow, replay: true });
+    lastSocket().receive({ type: "event", username: "alice", event: follow });
+
+    expect(onFollow).toHaveBeenCalledTimes(3);
+    live.close();
+  });
+});
+
 describe("actions", () => {
   const action: FiredAction = {
     id: "a1",

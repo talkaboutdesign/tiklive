@@ -20,8 +20,10 @@ import { decode, type ProtoMessage } from "./wire.ts";
 function common(m: ProtoMessage): { msgId: string; timestamp: number; displayKey: string } {
   const c = m.msg(1);
   const createTime = c?.num(4) ?? 0;
+  const msgId = c?.id(2) ?? "";
   return {
-    msgId: c?.id(2) ?? "",
+    // A zero id means "not set", so the envelope's id (see decodeLiveEvent) can apply instead.
+    msgId: msgId === "0" ? "" : msgId,
     // createTime is ms on most messages but occasionally seconds.
     timestamp: createTime === 0 ? Date.now() : createTime < 1e12 ? createTime * 1000 : createTime,
     displayKey: c?.msg(8)?.str(1) ?? "",
