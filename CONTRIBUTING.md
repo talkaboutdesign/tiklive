@@ -33,8 +33,8 @@ Node 22+ can run the library and tests. CI runs the Node tests on Node 24.
 
    Run `bun run fmt` to fix formatting. Print width is 110.
 
-4. Update docs in the same PR when behavior changes: [README.md](README.md), [docs/PROTOCOL.md](docs/PROTOCOL.md),
-   or [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+4. Update docs in the same PR when behavior changes: the [docs](docs/README.md), mainly
+   [docs/user](docs/user/) for users, [docs/PROTOCOL.md](docs/PROTOCOL.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 5. Open a pull request against `main`. CI runs typecheck, lint, both test suites, and the build.
 
 ### Tests
@@ -75,8 +75,8 @@ For example, a TikTok message that tiklive doesn't normalize yet:
    (`ProtoWriter` in `proto/wire.ts`). Cover the happy path and a message with missing fields.
 4. **Session stats.** If the event should count toward `SessionStats`, update `handleEvent` in
    `packages/server/src/Session.ts` and document the stat in PROTOCOL.md.
-5. **Docs.** Add the type to the event table in `docs/PROTOCOL.md` and the README.
-6. **Client.** The client types come from `@tiklive/contracts`, so `TikLive.on("name", ...)` gets the new type automatically.
+5. **Docs.** Add the type to the event table in `docs/PROTOCOL.md` and in [docs/user/library.md](docs/user/library.md#events).
+6. **Client.** The client types come from `packages/contracts`, so `TikLive.on("name", ...)` gets the new type automatically.
    The dashboard's test buttons and the overlays only change if you want them to use the event.
 
 ## Dependencies
@@ -88,26 +88,10 @@ For example, a TikTok message that tiklive doesn't normalize yet:
 
 ## Releasing
 
-The four `@tiklive/*` packages are versioned together with [Changesets](https://github.com/changesets/changesets).
+Contributors add a changeset in any PR that changes the published `tiklive` package: run `bun run changeset`, pick
+the bump (patch, minor or major), write a one-line summary, and commit the generated `.changeset/*.md` file.
 
-1. In any PR that changes a published package, run `bunx changeset`, pick the bump (patch, minor or major),
-   write a one-line summary, and commit the generated `.changeset/*.md` file.
-2. Changesets pile up on `main` until a maintainer decides to release. Nothing runs automatically. To start a
-   release, run the Release workflow by hand on `main` (Actions → Release → Run workflow, or
-   `gh workflow run release.yml`). It opens or updates a "Release: version packages" PR that bumps versions and
-   writes `CHANGELOG.md` entries.
-3. Merge that PR, then run the Release workflow again. With no pending changesets it **stages** the new versions
-   on npm (trusted publishing, no tokens), then creates a GitHub Release `vX.Y.Z` with the server's changelog as
-   notes. Staged versions aren't installable yet.
-4. A maintainer approves them with 2FA, in dependency order (contracts, core, client, server), either on
-   npmjs.com or with `npm stage list @tiklive/<pkg>` and `npm stage approve <stage-id>`.
-
-Useful commands:
-
-- `bun run release -- --dry-run` packs every package and shows what would be published.
-- `bun run build:binaries` builds a standalone `tiklive` binary for your platform into `dist/bin/` (`--all` for every
-  target). Releases don't ship them yet.
-- Versions with a prerelease suffix (e.g. `0.3.0-next.1`) publish under the `next` dist-tag.
+Releases are run by the maintainer only. See [docs/operations/release.md](docs/operations/release.md).
 
 ## Reporting problems
 

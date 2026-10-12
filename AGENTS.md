@@ -16,16 +16,20 @@ that needs one, even if it would make something easier. If you think one is need
 
 ```
 packages/contracts   Event and wire-protocol schemas (Effect Schema). PROTOCOL_VERSION lives here.
+                     Private: bundled into `tiklive` as `tiklive/contracts`.
 packages/core        TikTok connector: LiveConnection (Stream), TikTokWeb (service), errors,
-                     proto/ decoders, demoEvents, testing.ts fakes
+                     proto/ decoders, demoEvents, testing.ts fakes. Private: bundled as
+                     `tiklive/core` and `tiklive/testing`.
 packages/server      SessionManager, Session, HTTP/WS routes (http.ts), Server.layer,
-                     platform/ (Bun and Node HTTP layers), bin.ts (the `tiklive` CLI)
+                     platform/ (Bun and Node HTTP layers), bin.ts (the `tiklive` CLI).
+                     Publishes to npm as `tiklive`, and bundles the other three packages.
 packages/client      TikLive browser/Node client, built to dist/tiklive.js (served as /tiklive.js).
                      No Effect, no runtime deps.
 apps/desktop         Electron app: runs the server in-process on 127.0.0.1:8080, shows the dashboard,
                      auto-updates via electron-updater (src/updates/). Main + preload bundle to dist-electron/
 examples/overlays    Dashboard and OBS overlays (plain HTML, no build step)
-docs/                PROTOCOL.md, ARCHITECTURE.md
+docs/                Index in docs/README.md. user/ (using tiklive), operations/ (releases),
+                     PROTOCOL.md, ARCHITECTURE.md
 patches/             Patch to @effect/vitest (see Gotchas)
 .repos/              Gitignored reference repos. Read-only, never committed.
 ```
@@ -149,8 +153,9 @@ Patterns used here:
   deciding which behavior is intended. See the "Known gaps" section of ARCHITECTURE.md.
 - **No resume cursor.** tiklive doesn't send the signed `im/fetch` request, so reconnects can drop events.
   Don't add retries that pretend otherwise. Duplicates are de-duplicated by `msgId` (a bounded set of the last 5000).
-- **Package exports are public API.** `@tiklive/server` exports `.`, `./bun` and `./node` (the platform layers);
-  `@tiklive/core` exports `.` and `./testing`. The `@tiklive/source` condition maps them to `src/` for local dev.
+- **Package exports are public API.** `tiklive` exports `.`, `./core`, `./contracts`, `./client`, `./testing`,
+  `./bun`, `./node` (the platform layers) and `./tiklive.js`. The `@tiklive/source` condition maps them to `src/`
+  for local dev.
 - The Bun-only code path: `bin.ts` picks `platform/bun.ts` when `Bun` is defined, otherwise `platform/node.ts`.
   Don't import Bun-only modules from shared code.
 - **Reference repos in `.repos/`** are for reading only. `TikTok-Live-Connector` is AGPL. Both it and
@@ -162,11 +167,12 @@ Patterns used here:
 - **Small and boring.** Fewer moving parts beats cleverness. Don't add a dependency, a service or a new
   abstraction without a concrete need in this repo.
 - **Read-only.** tiklive observes streams. Don't add anything that sends messages or actions to TikTok.
-- **Stable public surface.** The exported names in `@tiklive/core`, `@tiklive/server`, `@tiklive/contracts`,
-  and the client are public. Changing them is a breaking change for library users.
+- **Stable public surface.** The exported names of `tiklive` and its subpaths (`tiklive/core`, `tiklive/client`,
+  `tiklive/contracts`, `tiklive/testing`, `tiklive/bun`, `tiklive/node`) are public. Changing them is a breaking
+  change for library users.
 - **Keep the client dependency-free.** Overlays are plain pages. The client must stay plain TypeScript with no
   imports beyond types.
-- **Docs follow code.** When behavior changes, update the README, PROTOCOL.md or ARCHITECTURE.md in the same change.
+- **Docs follow code.** When behavior changes, update the README, docs/user/, PROTOCOL.md or ARCHITECTURE.md in the same change.
   Check that examples still match the code.
 - **Scope.** Do what was asked. Don't reformat unrelated files, rename exports, or refactor across packages in
   a feature change.

@@ -1,42 +1,41 @@
-# @tiklive/server
+# tiklive
 
-The tiklive server and CLI. It keeps one TikTok connection per streamer, shares its events with any number of
-overlays and apps over WebSocket, and exposes a small REST API. The CLI is `packages/server/src/bin.ts`.
+Open-source TikTok LIVE connector and event server. It turns TikTok's LIVE WebSocket into typed JSON events
+for stream overlays: chats, gifts, likes, follows, shares, joins, subs and viewer counts. No signing service,
+no login, no headless browser.
 
-- **`Server.layer(options)`:** the routes, sessions and TikTok connection, as a layer that needs an HTTP server.
-- **`SessionManager`:** one shared session per streamer. Sessions start on first use and stop after an idle timeout,
-  or when watched with `watch`.
-- **`Session`:** one streamer's connection, stats, status, and recent history.
-- **`routes(options)`:** the HTTP and WebSocket routes, if you want to mount them in your own server.
-
-## Run it
+## Install
 
 ```sh
-npx @tiklive/server --help          # or: bunx @tiklive/server
-npx @tiklive/server --port 8080     # dashboard at http://localhost:8080, WebSocket at ws://localhost:8080/ws
+npx tiklive                      # run the server; dashboard at http://127.0.0.1:8080/
+npm install tiklive effect       # as a library (effect is a peer dependency)
 ```
 
-The `tiklive` bin starts with Node. To run it on Bun, install the package and run `bun node_modules/.bin/tiklive`.
-The package includes the dashboard and example overlays and serves them unless you pass `--static <dir>`.
-From a checkout of this repo, `bun run dev` builds the client and serves `examples/overlays` on :8080.
+Open http://127.0.0.1:8080/ and type `demo` as the username to get fake events. Options: `npx tiklive --help`.
 
-Full CLI flags and the REST and WebSocket API: [the root README](https://github.com/talkaboutdesign/tiklive/blob/main/README.md#server) and
-[docs/PROTOCOL.md](https://github.com/talkaboutdesign/tiklive/blob/main/docs/PROTOCOL.md).
+## Import map
 
-## Embed it
+| Import               | What it is                                                  |
+| -------------------- | ----------------------------------------------------------- |
+| `tiklive`            | The server: `Server.layer`, `SessionManager`, `Session`     |
+| `tiklive/node`       | The server on Node's HTTP server                            |
+| `tiklive/bun`        | The server on Bun's HTTP server                             |
+| `tiklive/core`       | The TikTok connector: `LiveConnection`, `TikTokWeb`, errors |
+| `tiklive/client`     | The `TikLive` client, with no runtime dependencies          |
+| `tiklive/contracts`  | Event and protocol schemas                                  |
+| `tiklive/testing`    | Fakes for tests                                             |
+| `tiklive/tiklive.js` | The browser client bundle, served at `/tiklive.js`          |
 
-`@tiklive/server/bun` and `@tiklive/server/node` export `layer(options)`, the server bound to that runtime's HTTP
-server, and `runMain`:
+Before, these were `@tiklive/server` (now `tiklive`), `@tiklive/server/node` and `@tiklive/server/bun`
+(now `tiklive/node` and `tiklive/bun`), `@tiklive/core` and `@tiklive/core/testing` (now `tiklive/core` and
+`tiklive/testing`), `@tiklive/contracts` and `@tiklive/client` (now `tiklive/contracts` and `tiklive/client`).
 
-```ts
-import { layer, runMain } from "@tiklive/server/node"; // or "@tiklive/server/bun"
-import * as Layer from "effect/Layer";
+## Documentation
 
-runMain(Layer.launch(layer({ port: 8080, sessions: { watch: ["someone"] } })));
-```
+- [README on GitHub](https://github.com/talkaboutdesign/tiklive#readme): overview, quick start, notes
+- [Run the server](https://github.com/talkaboutdesign/tiklive/blob/main/docs/user/server.md): CLI options, tokens, security, embedding
+- [Library](https://github.com/talkaboutdesign/tiklive/blob/main/docs/user/library.md): connector, client, contracts, testing, events
+- [Overlays](https://github.com/talkaboutdesign/tiklive/blob/main/docs/user/overlays.md) and [desktop app](https://github.com/talkaboutdesign/tiklive/blob/main/docs/user/desktop.md)
+- [Wire protocol](https://github.com/talkaboutdesign/tiklive/blob/main/docs/PROTOCOL.md)
 
-`@effect/platform-node` and `@effect/platform-bun` come with this package. For another HTTP server, provide one to
-`Server.layer(options)` yourself, as `src/platform/node.ts` does.
-`ServerOptions.port` and `host` are only read by those platform layers, not by `Server.layer`.
-`/tiklive.js` is served only when you pass `clientBundle`, e.g.
-`fileURLToPath(import.meta.resolve("@tiklive/client/tiklive.js"))` (the CLI does this for you).
+Licensed under MIT.

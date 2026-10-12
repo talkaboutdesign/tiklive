@@ -3,7 +3,7 @@
  * (so OBS browser sources keep working while the app is open) and shows the
  * dashboard it serves in a window.
  */
-import * as NodeServer from "@tiklive/server/node";
+import * as NodeServer from "tiklive/node";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
