@@ -91,6 +91,39 @@ describe("Session with a live streamer", () => {
     ),
   );
 
+  it.live("reports TikTok's stream start time and cover when the room has them", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make("someone");
+        const status = yield* waitForState(session, "live");
+        expect(status.streamStartedAt).toBe(1791770120000);
+        expect(status.coverUrl).toBe("https://example.test/cover.webp");
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            fakeTikTokWebLayer({
+              live: true,
+              streamStartedAt: 1791770120000,
+              coverUrl: "https://example.test/cover.webp",
+            }),
+            fakeWebSocketLayer().layer,
+          ),
+        ),
+      ),
+    ),
+  );
+
+  it.live("omits the stream start time and cover when the room has none", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const session = yield* Session.make("someone");
+        const status = yield* waitForState(session, "live");
+        expect(status.streamStartedAt).toBeUndefined();
+        expect(status.coverUrl).toBeUndefined();
+      }).pipe(Effect.provide(liveLayer())),
+    ),
+  );
+
   it.live("updates running stats from events", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -189,6 +222,7 @@ describe("Session with an offline or missing streamer", () => {
       Core.TikTokWeb.TikTokWeb.of({
         userAgent: "test",
         getTtwid: () => Effect.succeed("ttwid"),
+        getGifts: () => Effect.succeed([]),
         getRoomStatus: (username) =>
           Effect.sync(() => {
             lookups++;
