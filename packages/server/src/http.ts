@@ -44,6 +44,7 @@ import { RuleEngine } from "./rules/RuleEngine.ts";
 import { RulesStore } from "./rules/RulesStore.ts";
 import { cleanQuery, isAllowedSoundUrl, SoundSearch } from "./rules/SoundSearch.ts";
 import { SessionManager } from "./SessionManager.ts";
+import { makePublicationEncoder } from "./encodePublication.ts";
 
 export interface HttpOptions {
   /** Require this token as `Authorization: Bearer` or `?token=` for the API and WebSocket. */
@@ -225,6 +226,7 @@ const decodeHeader = (raw: string | undefined, fallback: string) => {
 };
 
 export const routes = (options: HttpOptions = {}) => {
+  const encodePublication = makePublicationEncoder();
   const maxSubscriptions = options.maxSubscriptionsPerSocket ?? 20;
   const allowedHosts = options.allowedHosts ?? LOOPBACK_HOSTS;
   const allowedOrigins = new Set(options.allowedOrigins ?? []);
@@ -763,7 +765,7 @@ export const routes = (options: HttpOptions = {}) => {
                     const message = yield* PubSub.take(updates);
                     switch (message._tag) {
                       case "Status":
-                        yield* send({ type: "status", username, status: message.status });
+                        yield* writer.write(encodePublication(username, message)).pipe(Effect.ignore);
                         break;
                       case "Event":
                         if (
@@ -774,11 +776,12 @@ export const routes = (options: HttpOptions = {}) => {
                         )
                           break;
                         if (wants(message.event))
-                          yield* send({ type: "event", username, event: message.event });
+                          yield* writer.write(encodePublication(username, message)).pipe(Effect.ignore);
                         break;
                       // Actions skip the `events` filter and are never replayed.
                       case "Action":
-                        if (actions) yield* send({ type: "action", username, action: message.action });
+                        if (actions)
+                          yield* writer.write(encodePublication(username, message)).pipe(Effect.ignore);
                         break;
                     }
                   }
