@@ -1,5 +1,28 @@
 # @tiklive/server
 
+## 0.4.0
+
+### Minor Changes
+
+- [#10](https://github.com/talkaboutdesign/tiklive/pull/10) [`2f4a16c`](https://github.com/talkaboutdesign/tiklive/commit/2f4a16c30804da23c813b4487242dd89f1e3b6f1) Thanks [@talkaboutdesign](https://github.com/talkaboutdesign)! - tiklive is now one npm package, `tiklive`, replacing `@tiklive/server`, `@tiklive/core`, `@tiklive/contracts` and `@tiklive/client`. Install `tiklive` and update imports:
+  
+  | Before                       | After                |
+  | ---------------------------- | -------------------- |
+  | `@tiklive/server`            | `tiklive`            |
+  | `@tiklive/server/node`       | `tiklive/node`       |
+  | `@tiklive/server/bun`        | `tiklive/bun`        |
+  | `@tiklive/core`              | `tiklive/core`       |
+  | `@tiklive/core/testing`      | `tiklive/testing`    |
+  | `@tiklive/contracts`         | `tiklive/contracts`  |
+  | `@tiklive/client`            | `tiklive/client`     |
+  | `@tiklive/client/tiklive.js` | `tiklive/tiklive.js` |
+  
+  The `tiklive` command and the server's HTTP and WebSocket API are unchanged.
+
+### Patch Changes
+
+- [#8](https://github.com/talkaboutdesign/tiklive/pull/8) [`610baa2`](https://github.com/talkaboutdesign/tiklive/commit/610baa2dcf4d545f48147e205826f97f0318b389) Thanks [@talkaboutdesign](https://github.com/talkaboutdesign)! - The dashboard event log and the chat overlay now show gift images. The demo stream uses TikTok's real gift art instead of placeholder icons, and its Galaxy gift has the correct gift ID (11046).
+
 ## 0.3.0
 
 ### Minor Changes
