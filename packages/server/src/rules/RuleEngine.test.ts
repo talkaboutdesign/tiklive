@@ -411,4 +411,23 @@ describe("RuleEngine webhook steps", () => {
       expect(peak).toBe(4);
     }).pipe(Effect.provide(engineWith([hookRule()], held)));
   });
+
+  it.effect("drops webhook requests beyond 100 waiting, so a stuck receiver can't pile them up", () => {
+    const sent: Array<Sent> = [];
+    const gate = Latch.makeUnsafe(false);
+    const stuck = fakeHttp(sent, () => Latch.whenOpen(gate)(Effect.void).pipe(Effect.as(200)));
+    return Effect.gen(function* () {
+      const engine = yield* RuleEngine;
+      for (let i = 0; i < 130; i++) yield* engine.fire("someone", gift());
+      yield* settle;
+      yield* Latch.open(gate);
+      yield* settle;
+      // 100 were accepted (4 sending, 96 waiting); the other 30 were dropped.
+      expect(sent).toHaveLength(100);
+      // Once they finish, new ones are accepted again.
+      yield* engine.fire("someone", gift());
+      yield* settle;
+      expect(sent).toHaveLength(101);
+    }).pipe(Effect.provide(engineWith([hookRule()], stuck)));
+  });
 });

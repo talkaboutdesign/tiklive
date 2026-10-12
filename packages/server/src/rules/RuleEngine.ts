@@ -45,7 +45,16 @@ export class RuleEngine extends Context.Service<
   }
 >()("@tiklive/server/RuleEngine") {}
 
-const describeError = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
+// The kind of failure only. HTTP client error messages can include the full URL, and webhook
+// query strings often hold tokens.
+const describeError = (cause: unknown): string => {
+  if (typeof cause !== "object" || cause === null || !("_tag" in cause)) return "unknown error";
+  const reason = "reason" in cause && typeof cause.reason === "string" ? ` (${cause.reason})` : "";
+  return `${String(cause._tag)}${reason}`;
+};
+
+/** Webhook requests waiting for a slot. Beyond this, new ones are dropped, so a stuck receiver can't pile them up. */
+const WEBHOOK_MAX_PENDING = 100;
 
 /**
  * Rules are read from `RulesStore` on every event, so edits apply immediately. Webhook steps
@@ -58,6 +67,8 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
     const client = yield* HttpClient.HttpClient;
     const scope = yield* Effect.scope;
     const slots = yield* Semaphore.make(WEBHOOK_CONCURRENCY);
+    // Started but not finished (waiting or sending). Changed only inside Effect.sync.
+    let pending = 0;
     // Mutated only inside Effect.try/sync blocks, which run without yielding.
     const states = new Map<string, EngineState>();
     let counter = 0;
@@ -104,7 +115,20 @@ export const layer: Layer.Layer<RuleEngine, never, RulesStore | HttpClient.HttpC
       Effect.gen(function* () {
         for (const step of action.steps) {
           if (step.kind !== "webhook") continue;
-          yield* Effect.forkIn(send(step, webhookPayload(action, eventType, vars)), scope);
+          if (pending >= WEBHOOK_MAX_PENDING) {
+            yield* Effect.logWarning(
+              `Webhook ${redactUrl(step.url)} dropped: ${WEBHOOK_MAX_PENDING} requests are already waiting`,
+            );
+            continue;
+          }
+          pending += 1;
+          const done = Effect.sync(() => {
+            pending -= 1;
+          });
+          yield* Effect.forkIn(
+            send(step, webhookPayload(action, eventType, vars)).pipe(Effect.ensuring(done)),
+            scope,
+          );
         }
       });
 
