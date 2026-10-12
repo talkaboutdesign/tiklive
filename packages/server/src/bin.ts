@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { normalizeUsername } from "@tiklive/contracts";
 import * as Layer from "effect/Layer";
 import { fileURLToPath } from "node:url";

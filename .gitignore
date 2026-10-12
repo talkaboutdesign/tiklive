@@ -46,3 +46,6 @@ Thumbs.db
 
 # Reference repos (synced locally, never committed)
 .repos/
+
+# Copied from the repo root when packing
+packages/*/LICENSE

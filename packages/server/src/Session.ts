@@ -3,11 +3,12 @@
  * restarts, tracks running stats, and fans events out to subscribers.
  */
 import type { LiveEvent, SessionState, SessionStats, SessionStatus } from "@tiklive/contracts";
-import { demoEvents, LiveConnection, type RoomStatus } from "@tiklive/core";
+import { demoEvents, LiveConnection, type RoomStatus, type TikTokWeb } from "@tiklive/core";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import type * as Scope from "effect/Scope";
+import type * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 
 export const DEMO_USERNAME = "demo";
@@ -55,7 +56,10 @@ const emptyStats = (): MutableStats => ({
 });
 
 /** Starts a session that runs until the surrounding scope closes. */
-export const make = (username: string, options: SessionOptions = {}) =>
+export const make = (
+  username: string,
+  options: SessionOptions = {},
+): Effect.Effect<Session, never, Scope.Scope | TikTokWeb.TikTokWeb | Socket.WebSocketConstructor> =>
   Effect.gen(function* () {
     const pollInterval = Duration.fromInputUnsafe(options.pollInterval ?? "30 seconds");
     const historySize = options.historySize ?? 50;

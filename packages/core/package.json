@@ -2,6 +2,18 @@
   "name": "@tiklive/core",
   "version": "0.1.0",
   "description": "Connect to TikTok LIVE and receive typed events. No signing service required.",
+  "keywords": [
+    "livestream",
+    "obs",
+    "overlay",
+    "tiktok",
+    "tiktok-live",
+    "webcast"
+  ],
+  "homepage": "https://github.com/talkaboutdesign/tiklive#readme",
+  "bugs": {
+    "url": "https://github.com/talkaboutdesign/tiklive/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,20 +26,37 @@
     "!src/**/*.test.ts"
   ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts",
-    "./testing": "./src/testing.ts"
+    ".": {
+      "@tiklive/source": "./src/index.ts",
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./testing": {
+      "@tiklive/source": "./src/testing.ts",
+      "types": "./dist/testing.d.mts",
+      "default": "./dist/testing.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
-    "test": "vp test run"
+    "test": "vp test run",
+    "build": "vp pack",
+    "prepack": "cp ../../LICENSE LICENSE"
   },
   "dependencies": {
-    "@tiklive/contracts": "workspace:*",
-    "effect": "catalog:"
+    "@tiklive/contracts": "workspace:*"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.2"
   }
 }

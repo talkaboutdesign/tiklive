@@ -17,6 +17,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": []
+    "types": [],
+    "customConditions": ["@tiklive/source"]
   }
 }

@@ -2,6 +2,18 @@
   "name": "@tiklive/server",
   "version": "0.1.0",
   "description": "Self-hosted TikTok LIVE event server for overlays and apps",
+  "keywords": [
+    "livestream",
+    "obs",
+    "overlay",
+    "tiktok",
+    "tiktok-live",
+    "webcast"
+  ],
+  "homepage": "https://github.com/talkaboutdesign/tiklive#readme",
+  "bugs": {
+    "url": "https://github.com/talkaboutdesign/tiklive/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -9,7 +21,7 @@
     "directory": "packages/server"
   },
   "bin": {
-    "tiklive": "./src/bin.ts"
+    "tiklive": "./dist/bin.mjs"
   },
   "files": [
     "dist",
@@ -17,27 +29,51 @@
     "!src/**/*.test.ts"
   ],
   "type": "module",
+  "sideEffects": [
+    "./dist/bin.mjs",
+    "./src/bin.ts"
+  ],
   "exports": {
-    ".": "./src/index.ts",
-    "./bun": "./src/platform/bun.ts",
-    "./node": "./src/platform/node.ts"
+    ".": {
+      "@tiklive/source": "./src/index.ts",
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./bun": {
+      "@tiklive/source": "./src/platform/bun.ts",
+      "types": "./dist/platform/bun.d.mts",
+      "default": "./dist/platform/bun.mjs"
+    },
+    "./node": {
+      "@tiklive/source": "./src/platform/node.ts",
+      "types": "./dist/platform/node.d.mts",
+      "default": "./dist/platform/node.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p .",
     "test": "vp test run",
-    "dev": "bun --watch src/bin.ts"
+    "dev": "bun --conditions=@tiklive/source --watch src/bin.ts",
+    "build": "vp pack",
+    "prepack": "cp ../../LICENSE LICENSE"
   },
   "dependencies": {
-    "@effect/platform-bun": "catalog:",
-    "@effect/platform-node": "catalog:",
+    "@effect/platform-bun": "^4.0.2",
+    "@effect/platform-node": "^4.0.2",
     "@tiklive/client": "workspace:*",
     "@tiklive/contracts": "workspace:*",
-    "@tiklive/core": "workspace:*",
-    "effect": "catalog:"
+    "@tiklive/core": "workspace:*"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.2"
   }
 }
