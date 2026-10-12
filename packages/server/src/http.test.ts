@@ -19,6 +19,7 @@ import {
 } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TikTokRequestError, TikTokWeb } from "@tiklive/core";
 import { fakeTikTokWebLayer, fakeWebSocketLayer } from "@tiklive/core/testing";
 import * as Server from "./server.ts";
 import type { ServerOptions } from "./server.ts";
@@ -330,6 +331,72 @@ describe("sessions API", () => {
     serve({}, async (base) => {
       expect((await fetch(`${base.http}/api/sessions/nobody`)).status).toBe(404);
       expect((await fetch(`${base.http}/api/sessions/${encodeURIComponent("bad name!")}`)).status).toBe(400);
+    }),
+  );
+});
+
+/**
+ * TikTokWeb that counts gift catalog lookups. With `failFirst`, the first lookup fails
+ * with a TikTok error.
+ */
+const countingGiftLookups = (failFirst = false) => {
+  let calls = 0;
+  const tiktok = Layer.effect(
+    TikTokWeb.TikTokWeb,
+    Effect.gen(function* () {
+      const inner = yield* TikTokWeb.TikTokWeb;
+      return TikTokWeb.TikTokWeb.of({
+        ...inner,
+        getGifts: () =>
+          Effect.suspend(() => {
+            calls++;
+            if (failFirst && calls === 1) {
+              return Effect.fail(new TikTokRequestError({ message: "TikTok is down", status: 503 }));
+            }
+            return inner.getGifts();
+          }),
+      });
+    }),
+  ).pipe(Layer.provide(fakeTikTokWebLayer()));
+  return { tiktok: Layer.mergeAll(tiktok, fakeWebSocketLayer().layer), calls: () => calls };
+};
+
+describe("GET /api/gifts", () => {
+  it.live("returns the gift catalog", () =>
+    serve({}, async (base) => {
+      const res = await fetch(`${base.http}/api/gifts`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { gifts: Array<Msg> };
+      expect(body.gifts.map((gift) => gift.name)).toEqual(["Rose", "Lion"]);
+      expect(body.gifts[0]).toMatchObject({ giftId: 5655, diamondCount: 1, streakable: true });
+    }),
+  );
+
+  it.live("looks up the catalog once and serves later requests from cache", () => {
+    const lookups = countingGiftLookups();
+    return serve({ tiktok: lookups.tiktok }, async (base) => {
+      expect((await fetch(`${base.http}/api/gifts`)).status).toBe(200);
+      expect((await fetch(`${base.http}/api/gifts`)).status).toBe(200);
+      expect(lookups.calls()).toBe(1);
+    });
+  });
+
+  it.live("maps TikTok failures to 502 and retries them on the next request", () => {
+    const lookups = countingGiftLookups(true);
+    return serve({ tiktok: lookups.tiktok }, async (base) => {
+      const failed = await fetch(`${base.http}/api/gifts`);
+      expect(failed.status).toBe(502);
+      expect(await failed.json()).toEqual({ error: "TikTok is down" });
+
+      expect((await fetch(`${base.http}/api/gifts`)).status).toBe(200);
+      expect(lookups.calls()).toBe(2);
+    });
+  });
+
+  it.live("requires the token like the other API routes", () =>
+    serve({ token: "s3cret" }, async (base) => {
+      expect((await fetch(`${base.http}/api/gifts`)).status).toBe(401);
+      expect((await fetch(`${base.http}/api/gifts?token=s3cret`)).status).toBe(200);
     }),
   );
 });

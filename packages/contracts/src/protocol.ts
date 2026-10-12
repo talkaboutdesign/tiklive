@@ -62,10 +62,26 @@ export const SessionStatus = Schema.Struct({
   owner: Schema.optionalKey(RoomOwner),
   /** Unix ms when the current stream connection started. */
   liveSince: Schema.optionalKey(Schema.Finite),
+  /** Unix ms when TikTok says the stream started. Unlike `liveSince`, it doesn't reset when tiklive reconnects. */
+  streamStartedAt: Schema.optionalKey(Schema.Finite),
+  /** Stream cover image URL. */
+  coverUrl: Schema.optionalKey(Schema.String),
   error: Schema.optionalKey(Schema.String),
   stats: SessionStats,
 });
 export type SessionStatus = typeof SessionStatus.Type;
+
+/** A TikTok gift from the public gift catalog. */
+export const GiftInfo = Schema.Struct({
+  giftId: Schema.Finite,
+  name: Schema.String,
+  /** Price in diamonds (coins). */
+  diamondCount: Schema.Finite,
+  imageUrl: Schema.String,
+  /** Streaks: repeated sends are combined into one event until the streak ends. */
+  streakable: Schema.Boolean,
+});
+export type GiftInfo = typeof GiftInfo.Type;
 
 // ---- client → server ----
 

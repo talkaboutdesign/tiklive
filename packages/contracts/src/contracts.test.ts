@@ -1,8 +1,26 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
-import { ClientMessage, LIVE_EVENT_TYPES, LiveEvent, normalizeUsername, Username } from "./index.ts";
+import {
+  ClientMessage,
+  GiftInfo,
+  LIVE_EVENT_TYPES,
+  LiveEvent,
+  normalizeUsername,
+  SessionStatus,
+  Username,
+} from "./index.ts";
 
 const user = { userId: "1", uniqueId: "viewer", nickname: "Viewer", profilePictureUrl: "" };
+const stats = () => ({
+  likes: 0,
+  diamonds: 0,
+  follows: 0,
+  shares: 0,
+  joins: 0,
+  chats: 0,
+  viewers: 0,
+  peakViewers: 0,
+});
 
 describe("contracts", () => {
   it("lists every event type", () => {
@@ -51,6 +69,27 @@ describe("contracts", () => {
       battleScore: () => "battleScore",
     });
     expect(describeEvent({ type: "follow", timestamp: 1, user })).toBe("Viewer followed");
+  });
+
+  it("accepts the optional room details on session status", () => {
+    const status = { username: "alice", state: "live", stats: stats() };
+    const decode = Schema.decodeUnknownSync(SessionStatus);
+    expect(decode(status)).toEqual(status);
+    const detailed = { ...status, streamStartedAt: 1791770120000, coverUrl: "https://img.example/c.webp" };
+    expect(decode(detailed)).toEqual(detailed);
+    expect(() => decode({ ...status, streamStartedAt: "yesterday" })).toThrow();
+  });
+
+  it("decodes gift info", () => {
+    const gift = {
+      giftId: 5655,
+      name: "Rose",
+      diamondCount: 1,
+      imageUrl: "https://img.example/r.webp",
+      streakable: true,
+    };
+    expect(Schema.decodeUnknownSync(GiftInfo)(gift)).toEqual(gift);
+    expect(() => Schema.decodeUnknownSync(GiftInfo)({ ...gift, streakable: "yes" })).toThrow();
   });
 
   it("validates client messages", () => {

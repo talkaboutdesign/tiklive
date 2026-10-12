@@ -27,7 +27,7 @@ LiveConnection.events("someone").pipe(
   - `events(username, options)`: just the normalized `LiveEvent`s.
   - `layer(options)`: the default TikTok and WebSocket layers.
   - Options: `roomId`, `wsHosts`, `includeHistory`, `includeRaw`, `reconnect`, `heartbeatInterval`, `connectTimeout`.
-- **`TikTokWeb`**: the service behind room lookups. `layer()` uses `fetch`. `layerWith()` takes your own `HttpClient`,
+- **`TikTokWeb`**: the service behind room lookups (`getRoomStatus`) and the gift catalog (`getGifts`). `layer()` uses `fetch`. `layerWith()` takes your own `HttpClient`,
   for a proxy.
 - **Errors:** `UserNotFound`, `UserOffline`, `TikTokRequestError`, `SocketOpenFailed`, `ReconnectFailed`, and the
   `ConnectError` union. Each is a tagged error, so you can match with `Effect.catchTag`.

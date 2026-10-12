@@ -1,7 +1,7 @@
 /**
  * Plain HTTPS calls to tiktok.com. None of these require request signing.
  */
-import { normalizeUsername, type RoomOwner } from "@tiklive/contracts";
+import { type GiftInfo, normalizeUsername, type RoomOwner } from "@tiklive/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -21,6 +21,10 @@ export interface RoomStatus {
   readonly title: string;
   readonly viewerCount: number;
   readonly owner: RoomOwner;
+  /** Unix ms when TikTok says the stream started. Only set when TikTok reports a start time. */
+  readonly streamStartedAt?: number;
+  /** Stream cover image URL. Only set when TikTok provides one. */
+  readonly coverUrl?: string;
 }
 
 export interface TikTokWebOptions {
@@ -42,6 +46,8 @@ export class TikTokWeb extends Context.Service<
     readonly getRoomStatus: (
       username: string,
     ) => Effect.Effect<RoomStatus, UserNotFound | TikTokRequestError>;
+    /** The public gift catalog, sorted by price. Not cached here; callers cache. */
+    readonly getGifts: () => Effect.Effect<ReadonlyArray<GiftInfo>, TikTokRequestError>;
   }
 >()("@tiklive/core/TikTokWeb") {}
 
@@ -125,6 +131,7 @@ export const make = (options: TikTokWebOptions = {}) =>
         }
 
         const { user, liveRoom, stats } = body.data;
+        const startTime = liveRoom?.startTime ?? 0;
         return {
           roomId: user.roomId ?? "",
           // liveRoom.status: 2 = live, 4 = ended.
@@ -138,10 +145,44 @@ export const make = (options: TikTokWebOptions = {}) =>
             profilePictureUrl: user.avatarThumb ?? "",
             followerCount: stats?.followerCount ?? 0,
           },
+          ...(startTime > 0 ? { streamStartedAt: startTime * 1000 } : {}),
+          ...(liveRoom?.coverUrl ? { coverUrl: liveRoom.coverUrl } : {}),
         } satisfies RoomStatus;
       });
 
-    return TikTokWeb.of({ userAgent, getTtwid, getRoomStatus });
+    const getGifts = () =>
+      Effect.gen(function* () {
+        const params = new URLSearchParams({
+          aid: "1988",
+          app_name: "tiktok_web",
+          device_platform: "web_pc",
+          browser_language: "en-US",
+        });
+        const res = yield* client
+          .get(`https://webcast.tiktok.com/webcast/gift/list/?${params}`, {
+            headers: headers({ Accept: "application/json" }),
+          })
+          .pipe(Effect.mapError((cause) => requestError(`Gift list failed: ${cause.message}`)));
+        if (res.status < 200 || res.status >= 300) {
+          return yield* requestError(`Gift list failed with HTTP ${res.status}`, {
+            status: res.status,
+            rateLimited: res.status === 429,
+          });
+        }
+        const text = yield* res.text.pipe(
+          Effect.mapError((cause) => requestError(`Gift list failed: ${cause.message}`)),
+        );
+        const body = yield* Effect.try({
+          try: () => JSON.parse(text) as GiftApiResponse | null,
+          catch: () => requestError("Gift list returned invalid JSON", { status: res.status }),
+        });
+        if (body?.status_code) {
+          return yield* requestError(`Gift list failed: ${body.status_code}`);
+        }
+        return parseGiftList(body);
+      });
+
+    return TikTokWeb.of({ userAgent, getTtwid, getRoomStatus, getGifts });
   });
 
 /** TikTokWeb backed by an `HttpClient` you provide (e.g. one routed through a proxy). */
@@ -152,6 +193,40 @@ export const layerWith = (
 /** TikTokWeb using the runtime's global `fetch`. */
 export const layer = (options: TikTokWebOptions = {}): Layer.Layer<TikTokWeb> =>
   layerWith(options).pipe(Layer.provide(FetchHttpClient.layer));
+
+/** Maps the gift catalog response to `GiftInfo`, skipping entries without an id or name. */
+export const parseGiftList = (body: unknown): ReadonlyArray<GiftInfo> => {
+  const gifts = (body as GiftApiResponse | null | undefined)?.data?.gifts;
+  if (!Array.isArray(gifts)) return [];
+  return gifts
+    .flatMap((gift) => {
+      if (typeof gift?.id !== "number" || typeof gift.name !== "string") return [];
+      return [
+        {
+          giftId: gift.id,
+          name: gift.name,
+          diamondCount: gift.diamond_count ?? 0,
+          imageUrl: gift.image?.url_list?.[0] ?? "",
+          // Type 1 gifts are streakable (repeated sends combine until the streak ends).
+          streakable: gift.type === 1,
+        },
+      ];
+    })
+    .sort((a, b) => a.diamondCount - b.diamondCount || a.name.localeCompare(b.name));
+};
+
+interface GiftApiResponse {
+  status_code?: number;
+  data?: {
+    gifts?: Array<{
+      id?: number;
+      name?: string;
+      diamond_count?: number;
+      type?: number;
+      image?: { url_list?: Array<string> };
+    } | null>;
+  };
+}
 
 interface RoomApiResponse {
   statusCode?: number;
@@ -170,6 +245,9 @@ interface RoomApiResponse {
       status?: number;
       title?: string;
       liveRoomStats?: { userCount?: number };
+      /** Unix seconds. */
+      startTime?: number;
+      coverUrl?: string;
     };
   };
 }

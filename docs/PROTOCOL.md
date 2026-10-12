@@ -124,6 +124,7 @@ Responses are JSON. Errors look like `{"error": "message"}`.
 | `PUT` or `POST /api/sessions/:username` | `200 SessionStatus & {watching: true}` | Keeps the session running until `DELETE`. Same as `--watch`                                      |
 | `DELETE /api/sessions/:username`        | `200 {ok: true}`                       | Stops watching. The session still closes after its subscribers leave and the idle timeout passes |
 | `POST /api/sessions/:username/simulate` | `200 {ok: true, event}`                | Injects an event as if TikTok sent it. Needs a running session                                   |
+| `GET /api/gifts`                        | `200 {gifts: GiftInfo[]}`              | TikTok's gift catalog, sorted by price. Cached for an hour. `502` if TikTok's lookup fails       |
 
 Status codes used across these routes:
 
@@ -206,6 +207,8 @@ interface SessionStatus {
   title?: string;
   owner?: { userId; uniqueId; nickname; profilePictureUrl; followerCount };
   liveSince?: number; // unix ms when the current connection started
+  streamStartedAt?: number; // unix ms when TikTok says the stream started. Doesn't reset on reconnect
+  coverUrl?: string; // stream cover image URL
   error?: string; // set in the "error" state
   stats: SessionStats;
 }

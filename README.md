@@ -178,7 +178,7 @@ the HTTP server layer as above. See [packages/server/README.md](packages/server/
 
 - WebSocket: `ws://localhost:8080/ws`. Subscribe to streamers, receive events and status.
 - REST: `/api/health`, `/api/sessions`, `/api/sessions/:username` (`PUT` or `DELETE` to watch and unwatch),
-  and `POST /api/sessions/:username/simulate` to inject a test event.
+  `POST /api/sessions/:username/simulate` to inject a test event, and `/api/gifts` for the gift catalog.
 
 The full message and endpoint reference is in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
