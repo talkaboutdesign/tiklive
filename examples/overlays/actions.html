@@ -524,6 +524,10 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 12px;
       }
+      .textarea.mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+      }
       .range-row {
         display: flex;
         align-items: center;
@@ -907,6 +911,7 @@
               <button type="button" class="btn btn-small" data-add="media">Show image or video</button>
               <button type="button" class="btn btn-small" data-add="speak">Say something</button>
               <button type="button" class="btn btn-small" data-add="obsScene">Switch OBS scene</button>
+              <button type="button" class="btn btn-small" data-add="webhook">Webhook</button>
             </div>
           </section>
 
@@ -1080,6 +1085,7 @@
         media: "Show image or video",
         speak: "Say something",
         obsScene: "Switch OBS scene",
+        webhook: "Webhook",
       };
       const KIND_LABEL = { image: "Image", video: "Video", audio: "Sound" };
       const NEEDS = { audio: "a sound", image: "an image", video: "a video" };
@@ -1158,6 +1164,8 @@
             return "Speak";
           case "obsScene":
             return `Scene “${s.scene}”`;
+          case "webhook":
+            return "Webhook";
           default:
             return "";
         }
@@ -2059,7 +2067,9 @@
               ? mediaFields(step, i)
               : step.kind === "speak"
                 ? speakFields(step, i)
-                : sceneFields(step, i);
+                : step.kind === "webhook"
+                  ? webhookFields(step, i)
+                  : sceneFields(step, i);
         return el("div", { class: "step", "data-index": String(i) }, head, ...body);
       }
 
@@ -2310,6 +2320,72 @@
             "p",
             { class: "hint" },
             "Needs the player's Page permissions set to Advanced access to OBS. Leave the switch-back empty to stay on the new scene.",
+          ),
+        ];
+      }
+
+      // ---- webhook ----
+
+      const WEBHOOK_METHODS = ["POST", "PUT", "GET"];
+
+      function webhookFields(step, i) {
+        const url = el("input", {
+          class: "input",
+          type: "text",
+          inputmode: "url",
+          spellcheck: "false",
+          autocomplete: "off",
+          placeholder: "https://streamer.local:8080/hook",
+          "aria-label": "Webhook address",
+          "data-key": `s${i}.url`,
+        });
+        url.value = step.url ?? "";
+        url.oninput = () => (step.url = url.value);
+
+        const method = el(
+          "select",
+          { class: "select", "aria-label": "Method", "data-key": `s${i}.method` },
+          ...WEBHOOK_METHODS.map((name) => el("option", { value: name }, name)),
+        );
+        method.value = step.method ?? "POST";
+
+        const body = el("textarea", {
+          class: "textarea mono",
+          rows: "4",
+          maxlength: "4000",
+          spellcheck: "false",
+          placeholder: '{"text": "{nickname} followed"}',
+          "aria-label": "Body",
+          "data-key": `s${i}.body`,
+        });
+        body.value = step.body ?? "";
+        body.oninput = () => {
+          if (body.value) step.body = body.value;
+          else delete step.body;
+        };
+        // GET has no body, so the field is hidden for it. The text stays in the draft.
+        const bodyBox = el(
+          "div",
+          { class: "fields" },
+          el("label", { class: "field-label" }, "Body (optional)", body),
+          el("p", { class: "field-caption" }, "Leave it empty to send a JSON description of the action."),
+          varChips(body),
+          el("p", { class: "field-error", "data-error": `s${i}.body` }),
+        );
+        bodyBox.hidden = step.method === "GET";
+        method.onchange = () => {
+          step.method = method.value;
+          bodyBox.hidden = method.value === "GET";
+        };
+
+        return [
+          field("Address", url, `s${i}.url`),
+          el("div", { class: "fields" }, el("label", { class: "field-label" }, "Method", method)),
+          bodyBox,
+          el(
+            "p",
+            { class: "hint" },
+            "tiklive's server sends this request when the action runs. Use it for Streamer.bot, Minecraft plugins, Home Assistant or Zapier.",
           ),
         ];
       }
@@ -3129,6 +3205,13 @@
               add(`s${i}.revert`, "Enter 1 to 3600 seconds.");
             }
             break;
+          case "webhook": {
+            const url = (s.url ?? "").trim();
+            if (!url) add(`s${i}.url`, "Enter the address to call.");
+            else if (!isHttpLink(url)) add(`s${i}.url`, "Use an http:// or https:// address.");
+            if (longText(s.body, 4000)) add(`s${i}.body`, "Keep the body to 4000 characters.");
+            break;
+          }
         }
       }
 
@@ -3225,6 +3308,13 @@
             const out = { kind: "speak", text: (s.text ?? "").trim() };
             if (s.voice) out.voice = s.voice;
             if (s.rate !== undefined) out.rate = s.rate;
+            return out;
+          }
+          case "webhook": {
+            // POST and an empty body are the defaults, so they're left out.
+            const out = { kind: "webhook", url: (s.url ?? "").trim() };
+            if (s.method && s.method !== "POST") out.method = s.method;
+            if (s.method !== "GET" && (s.body ?? "").trim()) out.body = s.body;
             return out;
           }
           default: {

@@ -4,6 +4,7 @@
  */
 import { LiveConnection, type TikTokWeb } from "@tiklive/core";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpRouter from "effect/http/HttpRouter";
 import { type HttpOptions, routes } from "./http.ts";
 import * as MediaStore from "./rules/MediaStore.ts";
@@ -42,7 +43,8 @@ export const layer = (
   const rules = options.dataDir ? RulesStore.layerFile(options.dataDir) : RulesStore.layerMemory();
   const media = options.dataDir ? MediaStore.layerFile(options.dataDir) : MediaStore.layerDisabled;
   // One engine instance, shared by the sessions and the router (layers are memoized by identity).
-  const engine = RuleEngine.layer.pipe(Layer.provide(rules));
+  // The engine sends webhook steps with the global fetch.
+  const engine = RuleEngine.layer.pipe(Layer.provide(Layer.mergeAll(rules, FetchHttpClient.layer)));
   const sessions = SessionManager.layer(options.sessions).pipe(Layer.provide(Layer.mergeAll(tiktok, engine)));
 
   return HttpRouter.serve(routes(options), { disableLogger: !options.logRequests }).pipe(

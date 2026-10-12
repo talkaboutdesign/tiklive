@@ -101,6 +101,8 @@ from a queue, one after another.
   and a speed.
 - **Switch OBS scene.** Enter the scene name. Set **Switch back after** a number of seconds to return to the
   previous scene, or leave it empty to stay. This needs the Page permissions from step 1.
+- **Webhook.** Sends an HTTP request to another app or device when the action runs. See
+  [Webhook steps](#webhook-steps) below.
 
 ### Pick a sound
 
@@ -142,6 +144,41 @@ These are filled in when the action fires. Anything else you type is left as it 
 | `{months}`    | The subscriber's month count                                                 | Subscribe     |
 | `{followers}` | The viewer's follower count, such as 1200. Empty when TikTok doesn't send it | Every trigger |
 
+### Webhook steps
+
+A **Webhook** step sends an HTTP request when the action runs. Use it to start something outside tiklive:
+Streamer.bot, a Minecraft plugin, Home Assistant or Zapier.
+
+- **Address.** An `http://` or `https://` address. Placeholders work in the path and the query, such as
+  `?viewer={nickname}`. Their values are percent-encoded, so a name with spaces or `&` stays in its own value.
+  Use placeholders in the path or query, not in the host.
+- **Method.** `POST` (the default), `PUT` or `GET`.
+- **Body.** For `POST` and `PUT` only. Leave it empty to send a JSON description of the action: the rule's
+  `id` and `name`, the event type, the viewer (`userId`, `uniqueId`, `nickname`), every placeholder's value under
+  `vars`, and a `timestamp`. If you type a body, it's sent as you wrote it. It's sent as JSON when it parses as
+  JSON, and as plain text otherwise. A body is up to 4,000 characters, and placeholders work in it too.
+
+The request comes from the computer running tiklive, not from OBS or the browser. So a LAN address such as
+`http://192.168.1.20:8080/...` works, and `127.0.0.1` means the computer running tiklive. A webhook step can
+run next to the other steps; if it fails or takes longer than 5 seconds, the rest of the action still plays.
+tiklive doesn't retry, and it writes a warning to the server log. At most four requests run at once.
+
+**Home Assistant.** Create an automation that starts from the **Webhook** trigger, with the webhook ID
+`tiklive-gift`. Then set the step to:
+
+- Address: `http://homeassistant.local:8123/api/webhook/tiklive-gift`
+- Method: `POST`
+- Body: `{"viewer": "{nickname}", "gift": "{giftName}", "count": "{count}"}`
+
+Home Assistant webhooks don't need a login, so anyone on your network who knows the ID can trigger them. Pick
+an ID that's hard to guess.
+
+**Streamer.bot.** Turn on Streamer.bot's HTTP server (its default port is 7474) and send a `POST` to its
+`/DoAction` endpoint, with the body in the format Streamer.bot's HTTP documentation gives for the action you
+want to run. Check that documentation for the exact fields, since they depend on your version.
+
+Rules are stored on this computer, and the address and body are saved with them.
+
 ### Cooldowns
 
 - **Cooldown** stops the action firing again for anyone for that many seconds. Use it so a busy gift
@@ -161,7 +198,8 @@ Click an action's name to edit it. The **⋯** menu on each row has **Test**, **
 
 - **Test**, in an action's **⋯** menu, sends a fake firing to the player in OBS. The page shows "Sent to the player".
   The Activity list on the page shows the firing with a **test** badge. This needs your stream session to
-  be running, which the Actions page keeps open for you while it's loaded.
+  be running, which the Actions page keeps open for you while it's loaded. Webhook steps send their requests
+  too, so you can check a webhook with a real call. The sample viewer is "Test User".
 - The test buttons on the dashboard also trigger your actions.
 
 If nothing plays, check that the player is in OBS and that its source is visible, and that you're on the
@@ -201,6 +239,7 @@ Actions. The first time, the desktop app asks for microphone access. If you said
 - Uploads are up to 25 MB each.
 - Images: PNG, JPG, GIF, WebP. Video: MP4, WebM. Sound: MP3, WAV, OGG, M4A. SVG and other types aren't allowed.
 - A rule can have up to 10 steps, and the server keeps up to 200 rules.
+- A webhook's address is up to 2,048 characters and its body up to 4,000. Each request times out after 5 seconds.
 - Step times: media stays on screen for up to 120 seconds. A scene switch can revert after up to an hour.
 - A step can also use a link to a file on the web (http or https) instead of an upload. The file has to stay
   online for the action to keep working.

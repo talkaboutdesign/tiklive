@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { FiredAction, LiveEvent, Rule } from "@tiklive/contracts";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
@@ -25,7 +26,11 @@ const managerWithRulesLayer = (rules: ReadonlyArray<Rule>) =>
       Layer.mergeAll(
         fakeTikTokWebLayer({ live: true }),
         fakeWebSocketLayer().layer,
-        RuleEngine.layer.pipe(Layer.provide(RulesStore.layerMemory({ revision: 0, rules }))),
+        RuleEngine.layer.pipe(
+          Layer.provide(
+            Layer.mergeAll(RulesStore.layerMemory({ revision: 0, rules }), FetchHttpClient.layer),
+          ),
+        ),
       ),
     ),
   );

@@ -665,3 +665,82 @@ describe("evaluate: {followers} template variable", () => {
     expect(texts(firings)).toEqual([["|"]]);
   });
 });
+
+describe("evaluate: webhook steps", () => {
+  const hook = (url: string, body?: string): RuleStep => ({
+    kind: "webhook",
+    url,
+    ...(body === undefined ? {} : { body }),
+  });
+
+  it("URL-encodes values substituted into the url, so they can't add a path, query or fragment", () => {
+    const sneaky = gift({ user: { ...USER, nickname: "Ann & Bo/x?#" } });
+    const firings = evaluate(
+      [
+        rule(
+          "w",
+          { type: "gift" },
+          { steps: [hook("https://h.example/{username}?n={nickname}&g={giftName}")] },
+        ),
+      ],
+      emptyState(),
+      sneaky,
+      NOW,
+    );
+    expect(firings[0]?.steps).toEqual([
+      { kind: "webhook", url: "https://h.example/viewer?n=Ann%20%26%20Bo%2Fx%3F%23&g=Rose" },
+    ]);
+  });
+
+  it("fills the body with the same variables, without encoding them or cutting it at 300 characters", () => {
+    const firings = evaluate(
+      [
+        rule(
+          "w",
+          { type: "chat", match: "any" },
+          { steps: [hook("https://h.example/", '{"said":"{comment}"}')] },
+        ),
+      ],
+      emptyState(),
+      chat("a & b"),
+      NOW,
+    );
+    expect(firings[0]?.steps).toEqual([
+      { kind: "webhook", url: "https://h.example/", body: '{"said":"a & b"}' },
+    ]);
+
+    const padded = "x".repeat(350);
+    const kept = evaluate(
+      [rule("w", { type: "gift" }, { steps: [hook("https://h.example/", padded)] })],
+      emptyState(),
+      gift(),
+      NOW,
+    );
+    expect(kept[0]?.steps).toEqual([{ kind: "webhook", url: "https://h.example/", body: padded }]);
+  });
+
+  it("keeps unknown placeholders as typed, and keeps the webhook even when its values are empty", () => {
+    const firings = evaluate(
+      [rule("w", { type: "follow" }, { steps: [hook("https://h.example/{nope}/{comment}")] })],
+      emptyState(),
+      plain("follow"),
+      NOW,
+    );
+    expect(firings[0]?.steps).toEqual([{ kind: "webhook", url: "https://h.example/{nope}/" }]);
+  });
+
+  it("records the event type and the template values on each firing, for the default payload", () => {
+    const [firing] = evaluate([rule("g", { type: "gift" })], emptyState(), gift(), NOW);
+    expect(firing?.eventType).toBe("gift");
+    expect(firing?.vars).toMatchObject({ nickname: "Viewer", giftName: "Rose", count: "1", comment: "" });
+
+    const likes = evaluate(
+      [rule("l", { type: "likes", every: 10 }, { steps: [say("{likes}")] })],
+      emptyState(),
+      like(10),
+      NOW,
+    );
+    expect(likes[0]?.eventType).toBe("like");
+    expect(likes[0]?.vars.likes).toBe("10");
+  });
+});
