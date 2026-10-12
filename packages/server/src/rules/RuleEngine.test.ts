@@ -14,7 +14,7 @@ import * as Latch from "effect/Latch";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as TestClock from "effect/testing/TestClock";
-import { templateVars } from "./evaluate.ts";
+import { renderRule, templateVars } from "./evaluate.ts";
 import { layer as ruleEngineLayer, RuleEngine } from "./RuleEngine.ts";
 import * as RulesStore from "./RulesStore.ts";
 import { webhookPayload, webhookRequest } from "./webhook.ts";
@@ -376,6 +376,56 @@ describe("RuleEngine webhook steps", () => {
     },
   );
 
+  for (const path of ["fire", "Test"] as const) {
+    const hostile = 'x","action":"evil';
+    const cases = [
+      {
+        template: "[1{comment}]",
+        event: chatEvent(hostile),
+        contentType: "text/plain",
+        body: `[1${hostile}]`,
+      },
+      {
+        template: "[-{comment}]",
+        event: chatEvent(hostile),
+        contentType: "text/plain",
+        body: `[-${hostile}]`,
+      },
+      { template: '{"count":0{count}}', event: gift(), contentType: "text/plain", body: '{"count":01}' },
+      { template: '{"count":{count}}', event: gift(), contentType: "application/json", body: '{"count":1}' },
+      { template: "[{count}, {coins}]", event: gift(), contentType: "application/json", body: "[1, 1]" },
+      {
+        template: '{"a":{comment}}',
+        event: chatEvent(hostile),
+        contentType: "application/json",
+        body: JSON.stringify({ a: hostile }),
+      },
+      ...["123", "true", "null"].map((body) => ({
+        template: body,
+        event: gift(),
+        contentType: "application/json",
+        body,
+      })),
+    ];
+    for (const { template, event, contentType, body } of cases) {
+      it.effect(`${path}: requires whole-value bare placeholders in ${template}`, () => {
+        const sent: Array<Sent> = [];
+        const rule = giftRule({
+          trigger:
+            event.type === "chat" ? { type: "chat", match: "contains", text: hostile } : { type: "gift" },
+          steps: [{ kind: "webhook", url: HOOK, body: template }],
+        });
+        return Effect.gen(function* () {
+          const engine = yield* RuleEngine;
+          if (path === "fire") yield* engine.fire("someone", event);
+          else yield* engine.test("someone", rule.id);
+          yield* settle;
+          expect(sent).toMatchObject([{ contentType, body }]);
+        }).pipe(Effect.provide(engineWith([rule], fakeHttp(sent))));
+      });
+    }
+  }
+
   it.effect("sends the same kinds of body on the Test button, with the sample's values", () => {
     const sent: Array<Sent> = [];
     const testRule = (id: string, text: string, body: string): Rule => ({
@@ -536,7 +586,7 @@ describe("RuleEngine webhook steps", () => {
 });
 
 describe("webhookRequest", () => {
-  it("sends a step that wasn't rendered as its body is typed, as JSON only when the template is", () => {
+  it("sends unregistered explicit bodies as text without classifying their contents", () => {
     const payload = webhookPayload(
       { id: "x", ruleId: "r", ruleName: "r", timestamp: 0, steps: [] },
       "chat",
@@ -547,8 +597,26 @@ describe("webhookRequest", () => {
       const sent = request.body;
       return sent._tag === "Uint8Array" ? sent.contentType : undefined;
     };
-    expect(contentTypeOf('{"viewer":"{nickname}"}')).toBe("application/json");
-    expect(contentTypeOf("123")).toBe("application/json");
+    expect(contentTypeOf('{"viewer":"{nickname}"}')).toBe("text/plain");
+    expect(contentTypeOf("123")).toBe("text/plain");
     expect(contentTypeOf("{nickname} sent a gift")).toBe("text/plain");
   });
+
+  it.each(["spread", "structuredClone"] as const)(
+    "sends a %s copy of a rendered hostile step as text",
+    (copy) => {
+      const hostile = '{"action":"evil"}';
+      const event = chatEvent(hostile);
+      const { steps, vars } = renderRule(chatRule("{comment}"), event);
+      const step = steps[0];
+      if (step?.kind !== "webhook") throw new Error("Expected a rendered webhook step");
+      const payload = webhookPayload(
+        { id: "x", ruleId: "r", ruleName: "r", timestamp: 0, steps },
+        "chat",
+        vars,
+      );
+      const request = webhookRequest(copy === "spread" ? { ...step } : structuredClone(step), payload);
+      expect(request.body).toMatchObject({ contentType: "text/plain", text: hostile });
+    },
+  );
 });

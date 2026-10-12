@@ -162,9 +162,10 @@ Streamer.bot, a Minecraft plugin, Home Assistant or Zapier.
   `id` and `name`, the event type, the viewer (`userId`, `uniqueId`, `nickname`), every placeholder's value under
   `vars`, and a `timestamp`. If you type a body, it's sent with its placeholders filled in, up to 4,000
   characters. It's sent as JSON when it's a JSON object or array with placeholders in place of values, inside
-  quotes or bare for numbers. Values in a JSON body are escaped, so a viewer's name or comment can't change its
-  fields, and placeholders in key names aren't filled. A placeholder outside quotes becomes a number when its
-  value is one, and a quoted string otherwise. Any other body is plain text, sent exactly as you wrote it with
+  quotes or bare as whole values. Partial values such as `[1{comment}]` are plain text. Values in a JSON body
+  are escaped, so a viewer's name or comment can't change its fields, and placeholders in key names aren't filled.
+  A placeholder outside quotes becomes a number when its value is one, and a quoted string otherwise. Any
+  other body is plain text, sent exactly as you wrote it with
   values inserted as-is. A body with no placeholders is sent as JSON if it parses.
 
 The request comes from the computer running tiklive, not from OBS or the browser. So a LAN address such as

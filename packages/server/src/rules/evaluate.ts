@@ -116,14 +116,14 @@ const hasKnownPlaceholder = (template: string): boolean =>
  * How a webhook body is sent. It's decided from the template, before any viewer value is in it, so
  * what a viewer types can't change the request's type. With no known placeholders, it's JSON when it
  * parses, so `123` is JSON, as it always was. With placeholders, it's JSON only when the body is an
- * object or array once each bare placeholder counts as a number. Placeholders inside a string are
- * already valid there, so string literals are kept as typed. So `{"viewer":"{nickname}"}` is JSON, and
+ * object or array once each bare placeholder counts as `null` (a whole JSON value). Placeholders inside
+ * a string are already valid there, so string literals are kept as typed. So `{"viewer":"{nickname}"}` is JSON, and
  * `{nickname} sent a gift`, `[Alert] {comment}` and a lone `{comment}` are text.
  */
 export const bodyMode = (template: string): BodyMode => {
   if (!hasKnownPlaceholder(template)) return parseJson(template) === undefined ? "text" : "json";
   const probe = template.replace(BODY_TOKEN, (token: string, part: string, colon: string | undefined) =>
-    part.startsWith('"') || !isTemplateVariable(part.slice(1, -1)) ? token : `0${colon ?? ""}`,
+    part.startsWith('"') || !isTemplateVariable(part.slice(1, -1)) ? token : `null${colon ?? ""}`,
   );
   const value = parseJson(probe);
   return typeof value === "object" && value !== null ? "json" : "text";

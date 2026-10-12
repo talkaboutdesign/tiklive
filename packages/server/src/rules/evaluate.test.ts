@@ -711,6 +711,10 @@ describe("bodyMode: decided by the template, not by the filled text", () => {
     ['{"viewer":"{nickname}"}', "json"],
     ['{"count":{count}}', "json"],
     ["[{count}]", "json"],
+    ["[{count}, {coins}]", "json"],
+    ['{"a":{comment}}', "json"],
+    ["[1{comment}]", "text"],
+    ["[-{comment}]", "text"],
     ['{"count":{count},"action":"safe","said":"{comment}"}', "json"],
     ['{"count":0{count}}', "text"],
     ["[Alert] {comment}", "text"],
@@ -724,6 +728,7 @@ describe("bodyMode: decided by the template, not by the filled text", () => {
     // With no known placeholder, a body is JSON when it parses, as it always was.
     ["123", "json"],
     ["true", "json"],
+    ["null", "json"],
     ['{"a":1}', "json"],
     ["hello", "text"],
     ["", "text"],
