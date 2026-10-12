@@ -1011,7 +1011,7 @@
       ];
       // Variables offered in "Say something", per trigger (see TEMPLATE_VARIABLES in contracts).
       const VARS_BY_TRIGGER = {
-        always: ["nickname", "username", "followers"],
+        always: ["nickname", "username", "followers", "points"],
         gift: ["giftName", "count", "coins"],
         chat: ["comment"],
         likes: ["likes"],
@@ -1027,6 +1027,7 @@
         likes: "1000",
         months: "1",
         followers: "1200",
+        points: "100",
       };
       // One-click starting points. Saved as is from the empty list, or filled into the editor for a new action.
       const PRESETS = [
@@ -1061,6 +1062,12 @@
           name: "New follower",
           trigger: { type: "follow" },
           steps: [{ kind: "speak", text: "Thanks for the follow, {nickname}!" }],
+        },
+        {
+          name: "Answer !points",
+          trigger: { type: "chat", match: "command", text: "!points" },
+          steps: [{ kind: "speak", text: "{nickname}, you have {points} points!" }],
+          userCooldown: 30,
         },
         {
           name: "!hello chat command",

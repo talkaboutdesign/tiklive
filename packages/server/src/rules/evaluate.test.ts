@@ -666,6 +666,46 @@ describe("evaluate: {followers} template variable", () => {
   });
 });
 
+describe("evaluate: {points} and other values from the caller", () => {
+  it("fills {points} from the values passed in", () => {
+    const firings = evaluate(
+      [
+        rule(
+          "c",
+          { type: "chat", match: "command", text: "!points" },
+          { steps: [say("{nickname}: {points}")] },
+        ),
+      ],
+      emptyState(),
+      chat("!points"),
+      NOW,
+      { points: "1240" },
+    );
+    expect(texts(firings)).toEqual([["Viewer: 1240"]]);
+  });
+
+  it("renders {points} as empty when the caller doesn't know them", () => {
+    const firings = evaluate(
+      [rule("c", { type: "chat", match: "any" }, { steps: [say("{points}|")] })],
+      emptyState(),
+      chat("hi"),
+      NOW,
+    );
+    expect(texts(firings)).toEqual([["|"]]);
+  });
+
+  it("passes them to like milestones too, alongside {likes}", () => {
+    const firings = evaluate(
+      [rule("l", { type: "likes", every: 10 }, { steps: [say("{likes} likes, {points} points")] })],
+      emptyState(),
+      like(10),
+      NOW,
+      { points: "7" },
+    );
+    expect(texts(firings)).toEqual([["10 likes, 7 points"]]);
+  });
+});
+
 describe("evaluate: webhook steps", () => {
   const hook = (url: string, body?: string): RuleStep => ({
     kind: "webhook",

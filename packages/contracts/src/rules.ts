@@ -218,6 +218,7 @@ export const TEMPLATE_VARIABLES = [
   "likes",
   "months",
   "followers",
+  "points",
 ] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];
 

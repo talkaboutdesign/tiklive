@@ -274,6 +274,7 @@ describe("RuleEngine webhook steps", () => {
               likes: "",
               months: "",
               followers: "",
+              points: "",
             },
             timestamp: now,
           }),
