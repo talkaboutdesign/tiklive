@@ -86,6 +86,23 @@ For example, a TikTok message that tiklive doesn't normalize yet:
 - Keep the browser client dependency-free. Don't add a runtime dependency to `packages/client`.
 - Don't add a third-party signing service, a headless browser, or a TikTok login. These are out of scope.
 
+## Releasing
+
+The four `@tiklive/*` packages are versioned together with [Changesets](https://github.com/changesets/changesets).
+
+1. In any PR that changes a published package, run `bunx changeset`, pick the bump (patch, minor or major),
+   write a one-line summary, and commit the generated `.changeset/*.md` file.
+2. On every push to `main`, the Release workflow opens or updates a "Release: version packages" PR that bumps
+   versions and writes `CHANGELOG.md` entries.
+3. Merging that PR publishes the new versions to npm (trusted publishing, no tokens) and creates a GitHub
+   Release `vX.Y.Z` with standalone `tiklive` binaries for macOS, Linux and Windows.
+
+Useful commands:
+
+- `bun run release -- --dry-run` packs every package and shows what would be published.
+- `bun run build:binaries` builds the standalone binary for your platform into `dist/bin/` (`--all` for every target).
+- Versions with a prerelease suffix (e.g. `0.3.0-next.1`) publish under the `next` dist-tag.
+
 ## Reporting problems
 
 Open a GitHub issue. Include the tiklive version (`tiklive --version`), the runtime (Bun or Node and its version),

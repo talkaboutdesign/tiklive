@@ -1,6 +1,6 @@
 {
   "name": "@tiklive/server",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Self-hosted TikTok LIVE event server for overlays and apps",
   "keywords": [
     "livestream",
@@ -54,7 +54,7 @@
     "access": "public"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p .",
+    "typecheck": "bun ../../scripts/embed-assets.ts --ensure && tsc --noEmit -p .",
     "test": "vp test run",
     "dev": "bun --conditions=@tiklive/source --watch src/bin.ts",
     "build": "vp pack",

@@ -27,9 +27,15 @@
     "test:node": "vp test run",
     "lint": "vp lint",
     "fmt": "vp fmt",
-    "check": "vp check && bun run typecheck"
+    "check": "vp check && bun run typecheck",
+    "changeset": "changeset",
+    "version-packages": "changeset version && bun install --lockfile-only",
+    "release": "bun scripts/release.ts",
+    "build:binaries": "bun scripts/build-binaries.ts"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
