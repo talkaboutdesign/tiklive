@@ -249,4 +249,4 @@ repo map and conventions.
 
 ## License
 
-[MIT](LICENSE). Copyright 2026 Maksim Petriv.
+[MIT](LICENSE). Copyright 2026 Talkabout Design LLC.
