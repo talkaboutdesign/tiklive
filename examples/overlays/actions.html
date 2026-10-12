@@ -2252,14 +2252,36 @@
         ];
       }
 
+      // macOS ships joke voices (Bubbles, Zarvox, ...) and 1980s robot voices (Fred, Ralph, ...).
+      // Nobody wants them reading chat, so the list hides them.
+      const NOVELTY_VOICES = new Set([
+        ...["Albert", "Bad News", "Bahh", "Bells", "Boing", "Bubbles", "Cellos", "Deranged", "Fred"],
+        ...["Good News", "Hysterical", "Jester", "Junior", "Kathy", "Organ", "Pipe Organ", "Ralph"],
+        ...["Superstar", "Trinoids", "Whisper", "Wobble", "Zarvox"],
+      ]);
+
+      // Voices in the page's language first, then the rest, each sorted by name.
+      function listVoices() {
+        const lang = (navigator.language || "en").slice(0, 2).toLowerCase();
+        const voices = (window.speechSynthesis?.getVoices?.() ?? []).filter(
+          (v) => !NOVELTY_VOICES.has(v.name.replace(/ \(.*\)$/, "")),
+        );
+        const mine = (v) => v.lang.slice(0, 2).toLowerCase() === lang;
+        const byName = (a, b) => a.name.localeCompare(b.name);
+        return [...voices.filter(mine).sort(byName), ...voices.filter((v) => !mine(v)).sort(byName)];
+      }
+
       function fillVoices(select, current) {
-        const names = window.speechSynthesis?.getVoices?.().map((v) => v.name) ?? [];
+        const voices = listVoices();
+        const names = voices.map((v) => v.name);
+        const all = window.speechSynthesis?.getVoices?.().map((v) => v.name) ?? [];
         const options = [
           el("option", { value: "" }, "Default voice"),
           ...names.map((name) => el("option", { value: name }, name)),
         ];
         if (current && !names.includes(current)) {
-          options.push(el("option", { value: current }, `${current} (not on this device)`));
+          const label = all.includes(current) ? current : `${current} (not on this device)`;
+          options.push(el("option", { value: current }, label));
         }
         select.replaceChildren(...options);
         select.value = current ?? "";
@@ -2271,6 +2293,8 @@
         select.onchange = () => {
           if (select.value) step.voice = select.value;
           else delete step.voice;
+          // Let people hear each voice as they pick it, even before they've typed a message.
+          previewSpeech(step, { sample: true });
         };
         return select;
       }
@@ -2281,8 +2305,10 @@
           fillVoices(select, select.value);
       });
 
-      function previewSpeech(step) {
-        const text = (step.text ?? "").replace(/\{(\w+)\}/g, (m, name) => SAMPLE[name] ?? m);
+      // sample: speak a stock line when the message is empty, instead of asking for one.
+      function previewSpeech(step, { sample = false } = {}) {
+        let text = (step.text ?? "").replace(/\{(\w+)\}/g, (m, name) => SAMPLE[name] ?? m);
+        if (!text.trim() && sample) text = `Thanks for the follow, ${SAMPLE.nickname ?? "friend"}!`;
         if (!text.trim()) return toast("Type something to say first.", { error: true });
         if (!("speechSynthesis" in window)) return toast("This browser can't speak.", { error: true });
         window.speechSynthesis.cancel();
