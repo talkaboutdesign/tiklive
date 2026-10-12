@@ -6,6 +6,8 @@
  * `actions: true` (usually the `/overlays/actions.html` player in OBS). The player
  * runs the steps; the server never talks to OBS or plays anything itself.
  */
+import * as Result from "effect/Result";
+import * as Url from "effect/http/Url";
 import * as Schema from "effect/Schema";
 import { LiveUser } from "./events.ts";
 
@@ -164,14 +166,45 @@ export const ObsSceneStep = Schema.Struct({
 });
 export type ObsSceneStep = typeof ObsSceneStep.Type;
 
-export const RuleStep = Schema.Union([SoundStep, MediaStep, SpeakStep, ObsSceneStep]).pipe(
+/**
+ * An http(s) URL that parses, with a literal scheme. Templates such as `{nickname}` are allowed
+ * anywhere after it. Their values are percent-encoded when filled in, so they suit the path and query.
+ */
+export const WebhookUrl = Schema.String.check(
+  Schema.isMaxLength(2048),
+  Schema.makeFilter((url: string) => /^https?:\/\//i.test(url) && Result.isSuccess(Url.fromString(url)), {
+    expected: "an http:// or https:// URL",
+  }),
+);
+export type WebhookUrl = typeof WebhookUrl.Type;
+
+/**
+ * Sends an HTTP request from the computer running tiklive when the action runs. The server
+ * sends it; the browser player skips this step. Requests time out after 5 seconds and are
+ * not retried.
+ */
+export const WebhookStep = Schema.Struct({
+  kind: Schema.tag("webhook"),
+  url: WebhookUrl,
+  /** Default POST. GET ignores `body`. */
+  method: Schema.optionalKey(Schema.Literals(["POST", "GET", "PUT"])),
+  /**
+   * Sent as-is for POST and PUT: as application/json if it parses as JSON, otherwise as text/plain.
+   * Omit it to send a JSON description of the action (see docs/user/actions.md).
+   */
+  body: Schema.optionalKey(Text(4000)),
+});
+export type WebhookStep = typeof WebhookStep.Type;
+
+export const RuleStep = Schema.Union([SoundStep, MediaStep, SpeakStep, ObsSceneStep, WebhookStep]).pipe(
   Schema.toTaggedUnion("kind"),
 );
 export type RuleStep = typeof RuleStep.Type;
 export type RuleStepKind = RuleStep["kind"];
 
 /**
- * Placeholders allowed in step text. Unknown placeholders are left as typed.
+ * Placeholders allowed in step text, including a webhook's URL and body (URL values are
+ * percent-encoded). Unknown placeholders are left as typed.
  * `count`, `coins` and `giftName` are empty for non-gift triggers; `comment` for non-chat ones.
  * `followers` is the viewer's follower count, empty when TikTok didn't send it.
  */

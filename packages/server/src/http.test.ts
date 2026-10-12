@@ -831,6 +831,33 @@ describe("GET and PUT /api/rules", () => {
     }),
   );
 
+  it.live("saves webhook steps and returns them unchanged, and rejects a non-http webhook URL", () =>
+    serve({}, async (base) => {
+      const hooks = {
+        ...danceRule,
+        steps: [
+          {
+            kind: "webhook",
+            url: "http://192.168.1.20:8080/hook?who={nickname}",
+            method: "PUT",
+            body: '{"n":1}',
+          },
+          { kind: "webhook", url: "https://hooks.example/x" },
+        ],
+      };
+      const saved = await saveRules(base, { revision: 0, rules: [hooks] });
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toEqual({ revision: 1, rules: [hooks] });
+
+      const got = await fetch(`${base.http}/api/rules`);
+      expect(await got.json()).toEqual({ revision: 1, rules: [hooks] });
+
+      const bad = { ...danceRule, steps: [{ kind: "webhook", url: "ftp://files.example/x" }] };
+      const rejected = await saveRules(base, { revision: 1, rules: [bad] });
+      expect(rejected.status).toBe(400);
+    }),
+  );
+
   it.live("returns 409 with the current revision when the save is based on an old one", () =>
     serve({}, async (base) => {
       await saveRules(base, { revision: 0, rules: [danceRule] });
