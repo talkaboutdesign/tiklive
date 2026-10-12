@@ -562,6 +562,7 @@
         radio.addEventListener("change", () => {
           if (radio.checked) {
             state.filter = radio.value;
+            if (!webSearchable()) stopWebPreview();
             render();
           }
         });
@@ -905,10 +906,17 @@
         );
       }
 
+      // Imports outlive a search, so clearing the box can't start a second copy of one still running.
       function resetWebSearch() {
-        const { added } = state.web;
+        const { importing, added } = state.web;
+        stopWebPreview();
         state.web = newWebSearch();
-        state.web.added = added;
+        Object.assign(state.web, { importing, added });
+      }
+
+      // Stops a MyInstants preview before its row goes away. Library sounds keep playing.
+      function stopWebPreview() {
+        if (state.playingUrl && !itemByUrl(state.playingUrl)) audio.pause();
       }
 
       function submitWebSearch() {
@@ -923,6 +931,7 @@
           render();
           return;
         }
+        stopWebPreview();
         Object.assign(s, { query, results: [], page: 0, hasMore: false, done: false });
         s.importErrors.clear();
         fetchWebPage(1);
