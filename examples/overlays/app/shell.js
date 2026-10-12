@@ -42,6 +42,10 @@
  *   img(src, props)               An <img> for a safe http(s) URL, or null. Hides itself on error.
  *   safeUrl(u)                    The absolute http(s) URL for u (relative to this page), or "".
  *   avatar(url, name, size)       Profile picture over a letter. size: "" | "sm" | "lg".
+ *   profileUrl(uniqueId)          The TikTok profile page for a @handle, or "" when there's none.
+ *   profileLink(uniqueId, props, ...children)
+ *                                 An <a> (class profile-link) that opens the profile in a new tab, or
+ *                                 a <span> when there's no handle. The desktop app opens it in the browser.
  *   pill(state)                   Status pill. state: live | waiting | connecting | error | idle.
  *   icon(name, size)              Inline SVG: dashboard | actions | overlays | settings | speaker |
  *                                 speakerOff | menu | external | video | filters | silence | volume | muted |
@@ -98,7 +102,7 @@
  *                                 for the header's right side. Fills #sidebar and #page-header.
  *                                 Adds html.desktop-mac on macOS. Returns { setCrumbs(crumbs), setActions(nodes) }.
  *
- * Sidebar (filled by mountShell): brand; account block (links to Settings, or to / when no name);
+ * Sidebar (filled by mountShell): brand; account block (opens your TikTok profile, or / when no name);
  * nav; spacer; desktop only: the sound player controls and the "Update" button.
  */
 import { TikLive } from "/tiklive.js";
@@ -187,6 +191,29 @@ export function img(src, props = {}) {
     node.style.visibility = "hidden";
   });
   return node;
+}
+
+export function profileUrl(uniqueId) {
+  const handle = String(uniqueId ?? "").trim();
+  return handle ? `https://www.tiktok.com/@${encodeURIComponent(handle)}` : "";
+}
+
+export function profileLink(uniqueId, props = {}, ...children) {
+  const href = profileUrl(uniqueId);
+  if (!href) return el("span", props, ...children);
+  const cls = ["profile-link", props.class].filter(Boolean).join(" ");
+  return el(
+    "a",
+    {
+      title: `Open @${uniqueId} on TikTok`,
+      ...props,
+      class: cls,
+      href,
+      target: "_blank",
+      rel: "noopener noreferrer",
+    },
+    ...children,
+  );
 }
 
 // A profile picture when there is one, otherwise a circle with the first letter of the name.
@@ -826,6 +853,9 @@ function renderAccount() {
   const { link, slot, name, dot, text } = sidebarAccount;
   if (!currentName) {
     link.href = withToken("/");
+    link.removeAttribute("target");
+    link.removeAttribute("rel");
+    link.removeAttribute("title");
     slot.replaceChildren(avatar("", ""));
     name.textContent = "Set your TikTok username";
     dot.dataset.state = "idle";
@@ -833,7 +863,10 @@ function renderAccount() {
     return;
   }
   const owner = lastStatus?.owner;
-  link.href = withToken("/settings.html");
+  link.href = profileUrl(currentName);
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.title = `Open @${currentName} on TikTok`;
   slot.replaceChildren(avatar(owner?.profilePictureUrl, currentName));
   name.textContent = `@${currentName}`;
   dot.dataset.state = lastStatus?.state ?? "connecting";

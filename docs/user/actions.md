@@ -235,7 +235,9 @@ Uploads need a data folder. Without one, the server turns uploads off and the li
 
 Uploads, pasted links and imported sounds are listed in the **Media library** at the bottom of the Actions page.
 It's collapsed until you open it. The **Media** page in the sidebar shows the whole library: play, rename and delete
-files, upload by dropping them on the page, and see how many actions use each one.
+files, upload by dropping them on the page, and see how many actions use each one. On **All** and **Sounds**, its
+search box works like the sound picker's: typing filters your files, and Enter also searches MyInstants. **Add**
+copies a result into your library.
 
 ### Record a sound
 

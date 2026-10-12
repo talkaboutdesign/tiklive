@@ -234,6 +234,16 @@ describe("SoundSearch.search", () => {
     );
   });
 
+  it.effect("treats a 404 as a search with no results", () => {
+    const fake = fakeFetch(() => htmlResponse("<h1>Not found</h1>", 404));
+    return withService(fake.fetch, (svc) => svc.search("yo", 1)).pipe(
+      Effect.map((response) => {
+        expect(response.results).toEqual([]);
+        expect(response.hasMore).toBe(false);
+      }),
+    );
+  });
+
   it.effect("turns a thrown fetch into a SoundSearchError", () => {
     const fake = fakeFetch(() => Promise.reject(new TypeError("fetch failed")));
     return withService(fake.fetch, (svc) =>

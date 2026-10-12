@@ -5,7 +5,8 @@ subscribing and joining. The score is kept per streamer, so it carries over from
 Use it to reward regulars, run a leaderboard on stream, or pick a winner.
 
 Points are on by default. You don't need to set anything up. Open the **Viewers** page (`/viewers.html`) to
-see the leaderboard and change how many points each action is worth.
+see the leaderboard and change how many points each action is worth. Click a viewer to open their TikTok profile
+in your browser.
 
 ## How viewers earn points
 

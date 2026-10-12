@@ -201,6 +201,37 @@
         margin-top: 12px;
       }
 
+      /* MyInstants results */
+      .web-intro {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 0 0 10px 4px;
+      }
+      .web-intro .hint {
+        margin: 0;
+      }
+      .web-more {
+        display: flex;
+        justify-content: center;
+        margin-top: 12px;
+      }
+      .web-note {
+        margin: 10px 0 0 4px;
+      }
+      .item-meta a {
+        color: inherit;
+      }
+      .added {
+        color: var(--success);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .no-match {
+        margin: 0 0 18px 4px;
+      }
+
       /* Drop anywhere to upload */
       .drop-overlay {
         position: fixed;
@@ -405,8 +436,9 @@
               class="input"
               type="search"
               id="search"
-              placeholder="Search by name"
-              aria-label="Search by name"
+              placeholder="Search your media and MyInstants"
+              aria-label="Search your media and MyInstants"
+              autocomplete="off"
             />
           </div>
           <p class="hint" id="status" role="status"></p>
@@ -416,7 +448,7 @@
     </div>
 
     <script type="module">
-      import { api, el, icon, mountShell, toast } from "/app/shell.js";
+      import { api, el, icon, mountShell, safeUrl, toast } from "/app/shell.js";
       import {
         ACCEPT,
         FILTERS,
@@ -453,6 +485,9 @@
         "tiklive can't use the microphone. Allow it in System Settings → Privacy & Security → Microphone, then try again.";
       const MIC_MISSING = "No microphone found.";
       const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+      const SUGGESTIONS = ["airhorn", "applause", "bruh", "drumroll", "wow", "sad trombone"];
+      const MYINSTANTS_NOTE =
+        "Sounds from MyInstants are uploaded by its users. Make sure you're allowed to use a sound on your stream.";
 
       // ---------- State ----------
 
@@ -472,7 +507,25 @@
         focusKey: null, // data-key of the control to focus after the next render
         durations: new Map(),
         probing: new Set(),
+        web: newWebSearch(),
       };
+
+      // The MyInstants search, the same one the action editor's sound picker runs (GET /api/sounds/search).
+      function newWebSearch() {
+        return {
+          query: "", // the last query sent
+          results: [],
+          page: 0, // the last page loaded
+          hasMore: false,
+          done: false, // a search has finished for `query`
+          loading: false,
+          error: null, // { status, message, page } when the last request failed
+          seq: 0, // the latest request; responses to older ones are dropped
+          importing: new Set(), // urls being copied into the library
+          importErrors: new Map(), // url -> message
+          added: new Map(), // url -> library item id, for results already copied
+        };
+      }
 
       // ---------- Page shell and controls ----------
 
@@ -509,13 +562,21 @@
         radio.addEventListener("change", () => {
           if (radio.checked) {
             state.filter = radio.value;
+            if (!webSearchable()) stopWebPreview();
             render();
           }
         });
       }
+      // Typing filters your media at once. Enter runs the MyInstants search, as in the action editor.
       search.addEventListener("input", () => {
         state.query = search.value;
+        if (!state.query.trim()) resetWebSearch();
         render();
+      });
+      search.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" || event.isComposing) return;
+        event.preventDefault();
+        submitWebSearch();
       });
 
       // ---------- Playing library sounds (one at a time) ----------
@@ -642,21 +703,28 @@
           };
           return [el("div", { class: "empty" }, el("p", {}, "Couldn't load your media."), retry)];
         }
+        const query = state.query.trim();
+        const web = webSection();
         if (!state.items.length) {
+          if (web && query) return [el("p", { class: "hint no-match" }, "No media yet."), web];
           return [
             el("div", { class: "empty" }, el("p", {}, "No media yet. Record a sound or drop files here.")),
+            ...(web ? [web] : []),
           ];
         }
 
         const shown = filterItems(state.items, { filter: state.filter, query: state.query });
-        const query = state.query.trim();
         if (!shown.length) {
+          if (web && query) {
+            return [el("p", { class: "hint no-match" }, `None of your media matches “${query}”.`), web];
+          }
           return [
             el(
               "div",
               { class: "empty" },
               el("p", {}, query ? `Nothing matches “${query}”.` : "Nothing here for this filter yet."),
             ),
+            ...(web ? [web] : []),
           ];
         }
 
@@ -684,7 +752,243 @@
             ),
           );
         }
+        if (web) out.push(web);
         return out;
+      }
+
+      // ---------- MyInstants search ----------
+
+      const webSearchable = () => state.filter === "all" || state.filter === "sounds";
+
+      // "From MyInstants", below your own media. Shown on All and Sounds once there's something to search for.
+      function webSection() {
+        const s = state.web;
+        const query = state.query.trim();
+        if (!webSearchable() || (!query && !s.query && !s.error)) return null;
+
+        const intro = [];
+        if (query && query !== s.query && !s.loading) {
+          const go = el(
+            "button",
+            { type: "button", class: "btn btn-small", "data-key": "web:search" },
+            "Search MyInstants",
+          );
+          go.onclick = submitWebSearch;
+          intro.push(el("p", { class: "hint" }, `Press Enter to search MyInstants for “${query}”.`), go);
+        } else if (!query && !s.query) {
+          intro.push(
+            el("p", { class: "hint" }, "Try:"),
+            ...SUGGESTIONS.map((term) => {
+              const chip = el(
+                "button",
+                { type: "button", class: "btn btn-small", "aria-label": `Search MyInstants for ${term}` },
+                term,
+              );
+              chip.onclick = () => {
+                search.value = term;
+                state.query = term;
+                submitWebSearch();
+              };
+              return chip;
+            }),
+          );
+        }
+
+        const more = [];
+        if (s.hasMore && s.results.length) {
+          const button = el(
+            "button",
+            { type: "button", class: "btn", disabled: s.loading, "data-key": "web:more" },
+            "Load more",
+          );
+          button.onclick = () => fetchWebPage(s.page + 1);
+          more.push(el("div", { class: "web-more" }, button));
+        }
+
+        return el(
+          "section",
+          { class: "media-section", "aria-label": "From MyInstants" },
+          el("h2", { class: "section-title" }, "From MyInstants"),
+          intro.length ? el("div", { class: "web-intro" }, ...intro) : null,
+          webStatus(),
+          s.results.length ? el("ul", { class: "item-list" }, ...s.results.map(webRow)) : null,
+          ...more,
+          el("p", { class: "hint web-note" }, MYINSTANTS_NOTE),
+        );
+      }
+
+      function webStatus() {
+        const s = state.web;
+        if (s.loading) return el("p", { class: "hint web-note", role: "status" }, "Searching…");
+        if (s.error) {
+          const { status: code, message, page } = s.error;
+          if (code === 400) return el("p", { class: "error-text web-note", role: "alert" }, message);
+          const text =
+            code === 502
+              ? "Couldn't reach MyInstants. Try again in a moment."
+              : code === 404
+                ? "This tiklive server can't search MyInstants. Update tiklive, then retry."
+                : "Couldn't search. Try again.";
+          const retry = el(
+            "button",
+            { type: "button", class: "btn btn-small", "data-key": "web:retry" },
+            "Retry",
+          );
+          retry.onclick = () => fetchWebPage(page);
+          return el("p", { class: "error-text web-note", role: "alert" }, text, " ", retry);
+        }
+        if (s.done && !s.results.length) {
+          return el("p", { class: "hint web-note", role: "status" }, `No sounds found for “${s.query}”.`);
+        }
+        return null;
+      }
+
+      function webRow(result) {
+        const s = state.web;
+        const title = result.title || "Untitled sound";
+        const url = safeUrl(result.url);
+        const playing = Boolean(url) && state.playingUrl === url;
+        const play = el(
+          "button",
+          {
+            type: "button",
+            class: "play-btn",
+            "aria-label": `${playing ? "Pause" : "Play"} ${title}`,
+            "aria-pressed": String(playing),
+            disabled: !url,
+            "data-key": `web:${result.url}:play`,
+          },
+          icon(playing ? "pause" : "play", 16),
+        );
+        play.onclick = () => togglePlay({ url, name: title });
+
+        const page = safeUrl(result.pageUrl);
+        const meta = page
+          ? el(
+              "a",
+              { href: page, target: "_blank", rel: "noopener noreferrer", title: "Open on MyInstants" },
+              "MyInstants ↗",
+            )
+          : "MyInstants";
+
+        const addedId = s.added.get(result.url);
+        let action;
+        if (addedId && state.items.some((m) => m.id === addedId)) {
+          action = el("span", { class: "added" }, "✓ In your library");
+        } else {
+          const busy = s.importing.has(result.url);
+          action = el(
+            "button",
+            {
+              type: "button",
+              class: "btn btn-small",
+              "aria-label": `Add ${title} to your library`,
+              disabled: busy,
+              "data-key": `web:${result.url}:add`,
+            },
+            busy ? "Adding…" : "Add",
+          );
+          action.onclick = () => importWebSound(result);
+        }
+        const error = s.importErrors.get(result.url);
+        return el(
+          "li",
+          { class: "item" },
+          play,
+          el(
+            "div",
+            { class: "item-main" },
+            el("span", { class: "item-name", title }, title),
+            el("span", { class: "item-meta" }, meta),
+            error ? el("span", { class: "error-text", role: "alert" }, error) : null,
+          ),
+          el("div", { class: "item-actions" }, action),
+        );
+      }
+
+      // Imports outlive a search, so clearing the box can't start a second copy of one still running.
+      function resetWebSearch() {
+        const { importing, added } = state.web;
+        stopWebPreview();
+        state.web = newWebSearch();
+        Object.assign(state.web, { importing, added });
+      }
+
+      // Stops a MyInstants preview before its row goes away. Library sounds keep playing.
+      function stopWebPreview() {
+        if (state.playingUrl && !itemByUrl(state.playingUrl)) audio.pause();
+      }
+
+      function submitWebSearch() {
+        if (!webSearchable()) return;
+        const query = state.query.trim();
+        const s = state.web;
+        if (!query) {
+          // Drop any search still in flight, and say what's missing.
+          s.seq++;
+          s.loading = false;
+          s.error = { status: 400, message: "Type a word to search for.", page: 1 };
+          render();
+          return;
+        }
+        stopWebPreview();
+        Object.assign(s, { query, results: [], page: 0, hasMore: false, done: false });
+        s.importErrors.clear();
+        fetchWebPage(1);
+      }
+
+      // Loads one page of results for the current query. Page 1 replaces the list, later pages add to it.
+      async function fetchWebPage(page) {
+        const s = state.web;
+        const seq = ++s.seq;
+        s.loading = true;
+        s.error = null;
+        render();
+        try {
+          const data = await api(`/api/sounds/search?q=${encodeURIComponent(s.query)}&page=${page}`);
+          if (seq !== s.seq || s !== state.web) return;
+          s.results = page === 1 ? data.results : [...s.results, ...data.results];
+          s.page = data.page;
+          s.hasMore = data.hasMore;
+          s.done = true;
+        } catch (error) {
+          if (seq !== s.seq || s !== state.web) return;
+          s.error = { status: error.status, message: error.message, page };
+        } finally {
+          if (seq === s.seq && s === state.web) {
+            s.loading = false;
+            render();
+          }
+        }
+      }
+
+      // Copies a result into the library (POST /api/media/import), so actions never depend on myinstants.com.
+      async function importWebSound(result) {
+        const s = state.web;
+        if (s.importing.has(result.url)) return;
+        s.importing.add(result.url);
+        s.importErrors.delete(result.url);
+        render();
+        try {
+          const name = (result.title ?? "").trim().slice(0, 200);
+          const item = await api("/api/media/import", {
+            method: "POST",
+            json: { url: result.url, ...(name ? { name } : {}) },
+          });
+          state.items = [item, ...state.items.filter((m) => m.id !== item.id)];
+          s.added.set(result.url, item.id);
+          toast("Added to your library. Pick it in Actions as a sound.");
+          highlight(item.id);
+        } catch (error) {
+          s.importErrors.set(
+            result.url,
+            Number.isInteger(error?.status) ? error.message : "Couldn't reach tiklive. Try again.",
+          );
+          state.focusKey = `web:${result.url}:add`;
+        } finally {
+          s.importing.delete(result.url);
+          render();
+        }
       }
 
       function rowClass(item, base) {
@@ -1397,6 +1701,7 @@
           state.items = [item, ...state.items.filter((m) => m.id !== item.id)];
           state.filter = "all";
           state.query = "";
+          resetWebSearch();
           document.querySelector('input[name="kind"][value="all"]').checked = true;
           search.value = "";
           rec.saving = false;

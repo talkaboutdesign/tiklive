@@ -132,6 +132,8 @@ const make = (fetchFn: Fetch) => {
   const fetchPage = async (url: string, signal: AbortSignal): Promise<SoundSearchResponse["results"]> => {
     const res = await fetchFn(url, { headers: HEADERS, signal });
     const html = await res.text();
+    // A search with no results answers 404.
+    if (res.status === 404) return [];
     if (!res.ok) throw searchFailure(`MyInstants returned HTTP ${res.status}`);
     return parseResults(html);
   };
