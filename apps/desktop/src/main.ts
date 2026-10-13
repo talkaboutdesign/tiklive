@@ -48,6 +48,7 @@ const serverRuntime = ManagedRuntime.make(
     port: PORT,
     staticDir,
     dataDir: app.getPath("userData"),
+    gracefulShutdownTimeout: "1 second",
     ...(existsSync(clientBundle) ? { clientBundle } : {}),
   }),
 );
@@ -340,6 +341,8 @@ if (!app.requestSingleInstanceLock()) {
   });
   const awaitShutdown = makeQuitHandler({
     dispose: async () => {
+      // Release renderer connections before the server waits for clients to disconnect.
+      for (const window of BrowserWindow.getAllWindows()) window.destroy();
       // Wait for both runtimes even if one fails, including the points store's final disk flush.
       const results = await Promise.allSettled([updatesRuntime.dispose(), serverRuntime.dispose()]);
       for (const result of results) {

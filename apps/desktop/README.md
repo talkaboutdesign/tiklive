@@ -12,6 +12,10 @@ bun run desktop:dev
 
 This builds the client, bundles the main process and preload with `vp pack`, and starts Electron. The app loads `examples/overlays` and `packages/client/dist/tiklive.js` straight from the repo.
 
+On quit, the app destroys its windows before shutting down the server. External clients such as OBS get a
+one-second server grace period before their connections are closed. Quit still waits for the final points
+save to finish.
+
 ## Packaging
 
 ```sh
